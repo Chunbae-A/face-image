@@ -1,0 +1,38 @@
+name: repository-ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: repository-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run unit tests
+        run: python3 -m unittest discover -s tests
+
+      - name: Check repository hygiene
+        run: python3 scripts/check_repository_hygiene.py
+
+      - name: Verify generated Colab notebook
+        run: |
+          python3 scripts/build_celebdf_colab_notebook.py
+          git diff --exit-code -- notebooks/celebdf_arcface_full_colab.ipynb

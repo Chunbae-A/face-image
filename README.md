@@ -46,7 +46,10 @@
 
 ```bash
 python3 -m unittest discover -s tests
+python3 scripts/check_repository_hygiene.py
 ```
+
+모든 작업은 Issue에서 시작하고 `<type>/<issue-number>-<description>` branch와 PR로 연결한다. 실험 기록, commit/PR 규칙과 금지 산출물은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 따른다.
 
 ## 데이터와 라이선스
 
