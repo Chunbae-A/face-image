@@ -1,0 +1,66 @@
+project: deepsogak-faceguard
+experiment: celebdf-arcface-full-baseline
+schema_version: 1
+seed: 20260805
+
+dataset:
+  name: Celeb-DF-v2
+  subset: Celeb-real
+  expected_videos: 590
+  expected_subjects: 59
+  expected_uncompressed_bytes: 946501150
+  eligible_subject_rule:
+    minimum_successful_videos: 8
+    expected_before_face_detection: 56
+  excluded_before_face_detection:
+    - id12
+    - id42
+    - id44
+
+preprocessing:
+  frames_per_video: 10
+  sampling: evenly_spaced_between_8_and_92_percent
+  minimum_valid_face_frames: 3
+  primary_face:
+    first_frame: largest_detected_face
+    following_frames: highest_similarity_to_running_video_template
+  save_sampled_frames: false
+  save_face_crops: false
+  aggregate: l2_normalized_mean_to_one_embedding_per_video
+
+model:
+  library: insightface
+  library_version: 1.0.1
+  model_pack: buffalo_l
+  embedding_dimensions: 512
+  model_weights_license_scope: noncommercial_research_only
+  fine_tuning: false
+
+protocol:
+  reference_counts: [3, 5]
+  maximum_reserved_reference_videos: 5
+  query_start_index: 5
+  query_registration_overlap: prohibited
+  subject_split:
+    validation: 0.30
+    test: 0.70
+    overlap: prohibited
+  threshold_selection: validation_only
+  test_evaluation_after_threshold_freeze: true
+  far_operating_points: [0.01, 0.001]
+  bootstrap:
+    unit: query_subject
+    repeats: 500
+    confidence_level: 0.95
+
+outputs:
+  metrics:
+    - roc_auc
+    - eer
+    - tar
+    - far
+    - frr
+  record_model_hashes: true
+  record_manifest_hash: true
+  persist_video_embeddings_publicly: false
+  include_raw_faces_in_report: false

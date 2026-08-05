@@ -1,0 +1,46 @@
+# FaceGuard 스크립트
+
+## 실험 사전 검사
+
+```bash
+# CPU/RAM/GPU/디스크 inventory
+python3 scripts/faceguard_plan.py env --path .
+
+# 다운로드 소요 시간과 저장공간 추정
+python3 scripts/faceguard_plan.py download --size-gb 100 --efficiency 0.8
+python3 scripts/faceguard_plan.py storage \
+  --compressed-gb 100 --unpacked-gb 150 --preprocessed-gb 30 \
+  --images 1000000
+
+# subject/source/hash 누수와 Test 증강 금지 검사
+python3 scripts/validate_faceguard_manifest.py examples/faceguard_manifest.csv
+```
+
+## Celeb-DF-v2 Celeb-real baseline
+
+```bash
+# ZIP을 풀지 않고 590개 영상 manifest 생성
+python3 scripts/celebdf_faceguard.py inventory /path/to/Celeb-DF-v2.zip \
+  --manifest outputs/celebdf_faceguard/celeb_real_manifest.csv \
+  --summary outputs/celebdf_faceguard/celeb_real_inventory.json
+
+# Celeb-real 590개만 안전하게 추출
+python3 scripts/celebdf_faceguard.py extract /path/to/Celeb-DF-v2.zip \
+  --manifest outputs/celebdf_faceguard/celeb_real_manifest.csv \
+  --output outputs/celebdf_faceguard/videos --mode full
+
+# 영상별 ArcFace 임베딩 평가
+python3 scripts/celebdf_faceguard.py evaluate \
+  --embeddings outputs/celebdf_faceguard/results/celeb_real_video_embeddings.npz \
+  --output outputs/celebdf_faceguard/results/celeb_real_arcface_metrics.json
+```
+
+GPU 추론은 `notebooks/celebdf_arcface_full_colab.ipynb` 또는 `scripts/run_celebdf_arcface.py`를 사용한다. smoke 2개 영상은 환경 확인용이며, 동일 checkpoint에서 590개 전체 실행을 이어간다.
+
+## 노트북 재생성
+
+```bash
+python3 scripts/build_celebdf_colab_notebook.py
+```
+
+노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`와 `scripts/run_celebdf_arcface.py`의 변경이 정확히 포함됐는지 검증한다.

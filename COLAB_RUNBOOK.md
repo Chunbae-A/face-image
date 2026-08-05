@@ -1,0 +1,53 @@
+# 얼굴가드 Google Colab 실행 가이드
+
+Colab은 딥소각 얼굴가드의 Debug/Pilot 연산 환경으로 사용한다. 얼굴 원본과 임베딩은 생체정보이므로, 호스팅된 Colab·Google Drive에 올릴 수 있는지 신청 약관과 보안 담당자가 먼저 승인해야 한다.
+
+## 실행 모드
+
+| 모드 | 연산 위치 | 실제 얼굴 데이터 | 사용 조건 |
+|---|---|---|---|
+| A. Hosted Colab GPU | Google 관리 VM | 기본 금지 | 데이터 제공약관의 클라우드·국외 반출 허용과 프로젝트 승인이 모두 있을 때만 |
+| B. Colab local runtime | 사용자 Mac | 허용 | Colab UI만 쓰고 코드/데이터는 로컬에서 실행. 현재 MPS 사용 |
+| C. Hosted Colab + 비식별 통계 | Google 관리 VM | 금지 | 합성/공개 허용 Debug data, 얼굴이 없는 가짜 manifest, 집계 metric만 사용 |
+
+승인 전 기본은 **B 또는 C**다. A를 사용하려면 `configs/faceguard/experiment.yaml`의 두 cloud 플래그를 승인 기록과 함께 변경한다.
+
+## Colab 제약을 반영한 설계
+
+[Google Colab FAQ](https://research.google.com/colaboratory/faq.html)에 따르면 GPU 종류·사용량 한도·idle timeout·VM 최대 수명은 변동하며 VM은 삭제될 수 있다. 따라서 GPU 명칭과 VRAM을 매 run 실측하고, 영구 디스크처럼 사용하지 않는다.
+
+- 100GB 전체를 runtime에 항상 복사하지 않고 2~10GB shard 단위로 처리한다.
+- 하나의 shard를 `/content`로 복사·해제하고, 처리한 뒤 결과/checkpoint/로그를 승인된 영구 저장소에 atomic write한다.
+- Drive에서 수많은 작은 파일을 직접 읽지 않고 archive를 runtime에 복사한 뒤 해제한다.
+- shard별 `_SUCCESS`, source/config/model hash, 성공/실패 건수를 저장하여 세션 중단 후 이어받는다.
+- 노트북 output에 얼굴, 실제 파일경로, subject ID, Drive 링크를 출력하지 않는다. 공유 전 모든 cell output을 삭제한다.
+- secrets/API key는 notebook cell, Git, Drive 평문에 저장하지 않고 Colab Secrets를 사용한다.
+
+## 시작
+
+1. GitHub에 작업 브랜치가 있는 경우 [`notebooks/faceguard_colab.ipynb`](notebooks/faceguard_colab.ipynb)를 Colab으로 연다.
+2. Runtime → Change runtime type에서 GPU를 선택한다. 할당 GPU는 고정값으로 가정하지 않는다.
+3. 보안 게이트 cell에서 hosted cloud 승인 여부를 선택한다. 승인이 없으면 Drive mount/data path cell이 중단된다.
+4. 환경 inventory와 저장 여유를 저장한다. 실제 GPU/VRAM/batch size를 run manifest에 기록한다.
+5. Debug → Pilot 순서로 실행하고, Pilot 결과 없이 Full 100GB를 Colab으로 복사하지 않는다.
+
+## Hosted Colab이 승인되지 않을 때
+
+Colab의 `Connect to local runtime`으로 사용자 Mac에 연결한다. 이 모드에서 Colab 프론트엔드는 로컬 코드를 실행하므로 노트북의 업로드/마운트 cell을 사용하지 않는다. Google의 [local runtime 안내](https://research.google.com/colaboratory/local-runtimes.html)가 경고하듯, 연결된 notebook은 로컬 파일을 읽고 수정/삭제할 수 있으므로 이 저장소의 노트북만 신뢰하여 연다.
+
+## Celeb-DF-v2 전체 얼굴인식 baseline
+
+AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파일은 [`notebooks/celebdf_arcface_full_colab.ipynb`](notebooks/celebdf_arcface_full_colab.ipynb)에서 처리한다. 단, 데이터 이용약관상 Google Drive·Hosted Colab 처리가 허용되는지 사용자가 확인한 뒤 노트북의 권한 확인 값을 변경해야 한다.
+
+이 노트북의 smoke 실행은 최종 데이터 축소가 아니다. 2개 영상으로 설치·모델 다운로드·얼굴 탐지를 확인한 뒤 동일 checkpoint에서 Celeb-real 590개 영상 전체 실행을 자동으로 이어간다.
+
+1. Colab의 `파일 → 노트북 업로드`에서 노트북 파일을 연다. 기본 `CODE_SOURCE=embedded` 모드는 GitHub 접근 없이 필요한 실행 코드를 노트북에서 복원한다.
+2. `Celeb-DF-v2.zip`을 약관상 허용된 경로에 둔다. 기본 Drive 경로는 `/content/drive/MyDrive/Celeb-DF-v2.zip`이다.
+3. GPU runtime을 선택하고 권한·InsightFace 비상업 연구 모델 확인 값을 `True`로 바꾼다.
+4. ZIP inventory가 590개 영상·59명·평가 가능 56명인지 확인한다.
+5. 전체 590개 영상을 추출하고 영상당 10프레임에서 얼굴을 추론한다.
+6. 영상별 임베딩을 평균한 뒤 등록 3개/5개 영상과 겹치지 않는 query 영상으로 평가한다.
+7. validation/test 인물은 완전히 분리하며, validation에서 정한 FAR threshold를 test에 한 번 적용한다.
+8. 얼굴이 없는 결과 묶음만 내려받는다. 얼굴 프레임과 `.npz` 임베딩은 Git 또는 공개 저장소에 올리지 않는다.
+
+결과 묶음에는 inventory, 실행 환경·모델 hash, reject 사유, ROC-AUC/EER/TAR/FAR/FRR 표, ROC/score 분포 그림이 포함된다. Celeb-real 결과는 일반 얼굴 동일인 검증 baseline이며 딥페이크 탐지 정확도나 한국인 특화 성능으로 해석하지 않는다.

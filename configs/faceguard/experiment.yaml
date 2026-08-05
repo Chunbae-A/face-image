@@ -1,0 +1,91 @@
+project: deepsogak-faceguard
+schema_version: 1
+
+labels:
+  numeric_values: target_or_estimate_until_measured
+  required_runtime_fields:
+    - git_commit
+    - config_hash
+    - data_manifest_hash
+    - model_name
+    - model_version
+    - model_sha256
+    - model_license
+    - device
+    - seed
+
+security:
+  cloud_data_approved: false
+  allow_google_drive_raw_faces: false
+  allow_hosted_colab_raw_faces: false
+  require_subject_pseudonyms: true
+  prohibit_git_data_upload: true
+  prohibit_public_face_examples: true
+
+data:
+  manifest: data/splits/faceguard_manifest.csv
+  subject_disjoint_split:
+    train: 0.70
+    validation: 0.15
+    test: 0.15
+  stages:
+    debug:
+      proposed_subjects: 30
+      minimum_images_per_subject: 10
+      preferred_images_per_subject: 15
+    pilot:
+      proposed_subjects: 300
+      minimum_images_per_subject: 10
+      preferred_images_per_subject: 15
+    full:
+      enabled: false
+      requires_pilot_go_decision: true
+
+preprocessing:
+  input_color: RGB
+  aligned_size: [112, 112]
+  landmarks: 5
+  stream_by_shard: true
+  keep_rejected_images: false
+  embedding_dimensions: 512
+  l2_normalize_embeddings: true
+  online_train_augmentation:
+    random_rotation_degrees: [-15, 15]
+    brightness_contrast: true
+    gaussian_blur: true
+    jpeg_compression: true
+    resolution_degradation: true
+    partial_occlusion: true
+  validation_random_augmentation: false
+  test_random_augmentation: false
+
+registration:
+  reference_counts: [3, 5]
+  query_images_per_subject: [5, 10]
+  pooling:
+    - individual_max
+    - mean_3
+    - mean_5
+    - quality_weighted_mean
+
+evaluation:
+  repeats: 3
+  confidence_level: 0.95
+  bootstrap_unit: subject
+  far_operating_points: [0.01, 0.001]
+  initial_targets:
+    tar_at_far_0_001: 0.90
+    max_key_condition_tar_drop_percentage_points: 10
+    mobile_embedding_p95_ms: 150
+    mobile_model_size_mb: 50
+  threshold_selection:
+    split: validation
+    objective: maximize_tar_subject_to_approved_far_constraint
+    evaluate_test_once_after_freeze: true
+
+runtime:
+  preferred: google_colab
+  hosted_colab_requires_cloud_data_approval: true
+  checkpoint_each_shard: true
+  copy_archive_to_runtime_before_many_small_reads: true
+  record_cold_and_warm_latency: true

@@ -1,0 +1,5 @@
+path,subject_id,split,source_id,sha256,is_augmented,age_group,gender,lighting,quality,occlusion,yaw,pitch,roll
+data/aligned/subj_001/ref_01.jpg,subj_001,train,source_001_a,aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,false,20s,F,bright,high,none,0,0,0
+data/aligned/subj_001/query_01.jpg,subj_001,train,source_001_b,bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb,true,20s,F,dark,low,none,20,0,0
+data/aligned/subj_002/ref_01.jpg,subj_002,validation,source_002_a,cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc,false,20s,M,bright,high,glasses,0,0,0
+data/aligned/subj_003/ref_01.jpg,subj_003,test,source_003_a,dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd,false,10s,F,bright,high,mask,35,0,0
