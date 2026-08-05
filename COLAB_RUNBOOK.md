@@ -51,3 +51,12 @@ AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파�
 8. 얼굴이 없는 결과 묶음만 내려받는다. 얼굴 프레임과 `.npz` 임베딩은 Git 또는 공개 저장소에 올리지 않는다.
 
 결과 묶음에는 inventory, 실행 환경·모델 hash, reject 사유, ROC-AUC/EER/TAR/FAR/FRR 표, ROC/score 분포 그림이 포함된다. Celeb-real 결과는 일반 얼굴 동일인 검증 baseline이며 딥페이크 탐지 정확도나 한국인 특화 성능으로 해석하지 않는다.
+
+## Celeb-DF baseline 재현성 감사
+
+[`notebooks/celebdf_arcface_audit_colab.ipynb`](notebooks/celebdf_arcface_audit_colab.ipynb)는 영상당 1/5/10프레임을 각각 다시 추론한 뒤 등록 1/3/5개, subject split seed 5개를 비교한다. 등록 수와 관계없이 query는 항상 6번째 영상부터 사용해 공정하게 비교한다.
+
+- validation/test identity intersection을 seed별로 검증한다.
+- registration/query video intersection을 frame run·seed별로 검증한다.
+- NPZ 임베딩은 `/content`에만 두고 Drive/Git에 저장하지 않는다.
+- Drive에는 집계 JSON/CSV, hash, 비식별 reject reason count, PNG만 포함한 ZIP을 저장한다.

@@ -34,6 +34,10 @@
 
 노트북은 Colab의 CUDA 사용자 라이브러리와 호환되도록 `onnxruntime-gpu==1.23.2`를 사용한다. 기본 `CODE_SOURCE="embedded"`는 GitHub clone 권한 없이도 필요한 스크립트를 노트북 내부에서 복원한다.
 
+### Baseline 감사
+
+[`notebooks/celebdf_arcface_audit_colab.ipynb`](notebooks/celebdf_arcface_audit_colab.ipynb)는 Issue [#4](https://github.com/Chunbae-A/face-image/issues/4)의 `frames={1,5,10} × reference={1,3,5} × seed=5개` 감사를 실행한다. 원본과 임베딩은 runtime에만 두고, 누수 검사·집계 metric·hash·그래프만 결과 ZIP에 포함한다.
+
 ## 구조
 
 - [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 Debug/Pilot/Full 실험 계획
