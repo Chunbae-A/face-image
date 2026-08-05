@@ -97,6 +97,8 @@ REPO_URL = "https://github.com/Chunbae-A/face-image.git" #@param {type:"string"}
 BRANCH = "exp/4-celebdf-baseline-audit" #@param {type:"string"}
 CODE_SOURCE = "embedded" #@param ["embedded", "github"]
 SOURCE_ZIP_PATH = "/content/drive/MyDrive/Celeb-DF-v2.zip" #@param {type:"string"}
+# DriveFS mount가 반복 실패할 때만 Drive 웹의 파일 ID를 입력한다. Git/결과 bundle에는 기록되지 않는다.
+DRIVE_SOURCE_FILE_ID = "" #@param {type:"string"}
 DRIVE_RESULT_DIR = "/content/drive/MyDrive/face-image-celebdf-audit" #@param {type:"string"}
 PERSIST_SANITIZED_RESULTS_TO_DRIVE = True #@param {type:"boolean"}
 
@@ -157,11 +159,41 @@ Colab에서 GPU runtime을 선택한다. 설치 셀은 Colab CUDA 사용자 라�
 import json
 import shutil
 
-if IN_HOSTED_COLAB:
+source_zip = Path(SOURCE_ZIP_PATH).expanduser()
+if IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():
+    from google.colab import auth
+    from google.auth import default
+    from googleapiclient.discovery import build
+    from googleapiclient.http import MediaIoBaseDownload
+
+    auth.authenticate_user()
+    credentials, _ = default()
+    drive_service = build("drive", "v3", credentials=credentials, cache_discovery=False)
+    metadata = drive_service.files().get(
+        fileId=DRIVE_SOURCE_FILE_ID.strip(), fields="id,name,size"
+    ).execute()
+    expected_size = int(metadata["size"])
+    source_zip = Path("/content/Celeb-DF-v2.zip")
+    if not source_zip.exists() or source_zip.stat().st_size != expected_size:
+        temporary_zip = source_zip.with_suffix(".zip.part")
+        request = drive_service.files().get_media(fileId=DRIVE_SOURCE_FILE_ID.strip())
+        with temporary_zip.open("wb") as handle:
+            downloader = MediaIoBaseDownload(handle, request, chunksize=64 * 1024 * 1024)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+                if status:
+                    print({"drive_api_download_percent": round(status.progress() * 100, 1)})
+        if temporary_zip.stat().st_size != expected_size:
+            raise IOError(
+                f"Drive API download size mismatch: {temporary_zip.stat().st_size} != {expected_size}"
+            )
+        temporary_zip.replace(source_zip)
+    print({"drive_api_source": metadata["name"], "bytes": expected_size})
+elif IN_HOSTED_COLAB:
     from google.colab import drive
     drive.mount("/content/drive", force_remount=False)
 
-source_zip = Path(SOURCE_ZIP_PATH).expanduser()
 if not source_zip.exists():
     raise FileNotFoundError(f"Celeb-DF ZIP not found: {source_zip}")
 
@@ -374,7 +406,7 @@ with zipfile.ZipFile(RESULT_BUNDLE, "w", compression=zipfile.ZIP_DEFLATED) as ar
         archive.write(path, arcname=path.name)
 
 saved_to = None
-if PERSIST_SANITIZED_RESULTS_TO_DRIVE:
+if PERSIST_SANITIZED_RESULTS_TO_DRIVE and not DRIVE_SOURCE_FILE_ID.strip():
     drive_result_dir = Path(DRIVE_RESULT_DIR)
     drive_result_dir.mkdir(parents=True, exist_ok=True)
     saved_to = shutil.copy2(RESULT_BUNDLE, drive_result_dir / RESULT_BUNDLE.name)

@@ -60,3 +60,5 @@ AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파�
 - registration/query video intersection을 frame run·seed별로 검증한다.
 - NPZ 임베딩은 `/content`에만 두고 Drive/Git에 저장하지 않는다.
 - Drive에는 집계 JSON/CSV, hash, 비식별 reject reason count, PNG만 포함한 ZIP을 저장한다.
+
+DriveFS가 `mount failed`로 반복 종료되면 Drive 웹에서 승인 ZIP의 파일 ID를 확인해 감사 노트북의 `DRIVE_SOURCE_FILE_ID`에만 입력한다. 이 fallback은 Google 인증 Drive API로 ZIP을 `/content`에 내려받으며, ID는 Git·결과 ZIP에 기록하지 않는다. 이때 비식별 결과 ZIP은 브라우저로 내려받는다.

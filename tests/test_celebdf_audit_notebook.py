@@ -34,6 +34,8 @@ class AuditNotebookTests(unittest.TestCase):
         self.assertIn('BRANCH = "exp/4-celebdf-baseline-audit"', source)
         self.assertIn('FRAMES_PER_VIDEO_VALUES = "1,5,10"', source)
         self.assertIn('REFERENCE_COUNTS = "1,3,5"', source)
+        self.assertIn('DRIVE_SOURCE_FILE_ID = ""', source)
+        self.assertIn('MediaIoBaseDownload', source)
         self.assertIn('onnxruntime-gpu==1.23.2', source)
         self.assertNotIn("Chunbae-A/deepsogak", source)
         self.assertNotIn("/content/deepsogak", source)
