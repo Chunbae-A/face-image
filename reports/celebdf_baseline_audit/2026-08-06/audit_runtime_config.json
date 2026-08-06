@@ -1,0 +1,23 @@
+{
+  "code_version": "embedded:7a8af82b0914",
+  "frames_per_video": [
+    1,
+    5,
+    10
+  ],
+  "reference_counts": [
+    1,
+    3,
+    5
+  ],
+  "seeds": [
+    20260805,
+    20260806,
+    20260807,
+    20260808,
+    20260809
+  ],
+  "bootstrap_repeats": 500,
+  "raw_data_in_bundle": false,
+  "embeddings_in_bundle": false
+}

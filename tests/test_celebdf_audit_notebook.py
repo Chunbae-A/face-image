@@ -40,6 +40,8 @@ class AuditNotebookTests(unittest.TestCase):
         self.assertIn('MediaIoBaseDownload', source)
         self.assertIn('Path("/content").glob("Celeb-DF-v2.zip.part-*")', source)
         self.assertIn('source_transport = "runtime_upload_parts"', source)
+        self.assertIn("runtime_upload_zip_matches_expected", source)
+        self.assertIn('"ignored_runtime_upload_zip_bytes"', source)
         self.assertIn('Celeb-DF ZIP size mismatch:', source)
         self.assertIn('onnxruntime-gpu==1.23.2', source)
         self.assertNotIn("Chunbae-A/deepsogak", source)
@@ -52,7 +54,7 @@ class AuditNotebookTests(unittest.TestCase):
             source.index("elif IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():"),
         )
         self.assertLess(
-            source.index('elif IN_HOSTED_COLAB and runtime_upload_zip.exists():'),
+            source.index('elif IN_HOSTED_COLAB and runtime_upload_zip_matches_expected:'),
             source.index("elif IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():"),
         )
 

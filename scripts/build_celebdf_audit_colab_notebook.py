@@ -167,6 +167,15 @@ source_zip = Path(SOURCE_ZIP_PATH).expanduser()
 source_transport = "configured_path"
 runtime_upload_zip = Path("/content/Celeb-DF-v2.zip")
 runtime_upload_parts = sorted(Path("/content").glob("Celeb-DF-v2.zip.part-*"))
+runtime_upload_zip_matches_expected = runtime_upload_zip.exists() and (
+    not EXPECTED_SOURCE_ZIP_BYTES
+    or runtime_upload_zip.stat().st_size == EXPECTED_SOURCE_ZIP_BYTES
+)
+if IN_HOSTED_COLAB and runtime_upload_zip.exists() and not runtime_upload_zip_matches_expected:
+    print({
+        "ignored_runtime_upload_zip_bytes": runtime_upload_zip.stat().st_size,
+        "expected_source_zip_bytes": EXPECTED_SOURCE_ZIP_BYTES,
+    })
 
 if IN_HOSTED_COLAB and ASSEMBLE_RUNTIME_UPLOAD_PARTS:
     if not runtime_upload_parts:
@@ -185,7 +194,7 @@ if IN_HOSTED_COLAB and ASSEMBLE_RUNTIME_UPLOAD_PARTS:
     temporary_joined_zip.replace(runtime_upload_zip)
     source_zip = runtime_upload_zip
     source_transport = "runtime_upload_parts"
-elif IN_HOSTED_COLAB and runtime_upload_zip.exists():
+elif IN_HOSTED_COLAB and runtime_upload_zip_matches_expected:
     source_zip = runtime_upload_zip
     source_transport = "runtime_upload"
 elif IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():

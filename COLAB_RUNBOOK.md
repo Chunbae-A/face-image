@@ -63,4 +63,8 @@ AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파�
 
 DriveFS가 `mount failed`로 반복 종료되면 Drive 웹에서 승인 ZIP의 파일 ID를 확인해 감사 노트북의 `DRIVE_SOURCE_FILE_ID`에만 입력한다. 이 fallback은 Google 인증 Drive API로 ZIP을 `/content`에 내려받으며, ID는 Git·결과 ZIP에 기록하지 않는다. 이때 비식별 결과 ZIP은 브라우저로 내려받는다.
 
-Drive 자격 증명 전파도 실패하면 로컬 ZIP을 2GB 미만의 `Celeb-DF-v2.zip.part-*` 조각으로 나누어 Colab 세션 저장소에 모두 올린 뒤 `ASSEMBLE_RUNTIME_UPLOAD_PARTS=True`로 4번 셀을 실행한다. 분할 전 실제 ZIP 크기를 `EXPECTED_SOURCE_ZIP_BYTES`에 넣으면 결합 후 바이트까지 검증한다. 노트북은 조각 바이트의 합과 결합 ZIP 크기를 비교하고 `/content/Celeb-DF-v2.zip`을 생성한다. 이 경로는 Drive 인증을 건너뛰며 원본·조각은 runtime 종료 시 삭제된다.
+감사에는 `Celeb-real`만 필요하다. 이용약관이 허용하면 원본에서 `Celeb-real` 590개 영상만 담은 ZIP을 만들고 Drive의 전용 비공개 폴더에 한 번 업로드하는 방식을 우선한다. 새 Colab runtime에서는 이 파일을 `/content`로 복사하거나, Drive 인증까지 실패하면 1GB 안팎의 단일 ZIP만 세션 저장소에 올린다. `EXPECTED_SOURCE_ZIP_BYTES`에는 로컬에서 확인한 정확한 바이트를 입력한다.
+
+노트북은 `/content/Celeb-DF-v2.zip`이 남아 있어도 예상 바이트와 다르면 불완전한 이전 업로드로 간주해 무시한다. 파일 패널의 표시 단위가 반올림되므로 성공 여부는 UI의 MB/GB가 아니라 정확한 바이트와 ZIP inventory `590 videos / 59 subjects / 56 eligible subjects`로 판단한다.
+
+단일 ZIP 업로드도 불가능할 때만 로컬 ZIP을 2GB 미만의 `Celeb-DF-v2.zip.part-*` 조각으로 나누어 세션 저장소에 모두 올린 뒤 `ASSEMBLE_RUNTIME_UPLOAD_PARTS=True`로 4번 셀을 실행한다. 노트북은 조각 바이트의 합과 결합 ZIP 크기를 비교해 `/content/Celeb-DF-v2.zip`을 생성한다. 이 경로의 원본·조각은 runtime 종료 시 삭제된다.
