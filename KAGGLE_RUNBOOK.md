@@ -2,6 +2,10 @@
 
 이 문서는 Issue #6의 촬영 열화 실험을 Google Colab 대신 Kaggle 무료 GPU에서 실행하는 방법을 설명한다. 실험량은 `590개 영상 × 5프레임 × 6조건 = 최대 17,700프레임`이다.
 
+## 완료된 실행
+
+2026-08-06 Kaggle P100에서 여섯 조건 전체 실행을 완료했다. 처리 성공률과 TAR Gate는 통과했지만 FAR 목표는 통과하지 못해 API 판정 기준값을 변경하지 않았다. 집계 결과와 해석은 [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06)에 있다. 비공개 Dataset 주소와 인증정보는 기록하지 않는다.
+
 ## 먼저 확인할 것
 
 - Celeb-DF 제공 조건에서 **Kaggle 비공개 Dataset 처리**가 허용되는지 확인한다.

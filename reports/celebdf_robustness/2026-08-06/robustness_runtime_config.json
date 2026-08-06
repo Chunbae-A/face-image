@@ -1,0 +1,27 @@
+{
+  "environment": "kaggle",
+  "code_version": "embedded:be50c18a7a6a",
+  "source_zip_bytes": 928989923,
+  "frames_per_video": 5,
+  "minimum_valid_frames": 3,
+  "conditions": [
+    "clean",
+    "jpeg_q30",
+    "gaussian_blur_sigma2",
+    "low_light_gamma2",
+    "downscale_0_25",
+    "combined_mobile_stress"
+  ],
+  "reference_count": 3,
+  "reserved_registration_count": 5,
+  "seeds": [
+    20260805,
+    20260806,
+    20260807,
+    20260808,
+    20260809
+  ],
+  "bootstrap_repeats": 500,
+  "raw_data_in_bundle": false,
+  "embeddings_in_bundle": false
+}
