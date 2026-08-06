@@ -14,7 +14,7 @@
 | 기준선 | 영상당 5프레임, 등록 영상 3개 평균 | 완료 |
 | API | 등록 사진 1~5장과 확인 사진 1장의 동일인 후보 비교 | 완료 |
 | 로컬 데모 | Docker CPU에서 같은 사람·다른 사람 HTTP 요청 확인 | 완료 |
-| 고도화 | 흐림·저조도·압축 평가와 품질 가중 평균 비교 | 다음 작업 |
+| 고도화 | 흐림·저조도·압축 6조건 평가 완료, FAR Gate 미통과 | 실험 완료·운영 미승인 |
 | 운영 적용 | 한국인·실제 촬영 검증, 라이브니스, 상용 사용권 | 미승인 |
 
 이 프로젝트는 **얼굴 동일인 검증**을 다룬다. 딥페이크 탐지 정확도나 여러 사람 중 한 명을 찾는 얼굴 검색 모델이 아니다.
@@ -145,7 +145,11 @@ Swagger에서 등록·확인 사진을 함께 고르는 것은 개발자 모델 
 
 ## 다음 모델 고도화
 
-다음 실험의 목적은 단순히 더 큰 모델을 사용하는 것이 아니라 **나쁜 촬영 조건에서 기존 방식보다 실제로 좋아지는지 증명하는 것**이다.
+Kaggle 무료 GPU에서 기존 기준선의 촬영 열화 6조건 평가는 완료했다. 모든 조건에서 TAR 손실은 없었고 처리 성공률은 99.83%였지만, 최악 FAR `0.001609`가 목표 `0.001`을 넘었다. 조건별로 기준값을 다시 정해도 최악 FAR은 `0.002091`이어서 **API 기준값은 변경하지 않는다.**
+
+상세 표, 판정 Gate와 개인정보 제외 검사는 [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06)에 있다.
+
+이번 평가는 기존 모델의 스트레스 검사다. 다음 개선 실험의 목적은 단순히 더 큰 모델을 사용하는 것이 아니라 **나쁜 촬영 조건에서 기존 방식보다 실제로 좋아지는지 증명하는 것**이다.
 
 ```text
 기존 방식: 등록 얼굴 특징 단순 평균
@@ -162,7 +166,7 @@ Swagger에서 등록·확인 사진을 함께 고르는 것은 개발자 모델 
 5. 해상도 축소
 6. 휴대전화 복합 열화
 
-Kaggle 무료 GPU에서 처리 성공률, FAR, TAR과 기준값 변화를 비교한다. 운영 후보는 목표 FAR, TAR 손실, 처리 성공률 Gate를 모두 통과해야 한다.
+다음 PR에서는 품질 가중 평균이나 품질 기반 거절 규칙을 구현하고 같은 프로토콜로 기존 단순 평균과 비교한다. 운영 후보는 목표 FAR, TAR 손실, 처리 성공률 Gate를 모두 통과해야 한다. 비공개 데이터셋 준비와 실행 순서는 [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md)를 따른다.
 
 ## 로드맵
 
@@ -176,7 +180,7 @@ Kaggle 무료 GPU에서 처리 성공률, FAR, TAR과 기준값 변화를 비교
 
 ### v0.2 — 모델 고도화
 
-- Kaggle 촬영 열화 평가
+- Kaggle 촬영 열화 평가 완료 — FAR Gate 미통과
 - 품질 가중 등록 특징과 단순 평균 비교
 - Validation 기준 판정값 재보정
 - 로컬 `/demo` 화면과 재촬영 상태 연결
@@ -195,6 +199,8 @@ Kaggle 무료 GPU에서 처리 성공률, FAR, TAR과 기준값 변화를 비교
 - [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md): 데모 사용자 흐름, 안전한 판정 분기와 시험표
 - [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 실험 계획
 - [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab 실행과 checkpoint 운영
+- [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md): Kaggle 비공개 데이터셋과 무료 GPU 실험 실행
+- [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06): 촬영 열화 6조건 결과와 API 적용 결정
 - [`faceguard_api`](faceguard_api): FastAPI 기반 무상태 얼굴가드 API
 - [`configs/faceguard`](configs/faceguard): 데이터 분리·평가 프로토콜 설정
 - [`notebooks`](notebooks): Colab 재현 노트북

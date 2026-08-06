@@ -164,7 +164,7 @@ Colab 메뉴에서 **런타임 → 런타임 유형 변경 → GPU**를 선택�
         """
 #@title 2. 라이브러리 설치
 %pip uninstall -y -q onnxruntime onnxruntime-gpu
-%pip install -q --no-cache-dir "insightface==1.0.1" "onnxruntime-gpu==1.23.2" opencv-python-headless pandas scikit-learn matplotlib seaborn tqdm
+%pip install -q --no-cache-dir "insightface==1.0.1" "onnxruntime-gpu==1.23.2" "Pillow==12.3.0" opencv-python-headless pandas scikit-learn matplotlib seaborn tqdm
 """
     ),
     repository_bootstrap_cell(),
@@ -447,14 +447,86 @@ plt.show()
     code(
         """
 #@title 13. 비식별 결과 묶음 저장
+from collections import Counter
 import zipfile
+
+inventory_public_fields = (
+    "dataset",
+    "video_count",
+    "subject_count",
+    "uncompressed_bytes",
+    "minimum_videos_per_subject",
+    "maximum_videos_per_subject",
+    "eligible_subjects_ge_8_videos",
+)
+PUBLIC_INVENTORY_JSON = RESULT_ROOT / "celeb_real_inventory_public.json"
+PUBLIC_INVENTORY_JSON.write_text(
+    json.dumps(
+        {key: inventory[key] for key in inventory_public_fields},
+        ensure_ascii=False,
+        indent=2,
+    ),
+    encoding="utf-8",
+)
+
+run_report = json.loads(RUN_REPORT_JSON.read_text(encoding="utf-8"))
+run_report_public_fields = (
+    "status",
+    "mode",
+    "selected_video_count",
+    "attempted_this_run",
+    "successful_video_count_total",
+    "rejected_this_run",
+    "frames_per_video",
+    "minimum_valid_frames",
+    "input_condition",
+    "elapsed_seconds",
+    "manifest_sha256",
+    "git_commit",
+    "code_version",
+    "resume_fingerprint",
+    "model_license_scope",
+    "insightface_version",
+    "onnxruntime_version",
+    "onnxruntime_available_providers",
+    "onnxruntime_selected_providers",
+    "device",
+    "model_name",
+    "model_hashes",
+)
+PUBLIC_RUN_REPORT_JSON = RESULT_ROOT / "celeb_real_arcface_run_public.json"
+PUBLIC_RUN_REPORT_JSON.write_text(
+    json.dumps(
+        {key: run_report[key] for key in run_report_public_fields if key in run_report},
+        ensure_ascii=False,
+        indent=2,
+    ),
+    encoding="utf-8",
+)
+
+REJECT_COUNTS_JSON = RESULT_ROOT / "celeb_real_reject_counts.json"
+reject_counts = Counter()
+if REJECTS_CSV.exists():
+    import csv
+    with REJECTS_CSV.open(newline="", encoding="utf-8") as handle:
+        reject_counts.update(
+            row.get("reason", "unknown") or "unknown"
+            for row in csv.DictReader(handle)
+        )
+REJECT_COUNTS_JSON.write_text(
+    json.dumps(dict(sorted(reject_counts.items())), ensure_ascii=False, indent=2),
+    encoding="utf-8",
+)
 
 RESULT_BUNDLE = RESULT_ROOT / "celeb_real_arcface_results.zip"
 bundle_files = [
-    INVENTORY_JSON, RUN_REPORT_JSON, METRICS_JSON, METRICS_CSV, FIGURE_PNG,
+    PUBLIC_INVENTORY_JSON,
+    PUBLIC_RUN_REPORT_JSON,
+    REJECT_COUNTS_JSON,
+    METRICS_JSON,
+    METRICS_CSV,
+    FIGURE_PNG,
 ]
-if REJECTS_CSV.exists():
-    bundle_files.append(REJECTS_CSV)
 with zipfile.ZipFile(RESULT_BUNDLE, "w", compression=zipfile.ZIP_DEFLATED) as archive:
     for path in bundle_files:
         archive.write(path, arcname=path.name)
@@ -481,8 +553,8 @@ if IN_HOSTED_COLAB and not PERSIST_DERIVED_RESULTS_TO_DRIVE:
 ]
 
 
-def main() -> int:
-    notebook = {
+def build_notebook() -> dict[str, object]:
+    return {
         "cells": CELLS,
         "metadata": {
             "accelerator": "GPU",
@@ -500,6 +572,10 @@ def main() -> int:
         "nbformat": 4,
         "nbformat_minor": 5,
     }
+
+
+def main() -> int:
+    notebook = build_notebook()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
         json.dumps(notebook, ensure_ascii=False, indent=1) + "\n",

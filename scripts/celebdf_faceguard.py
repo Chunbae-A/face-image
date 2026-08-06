@@ -58,6 +58,7 @@ class VideoEmbedding:
     mean_face_area_ratio: float
     decode_seconds: float
     inference_seconds: float
+    transform_seconds: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -281,6 +282,9 @@ def save_video_embeddings(records: Sequence[VideoEmbedding], path: Path) -> None
             inference_seconds=np.asarray(
                 [record.inference_seconds for record in records], dtype=np.float32
             ),
+            transform_seconds=np.asarray(
+                [record.transform_seconds for record in records], dtype=np.float32
+            ),
         )
     os.replace(temporary, path)
 
@@ -305,6 +309,13 @@ def load_video_embeddings(path: Path) -> list[VideoEmbedding]:
         count = len(payload["subject_ids"])
         if any(len(payload[key]) != count for key in required):
             raise ValueError("embedding arrays do not have the same row count")
+        transform_seconds = (
+            payload["transform_seconds"]
+            if "transform_seconds" in payload.files
+            else np.zeros(count, dtype=np.float32)
+        )
+        if len(transform_seconds) != count:
+            raise ValueError("embedding transform_seconds does not match row count")
         return [
             VideoEmbedding(
                 subject_id=str(payload["subject_ids"][index]),
@@ -317,6 +328,7 @@ def load_video_embeddings(path: Path) -> list[VideoEmbedding]:
                 mean_face_area_ratio=float(payload["mean_face_area_ratios"][index]),
                 decode_seconds=float(payload["decode_seconds"][index]),
                 inference_seconds=float(payload["inference_seconds"][index]),
+                transform_seconds=float(transform_seconds[index]),
             )
             for index in range(count)
         ]

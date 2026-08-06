@@ -68,3 +68,18 @@ DriveFS가 `mount failed`로 반복 종료되면 Drive 웹에서 승인 ZIP의 �
 노트북은 `/content/Celeb-DF-v2.zip`이 남아 있어도 예상 바이트와 다르면 불완전한 이전 업로드로 간주해 무시한다. 파일 패널의 표시 단위가 반올림되므로 성공 여부는 UI의 MB/GB가 아니라 정확한 바이트와 ZIP inventory `590 videos / 59 subjects / 56 eligible subjects`로 판단한다.
 
 단일 ZIP 업로드도 불가능할 때만 로컬 ZIP을 2GB 미만의 조각으로 나누어 세션 저장소에 모두 올린 뒤 `ASSEMBLE_RUNTIME_UPLOAD_PARTS=True`로 4번 셀을 실행한다. 조각 이름은 반드시 같은 자릿수의 연속 번호를 사용한다. 예: `Celeb-DF-v2.zip.part-00`, `Celeb-DF-v2.zip.part-01`. 노트북은 숫자 순서와 연속성을 확인한 뒤 조각 바이트의 합과 결합 ZIP 크기를 비교해 `/content/Celeb-DF-v2.zip`을 생성한다. 이 경로의 원본·조각은 runtime 종료 시 삭제된다.
+
+## 촬영 열화 강건성 평가
+
+[`notebooks/celebdf_arcface_robustness_colab.ipynb`](notebooks/celebdf_arcface_robustness_colab.ipynb)는 Issue #6의 후속 실험이다. 깨끗한 영상으로 얼굴을 등록한 뒤 압축, 흐림, 어두움, 저해상도, 복합 열화 query에서 같은 사람을 얼마나 안정적으로 찾는지 확인한다.
+
+1. Drive의 비공개 `face-image-data` 폴더에 929MB Celeb-real 전용 ZIP을 둔다.
+2. 기본 경로 `/content/drive/MyDrive/face-image-data/Celeb-DF-v2.zip`과 정확한 크기 `928,989,923 bytes`가 맞는지 확인한다.
+3. GPU runtime을 선택하고 클라우드 처리·InsightFace 비상업 연구 조건 확인값을 `True`로 바꾼다.
+4. 1~6번 셀로 설치, 데이터 확인, 590개 영상 추출, GPU 연결을 확인한다.
+5. 7번 셀에서 여섯 조건을 순서대로 처리한다. 총 최대 추론량은 `590 × 5프레임 × 6조건 = 17,700프레임`이다.
+6. 8~11번 셀에서 공통 query 평가, 판정 기준값 비교, 그래프, 비식별 결과 ZIP 저장을 수행한다.
+
+각 조건은 25개 영상마다 임베딩·진행 상태를 원자적으로 갱신한다. 연결이 잠시 끊겨도 runtime이 살아 있다면 7번 셀을 다시 실행해 완료된 영상 다음부터 이어간다. runtime 자체가 삭제되면 `/content` 체크포인트도 사라지므로 Drive 원본에서 다시 시작해야 한다. 임베딩은 생체정보이므로 재개 편의를 위해 Drive에 저장하지 않는다.
+
+결과는 먼저 얼굴 검출 성공률을 보고, 그다음 깨끗한 영상에서 정한 기준값을 고정했을 때의 TAR·FAR을 본다. TAR이 깨끗한 조건보다 0.05 이상 낮거나 성공률이 0.98 미만이면 재촬영 안내가 필요한 조건으로 표시한다. FAR이 목표 `0.001`보다 높으면 운영 기준값으로 승인하지 않는다.

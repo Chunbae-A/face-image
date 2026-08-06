@@ -66,6 +66,7 @@ class AuditNotebookTests(unittest.TestCase):
         self.assertIn('"ignored_runtime_upload_zip_bytes"', source)
         self.assertIn('Celeb-DF ZIP size mismatch:', source)
         self.assertIn('onnxruntime-gpu==1.23.2', source)
+        self.assertIn('Pillow==12.3.0', source)
         self.assertNotIn("Chunbae-A/deepsogak", source)
         self.assertNotIn("/content/deepsogak", source)
 

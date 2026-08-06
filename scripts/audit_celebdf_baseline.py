@@ -104,6 +104,8 @@ def sanitized_run_report(path: Path, expected_frames: int) -> dict[str, object]:
         raise ValueError(
             f"run report frame mismatch: expected {expected_frames}, got {report['frames_per_video']}"
         )
+    if report.get("input_condition") != "clean":
+        raise ValueError("baseline audit requires input_condition=clean")
     allowed = (
         "status",
         "selected_video_count",
@@ -112,6 +114,9 @@ def sanitized_run_report(path: Path, expected_frames: int) -> dict[str, object]:
         "rejected_this_run",
         "frames_per_video",
         "minimum_valid_frames",
+        "input_condition",
+        "code_version",
+        "resume_fingerprint",
         "elapsed_seconds",
         "manifest_sha256",
         "git_commit",
@@ -158,6 +163,9 @@ def quality_summary(
     inference_seconds = np.asarray(
         [record.inference_seconds for record in records], dtype=float
     )
+    transform_seconds = np.asarray(
+        [record.transform_seconds for record in records], dtype=float
+    )
     return {
         "successful_video_count": len(records),
         "success_rate": len(records) / expected_video_count,
@@ -168,6 +176,7 @@ def quality_summary(
         "valid_frames_min": int(np.min(valid_frames)),
         "mean_detection_score": float(np.nanmean(detection_scores)),
         "mean_decode_seconds_per_video": float(np.mean(decode_seconds)),
+        "mean_transform_seconds_per_video": float(np.mean(transform_seconds)),
         "mean_inference_seconds_per_video": float(np.mean(inference_seconds)),
     }
 

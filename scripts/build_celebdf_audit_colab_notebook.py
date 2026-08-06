@@ -153,7 +153,7 @@ Colab에서 GPU runtime을 선택한다. 설치 셀은 Colab CUDA 사용자 라�
         """
 #@title 2. 라이브러리 설치
 %pip uninstall -y -q onnxruntime onnxruntime-gpu
-%pip install -q --no-cache-dir "insightface==1.0.1" "onnxruntime-gpu==1.23.2" opencv-python-headless pandas matplotlib seaborn tqdm
+%pip install -q --no-cache-dir "insightface==1.0.1" "onnxruntime-gpu==1.23.2" "Pillow==12.3.0" opencv-python-headless pandas matplotlib seaborn tqdm
 """
     ),
     repository_bootstrap_cell(),
