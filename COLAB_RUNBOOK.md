@@ -51,3 +51,20 @@ AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파�
 8. 얼굴이 없는 결과 묶음만 내려받는다. 얼굴 프레임과 `.npz` 임베딩은 Git 또는 공개 저장소에 올리지 않는다.
 
 결과 묶음에는 inventory, 실행 환경·모델 hash, reject 사유, ROC-AUC/EER/TAR/FAR/FRR 표, ROC/score 분포 그림이 포함된다. Celeb-real 결과는 일반 얼굴 동일인 검증 baseline이며 딥페이크 탐지 정확도나 한국인 특화 성능으로 해석하지 않는다.
+
+## Celeb-DF baseline 재현성 감사
+
+[`notebooks/celebdf_arcface_audit_colab.ipynb`](notebooks/celebdf_arcface_audit_colab.ipynb)는 영상당 1/5/10프레임을 각각 다시 추론한 뒤 등록 1/3/5개, subject split seed 5개를 비교한다. 등록 수와 관계없이 query는 항상 6번째 영상부터 사용해 공정하게 비교한다.
+
+- validation/test identity intersection을 seed별로 검증한다.
+- registration/query video intersection을 frame run·seed별로 검증한다.
+- NPZ 임베딩은 `/content`에만 두고 Drive/Git에 저장하지 않는다.
+- Drive에는 집계 JSON/CSV, hash, 비식별 reject reason count, PNG만 포함한 ZIP을 저장한다.
+
+DriveFS가 `mount failed`로 반복 종료되면 Drive 웹에서 승인 ZIP의 파일 ID를 확인해 감사 노트북의 `DRIVE_SOURCE_FILE_ID`에만 입력한다. 이 fallback은 Google 인증 Drive API로 ZIP을 `/content`에 내려받으며, ID는 Git·결과 ZIP에 기록하지 않는다. 이때 비식별 결과 ZIP은 브라우저로 내려받는다.
+
+감사에는 `Celeb-real`만 필요하다. 이용약관이 허용하면 원본에서 `Celeb-real` 590개 영상만 담은 ZIP을 만들고 Drive의 전용 비공개 폴더에 한 번 업로드하는 방식을 우선한다. 새 Colab runtime에서는 이 파일을 `/content`로 복사하거나, Drive 인증까지 실패하면 1GB 안팎의 단일 ZIP만 세션 저장소에 올린다. `EXPECTED_SOURCE_ZIP_BYTES`에는 로컬에서 확인한 정확한 바이트를 입력한다.
+
+노트북은 `/content/Celeb-DF-v2.zip`이 남아 있어도 예상 바이트와 다르면 불완전한 이전 업로드로 간주해 무시한다. 파일 패널의 표시 단위가 반올림되므로 성공 여부는 UI의 MB/GB가 아니라 정확한 바이트와 ZIP inventory `590 videos / 59 subjects / 56 eligible subjects`로 판단한다.
+
+단일 ZIP 업로드도 불가능할 때만 로컬 ZIP을 2GB 미만의 조각으로 나누어 세션 저장소에 모두 올린 뒤 `ASSEMBLE_RUNTIME_UPLOAD_PARTS=True`로 4번 셀을 실행한다. 조각 이름은 반드시 같은 자릿수의 연속 번호를 사용한다. 예: `Celeb-DF-v2.zip.part-00`, `Celeb-DF-v2.zip.part-01`. 노트북은 숫자 순서와 연속성을 확인한 뒤 조각 바이트의 합과 결합 ZIP 크기를 비교해 `/content/Celeb-DF-v2.zip`을 생성한다. 이 경로의 원본·조각은 runtime 종료 시 삭제된다.

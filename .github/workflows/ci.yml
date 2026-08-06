@@ -26,13 +26,16 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install test dependencies
+        run: python -m pip install --requirement requirements-api-test.txt
+
       - name: Run unit tests
-        run: python3 -m unittest discover -s tests
+        run: python -m unittest discover -s tests
 
       - name: Check repository hygiene
-        run: python3 scripts/check_repository_hygiene.py
+        run: python scripts/check_repository_hygiene.py
 
       - name: Verify generated Colab notebook
         run: |
-          python3 scripts/build_celebdf_colab_notebook.py
+          python scripts/build_celebdf_colab_notebook.py
           git diff --exit-code -- notebooks/celebdf_arcface_full_colab.ipynb

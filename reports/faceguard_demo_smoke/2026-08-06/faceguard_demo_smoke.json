@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "run_id": "faceguard-local-demo-smoke-20260806",
+  "run_date": "2026-08-06",
+  "scope": "local functional smoke; not accuracy or identity assurance",
+  "sanitized": true,
+  "source": {
+    "dataset": "Celeb-DF-v2/Celeb-real",
+    "authorized_local_copy": true,
+    "raw_assets_in_git": false,
+    "subject_or_video_identifiers_in_report": false
+  },
+  "input": {
+    "reference_image_count": 3,
+    "same_person_query_count": 1,
+    "different_person_query_count": 1,
+    "distinct_source_videos": true,
+    "full_frames_only": true
+  },
+  "runtime": {
+    "api_version": "0.1.0",
+    "git_commit": "8b97c19",
+    "container_os": "linux",
+    "container_architecture": "arm64",
+    "python_version": "3.11.15",
+    "insightface_version": "1.0.1",
+    "onnxruntime_version": "1.23.2",
+    "execution_provider": "CPUExecutionProvider"
+  },
+  "model": {
+    "name": "buffalo_l",
+    "modules": [
+      "detection",
+      "recognition"
+    ],
+    "fingerprint_sha256": "4e912492f26ec02de957b2a572b9b847661d480393c40280dbc617b013eca803",
+    "threshold": 0.2823836207389832,
+    "threshold_status": "research_only_unapproved"
+  },
+  "results": [
+    {
+      "condition": "same_person_cold",
+      "expected_same_person": true,
+      "observed_same_person": true,
+      "similarity": 0.6942003965377808,
+      "processing_ms": 17789.27363299954,
+      "includes_first_model_prepare": true
+    },
+    {
+      "condition": "same_person_warm",
+      "expected_same_person": true,
+      "observed_same_person": true,
+      "similarity": 0.6942003965377808,
+      "processing_ms": 962.7060839993646,
+      "includes_first_model_prepare": false
+    },
+    {
+      "condition": "different_person_warm",
+      "expected_same_person": false,
+      "observed_same_person": false,
+      "similarity": -0.05194970220327377,
+      "processing_ms": 1188.254376000259,
+      "includes_first_model_prepare": false
+    }
+  ],
+  "health_after": {
+    "status": "ok",
+    "model_loaded": true,
+    "license_accepted": true,
+    "execution_provider": "CPUExecutionProvider"
+  },
+  "decision": {
+    "functional_demo_path": "pass",
+    "accuracy_approved": false,
+    "production_identity_assurance_approved": false,
+    "warm_latency_is_sla": false
+  },
+  "privacy": {
+    "images_in_report": false,
+    "embeddings_in_report": false,
+    "filenames_in_report": false,
+    "subject_or_video_ids_in_report": false,
+    "per_image_quality_in_report": false
+  }
+}

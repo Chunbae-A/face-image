@@ -41,6 +41,22 @@ GPU 추론은 `notebooks/celebdf_arcface_full_colab.ipynb` 또는 `scripts/run_c
 
 ```bash
 python3 scripts/build_celebdf_colab_notebook.py
+python3 scripts/build_celebdf_audit_colab_notebook.py
 ```
 
-노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`와 `scripts/run_celebdf_arcface.py`의 변경이 정확히 포함됐는지 검증한다.
+노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`, `scripts/run_celebdf_arcface.py`, `scripts/audit_celebdf_baseline.py`의 변경이 정확히 포함됐는지 검증한다.
+
+## Baseline 감사
+
+`audit_celebdf_baseline.py`는 frame 수별 NPZ를 runtime에서 읽고 다중 seed·reference 지표와 누수 검사를 생성한다. 출력에는 subject/video ID 대신 fingerprint와 reject reason 집계만 남긴다.
+
+```bash
+python3 scripts/audit_celebdf_baseline.py \
+  --embedding-run 1=/trusted/frames_1/video_embeddings.npz \
+  --embedding-run 5=/trusted/frames_5/video_embeddings.npz \
+  --embedding-run 10=/trusted/frames_10/video_embeddings.npz \
+  --run-report 1=/trusted/frames_1/run.json \
+  --run-report 5=/trusted/frames_5/run.json \
+  --run-report 10=/trusted/frames_10/run.json \
+  --output-dir outputs/celebdf_baseline_audit/sanitized
+```

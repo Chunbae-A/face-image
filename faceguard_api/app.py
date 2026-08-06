@@ -1,0 +1,185 @@
+"""FastAPI 기반 딥소각 얼굴가드 서비스."""
+
+from __future__ import annotations
+
+from typing import Annotated, Any
+from uuid import uuid4
+
+from fastapi import FastAPI, File, Request, UploadFile
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from starlette.concurrency import run_in_threadpool
+
+from .domain import FaceQuality
+from .engine import InsightFaceEncoder
+from .errors import FaceGuardError
+from .schemas import (
+    ErrorBody,
+    ErrorResponse,
+    HealthResponse,
+    ImageQualityResponse,
+    VerificationResponse,
+)
+from .service import FaceGuardService
+from .settings import Settings
+
+ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+RESEARCH_WARNING = (
+    "현재 판정 기준값은 Celeb-real 연구 기준선이며 운영 확정값이 아닙니다. "
+    "Kaggle 열화 실험과 외부 한국인·실제 촬영 데이터 검증이 필요합니다."
+)
+
+
+def _quality_response(quality: FaceQuality) -> ImageQualityResponse:
+    return ImageQualityResponse(
+        detection_score=quality.detection_score,
+        face_area_ratio=quality.face_area_ratio,
+        blur_score=quality.blur_score,
+        brightness_mean=quality.brightness_mean,
+        image_width=quality.image_width,
+        image_height=quality.image_height,
+    )
+
+
+async def _read_upload(upload: UploadFile, settings: Settings) -> bytes:
+    if upload.content_type not in ALLOWED_CONTENT_TYPES:
+        raise FaceGuardError(
+            "UNSUPPORTED_CONTENT_TYPE",
+            "JPEG, PNG, WEBP 파일만 전송할 수 있습니다.",
+            415,
+        )
+    payload = await upload.read(settings.maximum_image_bytes + 1)
+    await upload.close()
+    if len(payload) > settings.maximum_image_bytes:
+        raise FaceGuardError(
+            "IMAGE_TOO_LARGE",
+            f"이미지 한 장은 {settings.maximum_image_bytes} bytes 이하여야 합니다.",
+            413,
+        )
+    if not payload:
+        raise FaceGuardError("EMPTY_IMAGE", "빈 이미지 파일은 사용할 수 없습니다.")
+    return payload
+
+
+def create_app(
+    settings: Settings | None = None,
+    encoder: Any | None = None,
+) -> FastAPI:
+    active_settings = settings or Settings.from_environment()
+    active_encoder = encoder or InsightFaceEncoder(active_settings)
+    service = FaceGuardService(active_settings, active_encoder)
+
+    application = FastAPI(
+        title="딥소각 얼굴가드 API",
+        description=(
+            "등록 얼굴 사진과 확인 사진을 비교하는 연구용 동일인 확인 API입니다. "
+            "원본과 임베딩은 애플리케이션에 영구 저장하지 않습니다."
+        ),
+        version=active_settings.api_version,
+    )
+
+    @application.exception_handler(FaceGuardError)
+    async def faceguard_error_handler(
+        request: Request, error: FaceGuardError
+    ) -> JSONResponse:
+        del request
+        body = ErrorResponse(error=ErrorBody(code=error.code, message=error.message))
+        return JSONResponse(status_code=error.http_status, content=body.model_dump())
+
+    @application.exception_handler(RequestValidationError)
+    async def request_validation_error_handler(
+        request: Request, error: RequestValidationError
+    ) -> JSONResponse:
+        del request, error
+        body = ErrorResponse(
+            error=ErrorBody(
+                code="INVALID_REQUEST",
+                message="등록 사진과 확인 사진을 multipart/form-data 형식으로 보내세요.",
+            )
+        )
+        return JSONResponse(status_code=422, content=body.model_dump())
+
+    @application.get("/health", response_model=HealthResponse, tags=["운영"])
+    async def health() -> HealthResponse:
+        license_accepted = active_settings.accept_noncommercial_model_license
+        return HealthResponse(
+            status="ok" if license_accepted else "license_confirmation_required",
+            api_version=active_settings.api_version,
+            model_name=active_settings.model_name,
+            model_loaded=bool(active_encoder.loaded),
+            execution_provider=active_encoder.provider,
+            model_fingerprint=active_encoder.model_fingerprint,
+            license_accepted=license_accepted,
+            threshold_status=active_settings.threshold_status,
+        )
+
+    @application.post(
+        "/v1/faceguard/verify",
+        response_model=VerificationResponse,
+        responses={
+            413: {"model": ErrorResponse},
+            415: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            503: {"model": ErrorResponse},
+        },
+        tags=["얼굴가드"],
+        summary="등록 사진과 확인 사진의 동일인 여부 비교",
+    )
+    async def verify(
+        reference_images: Annotated[
+            list[UploadFile],
+            File(description="등록 얼굴 사진 1~5장, 3장 권장"),
+        ],
+        query_image: Annotated[
+            UploadFile,
+            File(description="동일인 여부를 확인할 얼굴 사진 1장"),
+        ],
+    ) -> VerificationResponse:
+        if not active_settings.accept_noncommercial_model_license:
+            raise FaceGuardError(
+                "MODEL_LICENSE_NOT_ACCEPTED",
+                "InsightFace 비상업 연구용 가중치 조건 확인이 필요합니다.",
+                503,
+            )
+        if len(reference_images) < active_settings.minimum_reference_images:
+            raise FaceGuardError(
+                "TOO_FEW_REFERENCES",
+                f"등록 사진이 최소 {active_settings.minimum_reference_images}장 필요합니다.",
+            )
+        if len(reference_images) > active_settings.maximum_reference_images:
+            raise FaceGuardError(
+                "TOO_MANY_REFERENCES",
+                f"등록 사진은 최대 {active_settings.maximum_reference_images}장까지 사용할 수 있습니다.",
+            )
+
+        reference_payloads = [
+            await _read_upload(upload, active_settings) for upload in reference_images
+        ]
+        query_payload = await _read_upload(query_image, active_settings)
+        verification = await run_in_threadpool(
+            service.verify, reference_payloads, query_payload
+        )
+        return VerificationResponse(
+            request_id=str(uuid4()),
+            is_same_person=verification.is_same_person,
+            similarity=verification.similarity,
+            threshold=verification.threshold,
+            threshold_status=verification.threshold_status,
+            threshold_source=verification.threshold_source,
+            warning=RESEARCH_WARNING,
+            reference_count=verification.reference_count,
+            recommended_reference_count=active_settings.recommended_reference_images,
+            reference_quality=[
+                _quality_response(face.quality) for face in verification.reference_faces
+            ],
+            query_quality=_quality_response(verification.query_face.quality),
+            processing_ms=verification.processing_ms,
+            model_name=active_settings.model_name,
+            execution_provider=active_encoder.provider,
+            model_fingerprint=active_encoder.model_fingerprint,
+        )
+
+    return application
+
+
+app = create_app()
