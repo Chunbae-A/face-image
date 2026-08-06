@@ -196,6 +196,7 @@ Kaggle 무료 GPU에서 기존 기준선의 촬영 열화 6조건 평가는 완�
 ## 저장소 안내
 
 - [`API_RUNBOOK.md`](API_RUNBOOK.md): API 실행, 요청·응답, 오류 코드, 백엔드 연동
+- [`API_QUICKSTART.md`](API_QUICKSTART.md): 저장소만 받은 사용자를 위한 Docker 빠른 실행
 - [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md): 데모 사용자 흐름, 안전한 판정 분기와 시험표
 - [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 실험 계획
 - [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab 실행과 checkpoint 운영
