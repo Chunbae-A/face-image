@@ -462,14 +462,28 @@ print({
 import torch
 import torchvision
 
+cuda_available = torch.cuda.is_available()
+gpu_name = torch.cuda.get_device_name(0) if cuda_available else None
+cuda_capability = torch.cuda.get_device_capability(0) if cuda_available else None
+compiled_arches = torch.cuda.get_arch_list() if cuda_available else []
+required_arch = (
+    f"sm_{cuda_capability[0]}{cuda_capability[1]}" if cuda_capability else None
+)
 print({
     "torch": torch.__version__,
     "torchvision": torchvision.__version__,
-    "cuda_available": torch.cuda.is_available(),
-    "gpu": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+    "cuda_available": cuda_available,
+    "gpu": gpu_name,
+    "cuda_capability": cuda_capability,
+    "compiled_arches": compiled_arches,
 })
-if IN_KAGGLE and not torch.cuda.is_available():
+if IN_KAGGLE and not cuda_available:
     raise RuntimeError("Kaggle Settings에서 GPU를 선택하고 다시 시작하세요.")
+if IN_KAGGLE and compiled_arches and required_arch not in compiled_arches:
+    raise RuntimeError(
+        f"현재 GPU({gpu_name}, {required_arch})는 설치된 PyTorch가 지원하지 않습니다. "
+        "Kaggle Settings에서 GPU T4 x2를 선택하세요."
+    )
 print(subprocess.check_output(
     ["nvidia-smi", "--query-gpu=name,memory.total", "--format=csv,noheader"],
     text=True,

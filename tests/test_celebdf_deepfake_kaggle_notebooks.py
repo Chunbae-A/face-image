@@ -104,6 +104,16 @@ class DeepfakeKaggleNotebookTests(unittest.TestCase):
         self.assertIn('"Pillow==11.3.0"', source)
         self.assertNotIn('"Pillow==12.3.0"', source)
 
+    def test_train_rejects_unsupported_kaggle_gpu_architecture(self):
+        source = "\n".join(
+            "".join(cell["source"])
+            for cell in self.train["cells"]
+            if cell["cell_type"] == "code"
+        )
+        self.assertIn("torch.cuda.get_arch_list()", source)
+        self.assertIn("required_arch not in compiled_arches", source)
+        self.assertIn("GPU T4 x2", source)
+
 
 if __name__ == "__main__":
     unittest.main()

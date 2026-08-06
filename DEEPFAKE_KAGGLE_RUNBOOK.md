@@ -87,7 +87,7 @@ celebdf_deepfake_preflight_sanitized.zip
 1. 새 Private Kaggle Notebook을 만든다.
 2. 위 IPYNB를 Import한다.
 3. `Add Input`에서 **1단계 Notebook의 저장된 Output**을 연결한다.
-4. GPU와 Internet을 켠다. Internet은 ImageNet 사전학습 가중치에 필요하다.
+4. `Settings`에서 **GPU T4 x2**와 Internet을 켠다. Internet은 ImageNet 사전학습 가중치에 필요하다. 2026-08-07 Kaggle PyTorch 환경에서는 P100의 `sm_60` 커널이 포함되지 않아 학습이 실패했으므로 P100을 선택하지 않는다.
 5. 1번 셀의 다음 값을 `True`로 바꾼다.
 
    ```python
