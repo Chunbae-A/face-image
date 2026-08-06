@@ -34,11 +34,27 @@ class AuditNotebookTests(unittest.TestCase):
         self.assertIn('BRANCH = "exp/4-celebdf-baseline-audit"', source)
         self.assertIn('FRAMES_PER_VIDEO_VALUES = "1,5,10"', source)
         self.assertIn('REFERENCE_COUNTS = "1,3,5"', source)
+        self.assertIn('ASSEMBLE_RUNTIME_UPLOAD_PARTS = False', source)
+        self.assertIn('EXPECTED_SOURCE_ZIP_BYTES = 0', source)
         self.assertIn('DRIVE_SOURCE_FILE_ID = ""', source)
         self.assertIn('MediaIoBaseDownload', source)
+        self.assertIn('Path("/content").glob("Celeb-DF-v2.zip.part-*")', source)
+        self.assertIn('source_transport = "runtime_upload_parts"', source)
+        self.assertIn('Celeb-DF ZIP size mismatch:', source)
         self.assertIn('onnxruntime-gpu==1.23.2', source)
         self.assertNotIn("Chunbae-A/deepsogak", source)
         self.assertNotIn("/content/deepsogak", source)
+
+    def test_runtime_upload_fallback_precedes_drive_authentication(self):
+        source = "\n".join("".join(cell["source"]) for cell in self.notebook["cells"])
+        self.assertLess(
+            source.index("if IN_HOSTED_COLAB and ASSEMBLE_RUNTIME_UPLOAD_PARTS:"),
+            source.index("elif IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():"),
+        )
+        self.assertLess(
+            source.index('elif IN_HOSTED_COLAB and runtime_upload_zip.exists():'),
+            source.index("elif IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():"),
+        )
 
     def test_embedded_scripts_match_sources(self):
         bootstrap = next(

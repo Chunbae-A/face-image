@@ -62,3 +62,5 @@ AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파�
 - Drive에는 집계 JSON/CSV, hash, 비식별 reject reason count, PNG만 포함한 ZIP을 저장한다.
 
 DriveFS가 `mount failed`로 반복 종료되면 Drive 웹에서 승인 ZIP의 파일 ID를 확인해 감사 노트북의 `DRIVE_SOURCE_FILE_ID`에만 입력한다. 이 fallback은 Google 인증 Drive API로 ZIP을 `/content`에 내려받으며, ID는 Git·결과 ZIP에 기록하지 않는다. 이때 비식별 결과 ZIP은 브라우저로 내려받는다.
+
+Drive 자격 증명 전파도 실패하면 로컬 ZIP을 2GB 미만의 `Celeb-DF-v2.zip.part-*` 조각으로 나누어 Colab 세션 저장소에 모두 올린 뒤 `ASSEMBLE_RUNTIME_UPLOAD_PARTS=True`로 4번 셀을 실행한다. 분할 전 실제 ZIP 크기를 `EXPECTED_SOURCE_ZIP_BYTES`에 넣으면 결합 후 바이트까지 검증한다. 노트북은 조각 바이트의 합과 결합 ZIP 크기를 비교하고 `/content/Celeb-DF-v2.zip`을 생성한다. 이 경로는 Drive 인증을 건너뛰며 원본·조각은 runtime 종료 시 삭제된다.

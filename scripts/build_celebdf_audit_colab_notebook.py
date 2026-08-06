@@ -97,6 +97,10 @@ REPO_URL = "https://github.com/Chunbae-A/face-image.git" #@param {type:"string"}
 BRANCH = "exp/4-celebdf-baseline-audit" #@param {type:"string"}
 CODE_SOURCE = "embedded" #@param ["embedded", "github"]
 SOURCE_ZIP_PATH = "/content/drive/MyDrive/Celeb-DF-v2.zip" #@param {type:"string"}
+# Drive/Drive API가 막혀 로컬 ZIP을 /content에 분할 업로드한 경우만 True.
+ASSEMBLE_RUNTIME_UPLOAD_PARTS = False #@param {type:"boolean"}
+# 0이면 생략. 분할 전 로컬 ZIP의 실제 바이트를 입력하면 결합 후 검증한다.
+EXPECTED_SOURCE_ZIP_BYTES = 0 #@param {type:"integer"}
 # DriveFS mount가 반복 실패할 때만 Drive 웹의 파일 ID를 입력한다. Git/결과 bundle에는 기록되지 않는다.
 DRIVE_SOURCE_FILE_ID = "" #@param {type:"string"}
 DRIVE_RESULT_DIR = "/content/drive/MyDrive/face-image-celebdf-audit" #@param {type:"string"}
@@ -160,7 +164,31 @@ import json
 import shutil
 
 source_zip = Path(SOURCE_ZIP_PATH).expanduser()
-if IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():
+source_transport = "configured_path"
+runtime_upload_zip = Path("/content/Celeb-DF-v2.zip")
+runtime_upload_parts = sorted(Path("/content").glob("Celeb-DF-v2.zip.part-*"))
+
+if IN_HOSTED_COLAB and ASSEMBLE_RUNTIME_UPLOAD_PARTS:
+    if not runtime_upload_parts:
+        raise FileNotFoundError("No /content/Celeb-DF-v2.zip.part-* uploads were found.")
+    expected_joined_bytes = sum(part.stat().st_size for part in runtime_upload_parts)
+    temporary_joined_zip = runtime_upload_zip.with_suffix(".zip.joining")
+    with temporary_joined_zip.open("wb") as sink:
+        for part in runtime_upload_parts:
+            with part.open("rb") as source:
+                shutil.copyfileobj(source, sink, length=64 * 1024 * 1024)
+    if temporary_joined_zip.stat().st_size != expected_joined_bytes:
+        raise IOError(
+            f"runtime upload join size mismatch: "
+            f"{temporary_joined_zip.stat().st_size} != {expected_joined_bytes}"
+        )
+    temporary_joined_zip.replace(runtime_upload_zip)
+    source_zip = runtime_upload_zip
+    source_transport = "runtime_upload_parts"
+elif IN_HOSTED_COLAB and runtime_upload_zip.exists():
+    source_zip = runtime_upload_zip
+    source_transport = "runtime_upload"
+elif IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():
     from google.colab import auth
     from google.auth import default
     from googleapiclient.discovery import build
@@ -190,12 +218,18 @@ if IN_HOSTED_COLAB and DRIVE_SOURCE_FILE_ID.strip():
             )
         temporary_zip.replace(source_zip)
     print({"drive_api_source": metadata["name"], "bytes": expected_size})
+    source_transport = "drive_api"
 elif IN_HOSTED_COLAB:
     from google.colab import drive
     drive.mount("/content/drive", force_remount=False)
+    source_transport = "drivefs"
 
 if not source_zip.exists():
     raise FileNotFoundError(f"Celeb-DF ZIP not found: {source_zip}")
+if EXPECTED_SOURCE_ZIP_BYTES and source_zip.stat().st_size != EXPECTED_SOURCE_ZIP_BYTES:
+    raise IOError(
+        f"Celeb-DF ZIP size mismatch: {source_zip.stat().st_size} != {EXPECTED_SOURCE_ZIP_BYTES}"
+    )
 
 DATA_ROOT = Path("/content/celebdf_faceguard") if IN_HOSTED_COLAB else REPO_DIR / "outputs" / "celebdf_faceguard"
 AUDIT_ROOT = Path("/content/celebdf_baseline_audit") if IN_HOSTED_COLAB else REPO_DIR / "outputs" / "celebdf_baseline_audit"
@@ -208,6 +242,7 @@ for path in (DATA_ROOT, AUDIT_ROOT, SANITIZED_ROOT):
 
 print({
     "source_zip_gb": round(source_zip.stat().st_size / 1e9, 3),
+    "source_transport": source_transport,
     "runtime_free_gb": round(shutil.disk_usage(AUDIT_ROOT).free / 1e9, 2),
     "audit_root": str(AUDIT_ROOT),
     "sanitized_drive_dir": DRIVE_RESULT_DIR if PERSIST_SANITIZED_RESULTS_TO_DRIVE else None,
