@@ -523,7 +523,16 @@ def evaluate_embeddings(
     minimum_valid_frames: int = 3,
     far_points: Sequence[float] = (0.01, 0.001),
     bootstrap_repeats: int = 500,
+    reference_counts: Sequence[int] = (3, 5),
+    max_reference_count: int = DEFAULT_MAX_REFERENCE_COUNT,
 ) -> dict[str, object]:
+    reference_counts = tuple(sorted(set(int(value) for value in reference_counts)))
+    if not reference_counts:
+        raise ValueError("reference_counts cannot be empty")
+    if reference_counts[0] < 1 or reference_counts[-1] > max_reference_count:
+        raise ValueError("reference_counts must be between 1 and max_reference_count")
+    if minimum_videos <= max_reference_count:
+        raise ValueError("minimum_videos must leave at least one post-registration query")
     grouped = group_eligible_records(
         records,
         minimum_videos=minimum_videos,
@@ -536,16 +545,18 @@ def evaluate_embeddings(
         seed=seed,
     )
     protocols: dict[str, object] = {}
-    for reference_count in (3, 5):
+    for reference_count in reference_counts:
         validation_pairs = build_pair_scores(
             grouped,
             validation_subjects,
             reference_count=reference_count,
+            max_reference_count=max_reference_count,
         )
         test_pairs = build_pair_scores(
             grouped,
             test_subjects,
             reference_count=reference_count,
+            max_reference_count=max_reference_count,
         )
         roc_auc, eer = auc_eer(test_pairs.labels, test_pairs.scores)
         operating_points: dict[str, object] = {}
@@ -587,6 +598,9 @@ def evaluate_embeddings(
         "status": "measured_from_video_embeddings",
         "model_scope": "pretrained ArcFace baseline; no fine-tuning",
         "threshold_note": "thresholds selected on identity-disjoint validation subjects",
+        "reference_counts": list(reference_counts),
+        "max_reference_count": max_reference_count,
+        "query_start_index": max_reference_count,
         "seed": seed,
         "video_embedding_count": len(records),
         "all_subject_count": len(all_subjects),
@@ -642,6 +656,8 @@ def _evaluate_command(args: argparse.Namespace) -> dict[str, object]:
         minimum_videos=args.minimum_videos,
         minimum_valid_frames=args.minimum_valid_frames,
         bootstrap_repeats=args.bootstrap_repeats,
+        reference_counts=args.reference_counts,
+        max_reference_count=args.max_reference_count,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(
@@ -679,6 +695,18 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate.add_argument("--minimum-videos", type=int, default=DEFAULT_MIN_VIDEOS)
     evaluate.add_argument("--minimum-valid-frames", type=int, default=3)
     evaluate.add_argument("--bootstrap-repeats", type=int, default=500)
+    evaluate.add_argument(
+        "--reference-counts",
+        type=lambda value: tuple(int(item) for item in value.split(",") if item.strip()),
+        default=(3, 5),
+        help="comma-separated registration video counts; queries always start after max-reference-count",
+    )
+    evaluate.add_argument(
+        "--max-reference-count",
+        type=int,
+        default=DEFAULT_MAX_REFERENCE_COUNT,
+        help="number of ordered videos reserved before the common query pool",
+    )
     evaluate.set_defaults(handler=_evaluate_command)
     return parser
 

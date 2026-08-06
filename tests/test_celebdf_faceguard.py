@@ -114,8 +114,10 @@ class EmbeddingEvaluationTests(unittest.TestCase):
             synthetic_records(),
             seed=7,
             bootstrap_repeats=20,
+            reference_counts=(1, 3, 5),
         )
         self.assertEqual(report["eligible_subject_count"], 8)
+        self.assertEqual(report["reference_counts"], [1, 3, 5])
         for protocol in report["protocols"].values():
             self.assertAlmostEqual(protocol["test_roc_auc"], 1.0)
             self.assertAlmostEqual(protocol["test_eer"], 0.0)

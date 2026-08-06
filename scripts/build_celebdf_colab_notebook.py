@@ -53,7 +53,7 @@ EMBEDDED_FILES_B64 = ''' + repr(embedded) + r'''
 EMBEDDED_CODE_SHA256 = "''' + fingerprint + r'''"
 
 if IN_HOSTED_COLAB and CODE_SOURCE == "github":
-    REPO_DIR = Path("/content/deepsogak")
+    REPO_DIR = Path("/content/face-image")
     if not REPO_DIR.exists():
         subprocess.run(
             ["git", "clone", "--depth", "1", "--branch", BRANCH, REPO_URL, str(REPO_DIR)],
@@ -67,7 +67,7 @@ if IN_HOSTED_COLAB and CODE_SOURCE == "github":
         ["git", "-C", str(REPO_DIR), "rev-parse", "HEAD"], text=True
     ).strip()
 elif IN_HOSTED_COLAB:
-    REPO_DIR = Path("/content/deepsogak")
+    REPO_DIR = Path("/content/face-image")
     for relative_path, encoded in EMBEDDED_FILES_B64.items():
         target = REPO_DIR / relative_path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -110,14 +110,14 @@ InsightFace 코드는 MIT이지만 제공 사전학습 모델은 비상업 연�
     code(
         """
 #@title 1. 실행 설정과 권한 확인
-REPO_URL = "https://github.com/Chunbae-A/deepsogak.git" #@param {type:"string"}
-BRANCH = "feat/faceguard-experiment-plan" #@param {type:"string"}
+REPO_URL = "https://github.com/Chunbae-A/face-image.git" #@param {type:"string"}
+BRANCH = "main" #@param {type:"string"}
 CODE_SOURCE = "embedded" #@param ["embedded", "github"]
 USE_GOOGLE_DRIVE = True #@param {type:"boolean"}
 SOURCE_ZIP_PATH = "/content/drive/MyDrive/Celeb-DF-v2.zip" #@param {type:"string"}
 COPY_ZIP_TO_RUNTIME = False #@param {type:"boolean"}
 PERSIST_DERIVED_RESULTS_TO_DRIVE = False #@param {type:"boolean"}
-DRIVE_RESULT_DIR = "/content/drive/MyDrive/deepsogak-celebdf-results" #@param {type:"string"}
+DRIVE_RESULT_DIR = "/content/drive/MyDrive/face-image-celebdf-results" #@param {type:"string"}
 
 # 공식 신청·승인으로 받은 파일이며, 해당 약관상 Colab/Drive 처리가 허용되는지 직접 확인 후 True로 변경합니다.
 I_CONFIRM_CELEBDF_CLOUD_PROCESSING_IS_ALLOWED = False #@param {type:"boolean"}
