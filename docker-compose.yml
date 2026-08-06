@@ -1,0 +1,15 @@
+services:
+  faceguard-api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE: "${FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE:-false}"
+      FACEGUARD_DEVICE: "${FACEGUARD_DEVICE:-cpu}"
+      FACEGUARD_THRESHOLD_STATUS: "${FACEGUARD_THRESHOLD_STATUS:-research_only_unapproved}"
+    volumes:
+      - faceguard-models:/models
+    restart: unless-stopped
+
+volumes:
+  faceguard-models:

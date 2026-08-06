@@ -44,6 +44,20 @@
 
 집계 결과와 그래프는 [`reports/celebdf_baseline_audit/2026-08-06`](reports/celebdf_baseline_audit/2026-08-06)에 있다. 영상, 얼굴 crop, 개별 score와 임베딩은 포함하지 않는다.
 
+## 딥소각에서 사용하는 얼굴가드 API
+
+`POST /v1/faceguard/verify`에 등록 얼굴 사진 1~5장과 확인 사진 1장을 보내면 ArcFace 코사인 유사도와 동일인 후보 여부를 JSON으로 반환한다. 등록 사진은 3장을 권장한다.
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-api.txt
+export FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE=true
+python -m uvicorn faceguard_api.app:app --port 8000
+```
+
+현재 판정 기준값은 Celeb-real 연구 결과에서 가져온 **운영 미승인 값**이다. API 응답에도 `threshold_status=research_only_unapproved`와 경고를 포함한다. 원본 사진·얼굴 crop·임베딩은 애플리케이션에 영구 저장하지 않는다. 전체 요청 예제, Docker 실행법, 오류 코드는 [`API_RUNBOOK.md`](API_RUNBOOK.md)에 있다.
+
 ## Colab에서 재실행
 
 1. [`notebooks/celebdf_arcface_full_colab.ipynb`](notebooks/celebdf_arcface_full_colab.ipynb)를 Google Colab에 업로드한다.
@@ -62,6 +76,8 @@
 
 - [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 Debug/Pilot/Full 실험 계획
 - [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab, 보안 게이트, checkpoint 운영 가이드
+- [`API_RUNBOOK.md`](API_RUNBOOK.md): 딥소각 백엔드 연동, Docker, 요청·응답 가이드
+- [`faceguard_api`](faceguard_api): 무상태 얼굴 등록·동일인 확인 API
 - [`configs/faceguard`](configs/faceguard): 일반 얼굴가드와 Celeb-DF 고정 프로토콜
 - [`scripts`](scripts): ZIP inventory/안전 추출, ArcFace 추론, 평가 도구
 - [`tests`](tests): 데이터 누수·압축 경로·프로토콜·지표 테스트
