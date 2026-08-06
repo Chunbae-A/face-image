@@ -1,0 +1,88 @@
+experiment:
+  issue: 15
+  name: celebdf_efficientnet_b4_baseline
+  seed: 20260807
+  preferred_environment: kaggle_private_gpu_two_stage
+
+data:
+  dataset: Celeb-DF-v2
+  expected_zip_bytes: 9952957051
+  expected_videos:
+    Celeb-real: 590
+    YouTube-real: 300
+    Celeb-synthesis: 5639
+  official_test_videos: 518
+  label_convention:
+    real: 0
+    fake: 1
+  validation_fraction: 0.15
+  split_before_frame_extraction: true
+  group_rule:
+    celebrity: original_target_identity_and_video_context
+    donor_identity: overlap_measured_not_used_for_strict_grouping
+    youtube_real: source_video
+
+preprocessing:
+  detector: InsightFace buffalo_l detection/SCRFD
+  detector_license: non-commercial-research-only
+  detector_size: 640
+  sampled_frames_per_video: 32
+  minimum_valid_frames: 4
+  aligned_crop_size: 224
+  model_input_size: 380
+  persist_raw_frames_to_git: false
+  persist_aligned_crops_to_git: false
+
+training:
+  architecture: torchvision EfficientNet-B4
+  initialization: ImageNet EfficientNet_B4_Weights.DEFAULT
+  train_frames_per_video: 16
+  loss: BCEWithLogitsLoss
+  sampling: inverse-class-frequency WeightedRandomSampler
+  epochs: 8
+  early_stopping_patience: 3
+  batch_size: 8
+  gradient_accumulation_steps: 2
+  optimizer: AdamW
+  learning_rate: 0.0001
+  weight_decay: 0.0001
+  mixed_precision: true
+  augmentation:
+    - horizontal_flip
+    - resize_degradation
+    - jpeg_compression
+    - gaussian_blur
+    - low_light
+    - color_jitter
+    - gaussian_noise
+
+evaluation:
+  frame_count_candidates: [8, 16, 32]
+  aggregation_candidates: [mean, median, top_k]
+  threshold_selected_on: validation
+  target_validation_fpr: 0.01
+  conditions:
+    - clean
+    - jpeg_q30
+    - gaussian_blur_sigma2
+    - low_light_gamma2
+    - downscale_0_25
+  official_test_used_after_selection_only: true
+  gates:
+    official_test_video_roc_auc_minimum: 0.90
+    official_test_real_video_fpr_maximum: 0.01
+    train_validation_video_overlap: 0
+    train_validation_group_overlap: 0
+
+artifacts:
+  private:
+    - dataset_manifest_csv
+    - aligned_face_crops
+    - frame_scores_csv
+    - pytorch_checkpoint
+    - onnx_model
+  committable:
+    - aggregate_inventory_json
+    - aggregate_metrics_json
+    - aggregate_plots
+    - model_card_without_identifiers

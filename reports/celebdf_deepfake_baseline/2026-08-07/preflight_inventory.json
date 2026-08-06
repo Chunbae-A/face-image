@@ -1,0 +1,54 @@
+{
+  "status": "preflight_complete_full_gpu_run_pending",
+  "dataset": "Celeb-DF-v2",
+  "source_zip_bytes": 9952957051,
+  "video_count": 6529,
+  "real_video_count": 890,
+  "fake_video_count": 5639,
+  "dataset_counts": {
+    "Celeb-real": 590,
+    "YouTube-real": 300,
+    "Celeb-synthesis": 5639
+  },
+  "official_test_count": 518,
+  "split_seed": 20260807,
+  "validation_fraction": 0.15,
+  "split_counts": {
+    "train": {
+      "total": 5175,
+      "real": 604,
+      "fake": 4571
+    },
+    "validation": {
+      "total": 836,
+      "real": 108,
+      "fake": 728
+    },
+    "test": {
+      "total": 518,
+      "real": 178,
+      "fake": 340
+    }
+  },
+  "label_convention": {
+    "real": 0,
+    "fake": 1
+  },
+  "leakage_audit": {
+    "train_validation_video_overlap": 0,
+    "train_test_video_overlap": 0,
+    "validation_test_video_overlap": 0,
+    "train_validation_group_overlap": 0,
+    "train_validation_donor_identity_overlap_observed": 53,
+    "train_test_group_overlap_observed": 46,
+    "validation_test_group_overlap_observed": 8,
+    "train_test_donor_identity_overlap_observed": 52,
+    "validation_test_donor_identity_overlap_observed": 48,
+    "official_test_outside_test_split": 0,
+    "nonofficial_video_in_test_split": 0
+  },
+  "official_test_list_sha256": "07063d46206e011aef9d1ad8d1854f5b87ae519ba6e452b897cc528c3dcfcdc0",
+  "contains_video_names_or_subject_ids": false,
+  "contains_face_data": false,
+  "model_metrics_available": false
+}

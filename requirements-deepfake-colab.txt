@@ -1,0 +1,7 @@
+# Colab supplies a CUDA-compatible torch/torchvision pair. Do not replace it.
+insightface==1.0.1
+onnxruntime-gpu==1.23.2
+onnx==1.18.0
+numpy==2.0.2
+opencv-python-headless==4.12.0.88
+Pillow==12.3.0

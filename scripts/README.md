@@ -37,6 +37,22 @@ python3 scripts/celebdf_faceguard.py evaluate \
 
 GPU 추론은 `notebooks/celebdf_arcface_full_colab.ipynb` 또는 `scripts/run_celebdf_arcface.py`를 사용한다. smoke 2개 영상은 환경 확인용이며, 동일 checkpoint에서 590개 전체 실행을 이어간다.
 
+## Celeb-DF-v2 딥페이크 판별 기준선
+
+기존 ArcFace 실험은 같은 사람인지 비교하는 기능이다. 실제/딥페이크 판별은 아래 별도 파이프라인으로 실행한다.
+
+```bash
+# 전체 6,529개 목록 확인, 공식 Test 518개 잠금, Train/Validation 분할
+python3 scripts/celebdf_deepfake.py inventory /path/to/Celeb-DF-v2.zip \
+  --manifest outputs/celebdf_deepfake/private_manifest.csv \
+  --summary outputs/celebdf_deepfake/inventory_aggregate.json
+
+# GPU 얼굴 전처리, EfficientNet-B4 학습·평가·ONNX 내보내기
+python3 scripts/run_celebdf_deepfake.py --help
+```
+
+내부 라벨은 `실제=0`, `딥페이크=1`이다. 공식 목록의 반대 표기를 자동 변환하고 경로와 대조한다. 8/16/32프레임과 평균/중앙값/상위평균은 Validation에서만 선택하고, 선택 후 공식 Test를 평가한다. 자세한 순서와 결과 해석은 [`DEEPFAKE_BASELINE_RUNBOOK.md`](../DEEPFAKE_BASELINE_RUNBOOK.md)에 있다.
+
 ## 노트북 재생성
 
 ```bash
@@ -44,9 +60,11 @@ python3 scripts/build_celebdf_colab_notebook.py
 python3 scripts/build_celebdf_audit_colab_notebook.py
 python3 scripts/build_celebdf_robustness_colab_notebook.py
 python3 scripts/build_celebdf_robustness_kaggle_notebook.py
+python3 scripts/build_celebdf_deepfake_colab_notebook.py
+python3 scripts/build_celebdf_deepfake_kaggle_notebooks.py
 ```
 
-노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`, `scripts/run_celebdf_arcface.py`, `scripts/audit_celebdf_baseline.py`, `scripts/audit_celebdf_robustness.py`의 변경이 정확히 포함됐는지 테스트로 검증한다.
+노트북은 실행 스크립트를 내장하므로 생성 후 ArcFace와 딥페이크 관련 원본 스크립트의 변경이 정확히 포함됐는지 테스트로 검증한다.
 
 ## Baseline 감사
 
