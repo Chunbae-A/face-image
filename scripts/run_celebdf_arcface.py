@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import csv
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -22,6 +23,7 @@ from pathlib import Path
 from typing import Any, Sequence
 
 import numpy as np
+from PIL import Image, ImageFilter
 
 from celebdf_faceguard import (
     ArchiveVideo,
@@ -32,6 +34,81 @@ from celebdf_faceguard import (
     save_video_embeddings,
     select_smoke_rows,
 )
+
+
+INPUT_CONDITIONS = (
+    "clean",
+    "jpeg_q30",
+    "gaussian_blur_sigma2",
+    "low_light_gamma2",
+    "downscale_0_25",
+    "combined_mobile_stress",
+)
+
+
+def _validate_frame(frame: np.ndarray) -> np.ndarray:
+    value = np.asarray(frame)
+    if value.dtype != np.uint8 or value.ndim != 3 or value.shape[2] != 3:
+        raise ValueError("frame must be an HxWx3 uint8 BGR array")
+    return value
+
+
+def _pil_from_bgr(frame: np.ndarray) -> Image.Image:
+    return Image.fromarray(np.ascontiguousarray(frame[..., ::-1]))
+
+
+def _bgr_from_pil(image: Image.Image) -> np.ndarray:
+    rgb = np.asarray(image.convert("RGB"), dtype=np.uint8)
+    return np.ascontiguousarray(rgb[..., ::-1])
+
+
+def _jpeg_q30(frame: np.ndarray) -> np.ndarray:
+    buffer = io.BytesIO()
+    _pil_from_bgr(frame).save(
+        buffer,
+        format="JPEG",
+        quality=30,
+        optimize=False,
+        progressive=False,
+        subsampling=2,
+    )
+    buffer.seek(0)
+    with Image.open(buffer) as decoded:
+        return _bgr_from_pil(decoded)
+
+
+def _low_light_gamma2(frame: np.ndarray) -> np.ndarray:
+    normalized = frame.astype(np.float32) / 255.0
+    return np.rint(np.square(normalized) * 255.0).clip(0, 255).astype(np.uint8)
+
+
+def _downscale_quarter(frame: np.ndarray) -> np.ndarray:
+    image = _pil_from_bgr(frame)
+    width, height = image.size
+    reduced = image.resize(
+        (max(1, int(round(width * 0.25))), max(1, int(round(height * 0.25)))),
+        resample=Image.Resampling.BILINEAR,
+    )
+    restored = reduced.resize((width, height), resample=Image.Resampling.BILINEAR)
+    return _bgr_from_pil(restored)
+
+
+def apply_input_condition(frame: np.ndarray, condition: str) -> np.ndarray:
+    """Apply one deterministic query-image quality condition to a BGR frame."""
+    value = _validate_frame(frame)
+    if condition == "clean":
+        return value
+    if condition == "jpeg_q30":
+        return _jpeg_q30(value)
+    if condition == "gaussian_blur_sigma2":
+        return _bgr_from_pil(_pil_from_bgr(value).filter(ImageFilter.GaussianBlur(radius=2.0)))
+    if condition == "low_light_gamma2":
+        return _low_light_gamma2(value)
+    if condition == "downscale_0_25":
+        return _downscale_quarter(value)
+    if condition == "combined_mobile_stress":
+        return _jpeg_q30(_low_light_gamma2(_downscale_quarter(value)))
+    raise ValueError(f"unsupported input condition: {condition}")
 
 
 def sample_frame_indices(frame_count: int, requested: int) -> list[int]:
@@ -82,6 +159,7 @@ def embed_video(
     *,
     frames_per_video: int,
     minimum_valid_frames: int,
+    input_condition: str = "clean",
 ) -> tuple[VideoEmbedding | None, dict[str, object] | None]:
     import cv2  # type: ignore
 
@@ -98,6 +176,7 @@ def embed_video(
         detection_scores: list[float] = []
         face_area_ratios: list[float] = []
         decode_seconds = 0.0
+        transform_seconds = 0.0
         inference_seconds = 0.0
         for frame_index in indices:
             decode_start = time.perf_counter()
@@ -106,6 +185,10 @@ def embed_video(
             decode_seconds += time.perf_counter() - decode_start
             if not ok or frame is None:
                 continue
+
+            transform_start = time.perf_counter()
+            frame = apply_input_condition(frame, input_condition)
+            transform_seconds += time.perf_counter() - transform_start
 
             inference_start = time.perf_counter()
             faces = face_app.get(frame)
@@ -141,6 +224,7 @@ def embed_video(
                 mean_face_area_ratio=float(np.mean(face_area_ratios)),
                 decode_seconds=decode_seconds,
                 inference_seconds=inference_seconds,
+                transform_seconds=transform_seconds,
             ),
             None,
         )
@@ -169,14 +253,26 @@ def _git_commit() -> str | None:
 
 def _write_rejects(rows: Sequence[dict[str, object]], path: Path) -> None:
     if not rows:
+        if path.exists():
+            path.unlink()
         return
     fields = sorted({key for row in rows for key in row})
     temporary = path.with_suffix(path.suffix + ".tmp")
     path.parent.mkdir(parents=True, exist_ok=True)
     with temporary.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    os.replace(temporary, path)
+
+
+def _write_json_atomic(payload: dict[str, object], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
     os.replace(temporary, path)
 
 
@@ -244,6 +340,18 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, object]:
 
     existing: list[VideoEmbedding] = []
     if args.output.exists():
+        if args.run_report.exists():
+            previous_report = json.loads(args.run_report.read_text(encoding="utf-8"))
+            previous_condition = previous_report.get("input_condition", "clean")
+            if previous_condition != args.input_condition:
+                raise ValueError(
+                    "existing embedding condition mismatch: "
+                    f"{previous_condition} != {args.input_condition}"
+                )
+        elif args.input_condition != "clean":
+            raise ValueError(
+                "a non-clean existing embedding file requires a matching run report"
+            )
         existing = load_video_embeddings(args.output)
     completed = {record.video_id for record in existing}
     records = list(existing)
@@ -257,6 +365,37 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, object]:
     started = datetime.now(timezone.utc)
     processed_since_checkpoint = 0
     attempted = 0
+
+    def current_report(status: str) -> dict[str, object]:
+        observed = datetime.now(timezone.utc)
+        return {
+            "status": status,
+            "mode": args.mode,
+            "selected_video_count": len(selected_rows),
+            "attempted_this_run": attempted,
+            "successful_video_count_total": len(records),
+            "rejected_this_run": len(rejects),
+            "frames_per_video": args.frames_per_video,
+            "minimum_valid_frames": args.minimum_valid_frames,
+            "input_condition": args.input_condition,
+            "started_utc": started.isoformat(),
+            "updated_utc": observed.isoformat(),
+            "elapsed_seconds": (observed - started).total_seconds(),
+            "manifest": str(args.manifest),
+            "manifest_sha256": _sha256(args.manifest),
+            "video_root": str(args.video_root),
+            "output": str(args.output),
+            "rejects": str(args.rejects),
+            "git_commit": _git_commit(),
+            "model_license_scope": (
+                "InsightFace-provided weights: non-commercial research only"
+            ),
+            **runtime_inventory,
+        }
+
+    # Write the condition sidecar before the first checkpoint. If Colab stops,
+    # the next runtime can safely verify and resume the same condition.
+    _write_json_atomic(current_report("running"), args.run_report)
     for index, row in enumerate(selected_rows, start=1):
         if row.video_id in completed:
             continue
@@ -274,6 +413,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, object]:
                 face_app,
                 frames_per_video=args.frames_per_video,
                 minimum_valid_frames=args.minimum_valid_frames,
+                input_condition=args.input_condition,
             )
         except Exception as exc:
             if args.fail_fast:
@@ -295,6 +435,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, object]:
         if processed_since_checkpoint >= args.checkpoint_every:
             save_video_embeddings(records, args.output)
             _write_rejects(rejects, args.rejects)
+            _write_json_atomic(current_report("running"), args.run_report)
             processed_since_checkpoint = 0
         if index == 1 or index % args.progress_every == 0 or index == len(selected_rows):
             print(
@@ -314,33 +455,9 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, object]:
         raise RuntimeError("no video embeddings were produced")
     save_video_embeddings(records, args.output)
     _write_rejects(rejects, args.rejects)
-    ended = datetime.now(timezone.utc)
-    report = {
-        "status": "completed",
-        "mode": args.mode,
-        "selected_video_count": len(selected_rows),
-        "attempted_this_run": attempted,
-        "successful_video_count_total": len(records),
-        "rejected_this_run": len(rejects),
-        "frames_per_video": args.frames_per_video,
-        "minimum_valid_frames": args.minimum_valid_frames,
-        "started_utc": started.isoformat(),
-        "ended_utc": ended.isoformat(),
-        "elapsed_seconds": (ended - started).total_seconds(),
-        "manifest": str(args.manifest),
-        "manifest_sha256": _sha256(args.manifest),
-        "video_root": str(args.video_root),
-        "output": str(args.output),
-        "rejects": str(args.rejects),
-        "git_commit": _git_commit(),
-        "model_license_scope": "InsightFace-provided weights: non-commercial research only",
-        **runtime_inventory,
-    }
-    args.run_report.parent.mkdir(parents=True, exist_ok=True)
-    args.run_report.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    report = current_report("completed")
+    report["ended_utc"] = report["updated_utc"]
+    _write_json_atomic(report, args.run_report)
     return report
 
 
@@ -356,6 +473,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--smoke-videos-per-subject", type=int, default=1)
     parser.add_argument("--frames-per-video", type=int, default=10)
     parser.add_argument("--minimum-valid-frames", type=int, default=3)
+    parser.add_argument(
+        "--input-condition",
+        choices=INPUT_CONDITIONS,
+        default="clean",
+        help="deterministic frame-quality condition applied before face detection",
+    )
     parser.add_argument("--checkpoint-every", type=int, default=25)
     parser.add_argument("--progress-every", type=int, default=10)
     parser.add_argument("--det-size", type=int, default=640)

@@ -1,0 +1,73 @@
+experiment:
+  id: celebdf-arcface-robustness-v1
+  issue: https://github.com/Chunbae-A/face-image/issues/6
+  scope: Celeb-real query degradation robustness; not deepfake detection
+
+dataset:
+  name: Celeb-DF-v2/Celeb-real
+  expected_videos: 590
+  expected_subjects: 59
+  minimum_videos_per_eligible_subject: 8
+  raw_data_in_git: false
+  embeddings_in_git: false
+
+model:
+  library: insightface
+  model_name: buffalo_l
+  embedding_dimension: 512
+  weight_license_scope: non-commercial research only
+  onnxruntime_gpu_version: 1.23.2
+  detection_size: 640
+
+protocol:
+  frames_per_video: 5
+  minimum_valid_frames: 3
+  registration_videos: 3
+  reserved_registration_videos: 5
+  common_query_start_index: 5
+  registration_condition: clean
+  query_pool: common_successful_videos_across_conditions
+  seeds:
+    - 20260805
+    - 20260806
+    - 20260807
+    - 20260808
+    - 20260809
+  validation_fraction: 0.30
+  target_far:
+    - 0.01
+    - 0.001
+  bootstrap_repeats: 500
+
+conditions:
+  - clean
+  - jpeg_q30
+  - gaussian_blur_sigma2
+  - low_light_gamma2
+  - downscale_0_25
+  - combined_mobile_stress
+
+thresholds:
+  clean_locked: clean validation identities only
+  condition_calibrated: same-condition validation identities only
+  test_scores_used_for_selection: false
+
+decision_gates:
+  target_far: 0.001
+  maximum_tar_loss: 0.05
+  minimum_processing_success_rate: 0.98
+  require_zero_validation_test_identity_overlap: true
+  require_zero_registration_query_video_overlap: true
+
+artifacts:
+  allowed:
+    - aggregate JSON and CSV
+    - model, manifest, config, source hashes
+    - condition-level reject reason counts without IDs
+    - aggregate plots
+  forbidden:
+    - face images or video frames
+    - raw videos or dataset archives
+    - per-video or per-subject scores
+    - per-video or per-subject embeddings
+    - Drive links and credentials
