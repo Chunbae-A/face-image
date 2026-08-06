@@ -1,0 +1,63 @@
+name: Model or data experiment
+description: Define a reproducible hypothesis, protocol, metrics, and decision gate.
+title: "exp: "
+labels:
+  - type:experiment
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not attach face images, embeddings, credentials, or restricted dataset files.
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: State the question and expected measurable change.
+    validations:
+      required: true
+  - type: textarea
+    id: baseline
+    attributes:
+      label: Baseline and independent variable
+      description: Name the baseline and the one controlled change.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Dataset and authorization
+      description: Record dataset version, approval state, license gate, and subject-level split.
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Protocol
+      description: Record model/weight version, preprocessing, seeds, hardware, and leakage controls.
+    validations:
+      required: true
+  - type: textarea
+    id: metrics
+    attributes:
+      label: Metrics and decision gate
+      description: Define primary metrics, confidence intervals, and Go/No-Go criteria.
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Allowed artifacts
+      description: List only sanitized outputs that may be committed or attached.
+    validations:
+      required: true
+  - type: checkboxes
+    id: safety
+    attributes:
+      label: Safety gates
+      options:
+        - label: Dataset use and cloud processing are authorized for the planned environment.
+          required: true
+        - label: Model weight license is recorded and compatible with the experiment.
+          required: true
+        - label: No raw face data or embeddings will be committed.
+          required: true

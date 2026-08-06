@@ -209,7 +209,10 @@ python3.11 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements-api-test.txt
 python -m unittest discover -s tests
+python scripts/check_repository_hygiene.py
 ```
+
+모든 작업은 Issue에서 시작하고 `<type>/<issue-number>-<description>` 브랜치와 PR로 연결한다. 실험 기록, 커밋·PR 규칙과 금지 산출물은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 따른다.
 
 ## 데이터·개인정보·라이선스
 
