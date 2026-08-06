@@ -17,7 +17,12 @@
 2. `Datasets` → `New Dataset`을 누른다.
 3. 로컬의 929MB `Celeb-DF-v2.zip`을 업로드한다.
 4. 공개 범위를 `Private`로 둔다.
-5. 업로드 후 파일 크기가 정확히 `928,989,923 bytes`인지 확인한다.
+5. Kaggle 화면에서 원본이 비공개인지 다시 확인한다. Kaggle이 ZIP을 자동으로 풀면 `590 Files (other) · 약 930 MB`로 표시될 수 있다.
+
+노트북은 두 입력 형태를 모두 처리한다.
+
+- ZIP이 그대로 남으면 파일 크기 `928,989,923 bytes`를 검증한다.
+- Kaggle이 ZIP을 자동으로 풀면 MP4 `590개`와 총 `946,501,150 bytes`를 검증한 뒤, 공유되지 않는 `/kaggle/temp`에 실행용 ZIP을 재구성한다.
 
 비공개 Dataset으로 등록하면 Notebook 세션이 종료돼도 원본을 다시 업로드할 필요가 없다.
 
@@ -39,7 +44,7 @@
    ```
 
 2. `Run All`로 위에서부터 실행한다.
-3. 4번 셀에서 ZIP 하나와 정확한 바이트가 확인되는지 본다.
+3. 4번 셀에서 `input_mode`가 `zip` 또는 `kaggle_auto_extracted_mp4`인지 확인한다.
 4. 6번 셀에서 `CUDAExecutionProvider`와 GPU 이름이 표시되는지 본다.
 5. 7번 셀이 여섯 조건을 순서대로 처리할 때 브라우저를 닫지 않는다.
 
@@ -60,7 +65,7 @@ raw_or_embedding_files_in_bundle: False
 
 ### ZIP을 찾지 못함
 
-오른쪽 `Input`에 비공개 Dataset이 연결돼 있는지 확인한다. 파일명은 `Celeb-DF-v2.zip`, 크기는 `928,989,923 bytes`여야 한다.
+오른쪽 `Input`에 비공개 Dataset이 연결돼 있는지 확인한다. Kaggle이 ZIP을 자동으로 푼 경우에는 `Celeb-real` 아래 MP4 590개가 보여야 한다. 최신 노트북은 이 구조를 자동으로 인식하므로 ZIP을 다시 올릴 필요가 없다.
 
 ### `CUDAExecutionProvider`가 없음
 

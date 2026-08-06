@@ -67,6 +67,8 @@ CODE_SOURCE = "embedded"  # "embedded" 권장, 필요하면 "github"
 # 비워두면 /kaggle/input 아래에서 정확한 크기의 Celeb-DF-v2.zip을 자동으로 찾는다.
 SOURCE_ZIP_PATH = ""
 EXPECTED_SOURCE_ZIP_BYTES = 928989923
+# Kaggle Dataset이 ZIP을 자동으로 풀었을 때 검증할 590개 MP4의 정확한 합계다.
+EXPECTED_EXTRACTED_VIDEO_BYTES = 946501150
 
 # Celeb-DF 이용 조건에서 Kaggle 비공개 데이터 처리도 허용되는지 확인한 경우만 True.
 I_CONFIRM_CELEBDF_KAGGLE_PRIVATE_PROCESSING_IS_ALLOWED = False
@@ -125,36 +127,93 @@ Kaggle 오른쪽 설정에서 GPU와 Internet을 켠다. 이 노트북은 민감
 # 4. 비공개 Kaggle Dataset 원본 확인
 import json
 import shutil
-
-if IN_KAGGLE:
-    if SOURCE_ZIP_PATH.strip():
-        candidates = [Path(SOURCE_ZIP_PATH).expanduser()]
-    else:
-        candidates = sorted(Path("/kaggle/input").rglob("Celeb-DF-v2.zip"))
-        exact = [path for path in candidates if path.stat().st_size == EXPECTED_SOURCE_ZIP_BYTES]
-        if exact:
-            candidates = exact
-else:
-    candidates = [Path(SOURCE_ZIP_PATH).expanduser()]
-
-existing = [path for path in candidates if path.exists()]
-if len(existing) != 1:
-    found = [f"{path} ({path.stat().st_size} bytes)" for path in existing]
-    raise FileNotFoundError(
-        "정확한 Celeb-DF-v2.zip 하나를 찾지 못했습니다. "
-        f"Kaggle Input 연결과 파일명을 확인하세요. 발견={found}"
-    )
-source_zip = existing[0]
-if source_zip.stat().st_size != EXPECTED_SOURCE_ZIP_BYTES:
-    raise IOError(
-        f"Celeb-DF ZIP 크기가 다릅니다: {source_zip.stat().st_size} "
-        f"!= {EXPECTED_SOURCE_ZIP_BYTES}"
-    )
+import zipfile
 
 # /kaggle/temp는 Save Version 결과에 포함하지 않는 민감정보 임시 처리 영역이다.
 WORK_ROOT = Path("/kaggle/temp/celebdf_robustness") if IN_KAGGLE else REPO_DIR / "outputs" / "celebdf_robustness"
 WORK_ROOT.mkdir(parents=True, exist_ok=True)
-runtime_zip = source_zip
+
+input_mode = "zip"
+source_input = None
+runtime_zip = None
+
+if IN_KAGGLE:
+    if SOURCE_ZIP_PATH.strip():
+        zip_candidates = [Path(SOURCE_ZIP_PATH).expanduser()]
+    else:
+        zip_candidates = sorted(Path("/kaggle/input").rglob("Celeb-DF-v2.zip"))
+    exact_zips = [
+        path for path in zip_candidates
+        if path.is_file() and path.stat().st_size == EXPECTED_SOURCE_ZIP_BYTES
+    ]
+
+    if len(exact_zips) == 1:
+        source_input = exact_zips[0]
+        runtime_zip = exact_zips[0]
+    elif exact_zips:
+        raise FileExistsError(f"정확한 Celeb-DF ZIP이 여러 개입니다: {exact_zips}")
+    else:
+        # Kaggle은 업로드한 ZIP을 자동으로 풀 수 있다. 이 경우 590개 파일 수와
+        # 정확한 총 바이트를 확인한 뒤 /kaggle/temp에 저장 방식 ZIP을 재구성한다.
+        celeb_real_dirs = sorted({
+            path.parent
+            for path in Path("/kaggle/input").rglob("Celeb-real/*.mp4")
+            if path.is_file()
+        })
+        exact_dirs = []
+        for directory in celeb_real_dirs:
+            videos = sorted(directory.glob("*.mp4"))
+            total_bytes = sum(path.stat().st_size for path in videos)
+            if len(videos) == 590 and total_bytes == EXPECTED_EXTRACTED_VIDEO_BYTES:
+                exact_dirs.append((directory, videos))
+        if len(exact_dirs) != 1:
+            found = [
+                {
+                    "directory": str(directory),
+                    "video_count": len(videos),
+                    "total_bytes": sum(path.stat().st_size for path in videos),
+                }
+                for directory, videos in exact_dirs
+            ]
+            raise FileNotFoundError(
+                "정확한 Celeb-real MP4 590개 묶음 하나를 찾지 못했습니다. "
+                f"Kaggle Input 연결을 확인하세요. 일치={found}"
+            )
+
+        celeb_real_dir, videos = exact_dirs[0]
+        source_input = celeb_real_dir
+        input_mode = "kaggle_auto_extracted_mp4"
+        repacked_dir = WORK_ROOT / "source_repacked"
+        repacked_dir.mkdir(parents=True, exist_ok=True)
+        runtime_zip = repacked_dir / "Celeb-DF-v2.zip"
+        partial_zip = runtime_zip.with_suffix(".zip.partial")
+        if not runtime_zip.exists():
+            partial_zip.unlink(missing_ok=True)
+            with zipfile.ZipFile(partial_zip, "w", compression=zipfile.ZIP_STORED) as archive:
+                for video in videos:
+                    archive.write(video, arcname=f"Celeb-real/{video.name}")
+            partial_zip.replace(runtime_zip)
+
+        with zipfile.ZipFile(runtime_zip) as archive:
+            repacked_members = [
+                item for item in archive.infolist()
+                if not item.is_dir() and item.filename.startswith("Celeb-real/")
+            ]
+        if len(repacked_members) != 590:
+            raise IOError(f"재구성 ZIP 영상 수가 다릅니다: {len(repacked_members)} != 590")
+else:
+    source_input = Path(SOURCE_ZIP_PATH).expanduser()
+    if not source_input.is_file():
+        raise FileNotFoundError(f"Celeb-DF ZIP을 찾지 못했습니다: {source_input}")
+    if source_input.stat().st_size != EXPECTED_SOURCE_ZIP_BYTES:
+        raise IOError(
+            f"Celeb-DF ZIP 크기가 다릅니다: {source_input.stat().st_size} "
+            f"!= {EXPECTED_SOURCE_ZIP_BYTES}"
+        )
+    runtime_zip = source_input
+
+assert source_input is not None
+assert runtime_zip is not None
 
 VIDEO_ROOT = WORK_ROOT / "videos"
 MANIFEST = WORK_ROOT / "celeb_real_manifest.csv"
@@ -165,8 +224,9 @@ for path in (VIDEO_ROOT, CONDITION_ROOT, SANITIZED_ROOT):
     path.mkdir(parents=True, exist_ok=True)
 
 print({
-    "source_zip_gb": round(source_zip.stat().st_size / 1e9, 3),
-    "source_zip": str(source_zip),
+    "input_mode": input_mode,
+    "source_input": str(source_input),
+    "runtime_zip_gb": round(runtime_zip.stat().st_size / 1e9, 3),
     "private_work_root": str(WORK_ROOT),
     "runtime_free_gb": round(shutil.disk_usage(WORK_ROOT).free / 1e9, 2),
 })
