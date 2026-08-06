@@ -60,6 +60,8 @@ python -m uvicorn faceguard_api.app:app --port 8000
 
 데모 화면과 딥소각 백엔드를 연결할 때는 [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md)의 등록 사진 준비, 사용자 촬영, 오류 분기, 개인정보 정리 순서를 따른다. Swagger에서 등록·확인 사진을 함께 올리는 방식은 개발자 모델 테스트이며 운영 본인인증이 아니다.
 
+승인받은 Celeb-real 전체 프레임으로 Docker API의 같은 사람·다른 사람 분기를 확인한 익명 결과는 [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06)에 있다. 예열 후 CPU 처리시간은 이번 두 요청에서 약 0.96~1.19초였으며, 이는 정확도나 운영 SLA를 뜻하지 않는다.
+
 ## Colab에서 재실행
 
 1. [`notebooks/celebdf_arcface_full_colab.ipynb`](notebooks/celebdf_arcface_full_colab.ipynb)를 Google Colab에 업로드한다.
@@ -80,6 +82,7 @@ python -m uvicorn faceguard_api.app:app --port 8000
 - [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab, 보안 게이트, checkpoint 운영 가이드
 - [`API_RUNBOOK.md`](API_RUNBOOK.md): 딥소각 백엔드 연동, Docker, 요청·응답 가이드
 - [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md): 데모 사용자 흐름, 백엔드 판정 분기, 시험표와 운영 전 보완점
+- [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06): 개인정보를 제외한 로컬 데모 기능 스모크 결과
 - [`faceguard_api`](faceguard_api): 무상태 얼굴 등록·동일인 확인 API
 - [`configs/faceguard`](configs/faceguard): 일반 얼굴가드와 Celeb-DF 고정 프로토콜
 - [`scripts`](scripts): ZIP inventory/안전 추출, ArcFace 추론, 평가 도구
