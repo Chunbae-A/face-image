@@ -94,5 +94,16 @@ class DeepfakeKaggleNotebookTests(unittest.TestCase):
         self.assertIn("CROP_MANIFEST.name not in names", bundle_cell)
         self.assertNotIn("archive.write(PRIVATE_SCORES", bundle_cell)
         self.assertIn("celebdf_deepfake_private_model.zip", bundle_cell)
+
+    def test_train_uses_kaggle_torchvision_compatible_pillow(self):
+        source = "\n".join(
+            "".join(cell["source"])
+            for cell in self.train["cells"]
+            if cell["cell_type"] == "code"
+        )
+        self.assertIn('"Pillow==11.3.0"', source)
+        self.assertNotIn('"Pillow==12.3.0"', source)
+
+
 if __name__ == "__main__":
     unittest.main()
