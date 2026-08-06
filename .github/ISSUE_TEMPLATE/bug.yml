@@ -1,0 +1,39 @@
+name: Bug
+description: Report a reproducible defect in code, notebooks, data handling, or metrics.
+title: "fix: "
+labels:
+  - bug
+body:
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Include the sanitized error and its impact.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Do not paste tokens, Drive links, face data, or private paths.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Record commit, Python, runtime, GPU, package, and model versions.
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Fix acceptance criteria
+    validations:
+      required: true

@@ -28,5 +28,6 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.models/
 .env
 scripts/aihubshell
