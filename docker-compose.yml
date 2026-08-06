@@ -2,7 +2,7 @@ services:
   faceguard-api:
     build: .
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE: "${FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE:-false}"
       FACEGUARD_DEVICE: "${FACEGUARD_DEVICE:-cpu}"
