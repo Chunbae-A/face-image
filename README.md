@@ -46,7 +46,7 @@
 
 ## 다음 실험: 실제 촬영 열화 강건성
 
-Issue [#6](https://github.com/Chunbae-A/face-image/issues/6)은 깨끗한 영상에서 등록한 얼굴이 실제 촬영처럼 품질이 낮아져도 같은 사람으로 인식되는지 확인한다. 현재 **코드와 Colab 실행 절차까지 준비된 상태이며 실제 GPU 결과는 아직 게시하지 않았다.**
+Issue [#6](https://github.com/Chunbae-A/face-image/issues/6)은 깨끗한 영상에서 등록한 얼굴이 실제 촬영처럼 품질이 낮아져도 같은 사람으로 인식되는지 확인한다. 현재 **코드와 Colab·Kaggle 무료 GPU 실행 절차까지 준비된 상태이며 실제 GPU 결과는 아직 게시하지 않았다.**
 
 | 코드에서 쓰는 조건명 | 쉬운 뜻 |
 |---|---|
@@ -79,10 +79,13 @@ Issue [#6](https://github.com/Chunbae-A/face-image/issues/6)은 깨끗한 영상
 
 조건별 임베딩과 개별 실패 ID는 Colab 세션에만 둔다. Drive에는 집계 JSON·CSV·PNG와 실행 설정만 담은 `celebdf_robustness_results.zip`을 저장한다. 세션이 중단되면 Drive 원본을 다시 복사해야 하지만, 같은 세션 안에서는 25개 영상마다 저장된 조건별 체크포인트에서 이어서 실행할 수 있다.
 
+Colab 무료 GPU 사용량이 막힌 경우 [`notebooks/celebdf_arcface_robustness_kaggle.ipynb`](notebooks/celebdf_arcface_robustness_kaggle.ipynb)를 사용한다. 승인 ZIP은 Kaggle 비공개 Dataset으로 한 번만 등록하고, 원본·임베딩·ID가 포함된 중간 파일은 저장 결과에 들어가지 않는 `/kaggle/temp`에서만 처리한다. 마지막에는 비식별 집계 ZIP만 `/kaggle/working`에 남긴다. 자세한 순서는 [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md)에 있다.
+
 ## 구조
 
 - [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 Debug/Pilot/Full 실험 계획
 - [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab, 보안 게이트, checkpoint 운영 가이드
+- [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md): 무료 Kaggle GPU와 비공개 Dataset 실행 가이드
 - [`configs/faceguard`](configs/faceguard): 일반 얼굴가드와 Celeb-DF 고정 프로토콜
 - [`scripts`](scripts): ZIP 목록 확인·안전 추출, ArcFace 추론, 기준선·촬영 열화 평가 도구
 - [`tests`](tests): 데이터 누수·압축 경로·프로토콜·지표 테스트
