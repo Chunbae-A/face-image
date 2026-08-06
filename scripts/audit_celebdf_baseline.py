@@ -32,12 +32,24 @@ DEFAULT_SEEDS = (20260805, 20260806, 20260807, 20260808, 20260809)
 DEFAULT_REFERENCE_COUNTS = (1, 3, 5)
 DEFAULT_MAX_REFERENCE_COUNT = 5
 EXPECTED_VIDEO_COUNT = 590
+MAX_FRAME_5_TAR_LOSS = 0.005
+MIN_REFERENCE_5_TAR_GAIN = 0.01
 
 
 def parse_int_list(value: str) -> tuple[int, ...]:
     parsed = tuple(int(item.strip()) for item in value.split(",") if item.strip())
     if not parsed:
         raise argparse.ArgumentTypeError("at least one integer is required")
+    return parsed
+
+
+def positive_int(value: str) -> int:
+    try:
+        parsed = int(value)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError("value must be an integer") from error
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("value must be positive")
     return parsed
 
 
@@ -120,17 +132,21 @@ def quality_summary(
     *,
     requested_frames: int,
     minimum_valid_frames: int,
+    minimum_videos: int,
+    expected_video_count: int,
 ) -> dict[str, object]:
     if not records:
         raise ValueError("embedding run is empty")
     if any(record.sampled_frames > requested_frames for record in records):
         raise ValueError(f"sampled frame count exceeds requested frames={requested_frames}")
+    if expected_video_count <= 0 or len(records) > expected_video_count:
+        raise ValueError("expected video count is inconsistent with embedding records")
     dimensions = sorted({int(np.asarray(record.embedding).size) for record in records})
     if len(dimensions) != 1:
         raise ValueError(f"embedding dimensions differ: {dimensions}")
     grouped = group_eligible_records(
         records,
-        minimum_videos=8,
+        minimum_videos=minimum_videos,
         minimum_valid_frames=minimum_valid_frames,
         seed=DEFAULT_SEEDS[0],
     )
@@ -144,7 +160,7 @@ def quality_summary(
     )
     return {
         "successful_video_count": len(records),
-        "success_rate": len(records) / EXPECTED_VIDEO_COUNT,
+        "success_rate": len(records) / expected_video_count,
         "all_subject_count": len({record.subject_id for record in records}),
         "eligible_subject_count": len(grouped),
         "embedding_dimension": dimensions[0],
@@ -163,6 +179,10 @@ def leakage_summary(
     minimum_valid_frames: int,
     max_reference_count: int,
 ) -> dict[str, object]:
+    video_ids = [record.video_id for record in records]
+    duplicate_video_count = len(video_ids) - len(set(video_ids))
+    if duplicate_video_count:
+        raise ValueError(f"global duplicate video_id detected: {duplicate_video_count}")
     grouped = group_eligible_records(
         records,
         minimum_videos=max_reference_count + 3,
@@ -172,7 +192,8 @@ def leakage_summary(
     validation, test = split_subjects(grouped, seed=seed)
     validation_set = set(validation)
     test_set = set(test)
-    if validation_set & test_set:
+    validation_test_overlap = len(validation_set & test_set)
+    if validation_test_overlap:
         raise AssertionError("validation and test identities overlap")
 
     registration_videos: set[str] = set()
@@ -180,21 +201,18 @@ def leakage_summary(
     for rows in grouped.values():
         registration_videos.update(row.video_id for row in rows[:max_reference_count])
         query_videos.update(row.video_id for row in rows[max_reference_count:])
-    if registration_videos & query_videos:
+    registration_query_overlap = len(registration_videos & query_videos)
+    if registration_query_overlap:
         raise AssertionError("registration and query videos overlap")
-
-    video_ids = [record.video_id for record in records]
-    if len(video_ids) != len(set(video_ids)):
-        raise AssertionError("global duplicate video_id detected")
 
     return {
         "seed": seed,
         "eligible_subject_count": len(grouped),
         "validation_subject_count": len(validation),
         "test_subject_count": len(test),
-        "validation_test_identity_overlap": 0,
-        "registration_query_video_overlap": 0,
-        "global_duplicate_video_ids": 0,
+        "validation_test_identity_overlap": validation_test_overlap,
+        "registration_query_video_overlap": registration_query_overlap,
+        "global_duplicate_video_ids": duplicate_video_count,
         "validation_subject_fingerprint": fingerprint(validation),
         "test_subject_fingerprint": fingerprint(test),
         "registration_video_fingerprint": fingerprint(registration_videos),
@@ -292,31 +310,45 @@ def decision_summary(summary: Sequence[Mapping[str, object]]) -> dict[str, objec
         references=3,
         metric="far_0.001_test_tar_mean",
     )
-    ref3 = frame10
-    ref5 = lookup_summary(
-        summary,
-        frames=10,
-        references=5,
-        metric="far_0.001_test_tar_mean",
-    )
     decisions: dict[str, object] = {}
+    selected_frames = 10
     if frame5 is not None and frame10 is not None:
         loss = frame10 - frame5
+        selected_frames = 5 if loss < MAX_FRAME_5_TAR_LOSS else 10
         decisions["frames"] = {
             "frame_5_tar": frame5,
             "frame_10_tar": frame10,
             "frame_5_tar_loss": loss,
-            "criterion_max_loss": 0.005,
-            "recommendation": "use_5_frames" if loss < 0.005 else "keep_10_frames",
+            "criterion_max_loss": MAX_FRAME_5_TAR_LOSS,
+            "recommendation": (
+                "use_5_frames" if selected_frames == 5 else "keep_10_frames"
+            ),
         }
+    ref3 = lookup_summary(
+        summary,
+        frames=selected_frames,
+        references=3,
+        metric="far_0.001_test_tar_mean",
+    )
+    ref5 = lookup_summary(
+        summary,
+        frames=selected_frames,
+        references=5,
+        metric="far_0.001_test_tar_mean",
+    )
     if ref3 is not None and ref5 is not None:
         gain = ref5 - ref3
         decisions["registration"] = {
+            "reference_frames_per_video": selected_frames,
             "reference_3_tar": ref3,
             "reference_5_tar": ref5,
             "reference_5_tar_gain": gain,
-            "criterion_min_gain": 0.01,
-            "recommendation": "use_3_references" if gain < 0.01 else "use_5_references",
+            "criterion_min_gain": MIN_REFERENCE_5_TAR_GAIN,
+            "recommendation": (
+                "use_3_references"
+                if gain < MIN_REFERENCE_5_TAR_GAIN
+                else "use_5_references"
+            ),
         }
     return decisions
 
@@ -327,7 +359,7 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     fieldnames = list(rows[0].keys())
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer = csv.DictWriter(handle, fieldnames=fieldnames, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
 
@@ -345,6 +377,8 @@ def run_audit(
 ) -> dict[str, object]:
     if set(embeddings) != set(run_reports):
         raise ValueError("embedding and run-report frame mappings must match")
+    if bootstrap_repeats <= 0:
+        raise ValueError("bootstrap_repeats must be positive")
     if max(reference_counts) > max_reference_count:
         raise ValueError("reference count exceeds reserved registration videos")
     if len(set(seeds)) != len(seeds):
@@ -363,6 +397,10 @@ def run_audit(
             records,
             requested_frames=frames,
             minimum_valid_frames=minimum_valid_frames,
+            minimum_videos=max_reference_count + 3,
+            expected_video_count=int(
+                run.get("selected_video_count", EXPECTED_VIDEO_COUNT)
+            ),
         )
         model_hashes = dict(run.get("model_hashes", {}))
         model_hash_sets.append(model_hashes)
@@ -472,7 +510,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=parse_int_list,
         default=DEFAULT_REFERENCE_COUNTS,
     )
-    parser.add_argument("--bootstrap-repeats", type=int, default=500)
+    parser.add_argument("--bootstrap-repeats", type=positive_int, default=500)
     parser.add_argument("--max-reference-count", type=int, default=5)
     return parser
 

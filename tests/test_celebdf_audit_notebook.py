@@ -1,13 +1,28 @@
 import ast
 import base64
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
+import sys
 import unittest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 NOTEBOOK = ROOT / "notebooks" / "celebdf_arcface_audit_colab.ipynb"
+BUILDER = ROOT / "scripts" / "build_celebdf_audit_colab_notebook.py"
+SCRIPTS = str(ROOT / "scripts")
+if SCRIPTS not in sys.path:
+    sys.path.insert(0, SCRIPTS)
+
+
+def load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 class AuditNotebookTests(unittest.TestCase):
@@ -41,6 +56,13 @@ class AuditNotebookTests(unittest.TestCase):
         self.assertIn('Path("/content").glob("Celeb-DF-v2.zip.part-*")', source)
         self.assertIn('source_transport = "runtime_upload_parts"', source)
         self.assertIn("runtime_upload_zip_matches_expected", source)
+        self.assertIn("bool(EXPECTED_SOURCE_ZIP_BYTES)", source)
+        self.assertIn("runtime_part_index", source)
+        self.assertIn('DRIVE_MOUNTED = source_transport == "drivefs"', source)
+        self.assertIn(
+            "PERSIST_SANITIZED_RESULTS_TO_DRIVE and DRIVE_MOUNTED",
+            source,
+        )
         self.assertIn('"ignored_runtime_upload_zip_bytes"', source)
         self.assertIn('Celeb-DF ZIP size mismatch:', source)
         self.assertIn('onnxruntime-gpu==1.23.2', source)
@@ -82,6 +104,10 @@ class AuditNotebookTests(unittest.TestCase):
             b"".join((ROOT / relative).read_bytes() for relative in expected_paths)
         ).hexdigest()
         self.assertIn(f'EMBEDDED_CODE_SHA256 = "{expected_fingerprint}"', bootstrap)
+
+    def test_committed_notebook_matches_builder_output(self):
+        builder = load_module("build_celebdf_audit_colab_notebook", BUILDER)
+        self.assertEqual(self.notebook, builder.build_notebook())
 
 
 if __name__ == "__main__":

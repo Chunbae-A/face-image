@@ -1,3 +1,4 @@
+import argparse
 import csv
 import importlib.util
 import json
@@ -108,9 +109,14 @@ class BaselineAuditTests(unittest.TestCase):
                 "use_3_references",
             )
             self.assertEqual(
+                report["decisions"]["registration"]["reference_frames_per_video"],
+                5,
+            )
+            self.assertEqual(
                 report["input_runs"][0]["reject_reason_counts"],
                 {"test_reject": 1},
             )
+            self.assertEqual(report["input_runs"][0]["quality"]["success_rate"], 1.0)
             serialized = (output / "celebdf_baseline_audit.json").read_text(encoding="utf-8")
             self.assertNotIn("private_1", serialized)
             self.assertNotIn('"id0"', serialized)
@@ -120,6 +126,43 @@ class BaselineAuditTests(unittest.TestCase):
     def test_duplicate_frame_mapping_is_rejected(self):
         with self.assertRaises(ValueError):
             audit.mapping_from_specs([(1, Path("a")), (1, Path("b"))])
+
+    def test_duplicate_video_id_is_rejected_by_leakage_check(self):
+        records = synthetic_records(5)
+        records.append(records[0])
+        with self.assertRaisesRegex(ValueError, "duplicate video_id"):
+            audit.leakage_summary(
+                records,
+                seed=7,
+                minimum_valid_frames=3,
+                max_reference_count=5,
+            )
+
+    def test_run_report_frame_mismatch_and_paths_are_sanitized(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            report_path = Path(temporary) / "run.json"
+            report_path.write_text(
+                json.dumps(
+                    {
+                        "frames_per_video": 5,
+                        "selected_video_count": 64,
+                        "video_root": "/content/drive/MyDrive/private-data",
+                        "output": "/content/private-embeddings.npz",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "frame mismatch"):
+                audit.sanitized_run_report(report_path, 10)
+            sanitized = audit.sanitized_run_report(report_path, 5)
+            self.assertNotIn("video_root", sanitized)
+            self.assertNotIn("output", sanitized)
+            self.assertEqual(sanitized["selected_video_count"], 64)
+
+    def test_bootstrap_repeats_must_be_positive(self):
+        self.assertEqual(audit.positive_int("1"), 1)
+        with self.assertRaises(argparse.ArgumentTypeError):
+            audit.positive_int("0")
 
 
 if __name__ == "__main__":

@@ -44,7 +44,7 @@ python3 scripts/build_celebdf_colab_notebook.py
 python3 scripts/build_celebdf_audit_colab_notebook.py
 ```
 
-노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`와 `scripts/run_celebdf_arcface.py`의 변경이 정확히 포함됐는지 검증한다.
+노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`, `scripts/run_celebdf_arcface.py`, `scripts/audit_celebdf_baseline.py`의 변경이 정확히 포함됐는지 검증한다.
 
 ## Baseline 감사
 

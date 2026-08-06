@@ -67,4 +67,4 @@ DriveFS가 `mount failed`로 반복 종료되면 Drive 웹에서 승인 ZIP의 �
 
 노트북은 `/content/Celeb-DF-v2.zip`이 남아 있어도 예상 바이트와 다르면 불완전한 이전 업로드로 간주해 무시한다. 파일 패널의 표시 단위가 반올림되므로 성공 여부는 UI의 MB/GB가 아니라 정확한 바이트와 ZIP inventory `590 videos / 59 subjects / 56 eligible subjects`로 판단한다.
 
-단일 ZIP 업로드도 불가능할 때만 로컬 ZIP을 2GB 미만의 `Celeb-DF-v2.zip.part-*` 조각으로 나누어 세션 저장소에 모두 올린 뒤 `ASSEMBLE_RUNTIME_UPLOAD_PARTS=True`로 4번 셀을 실행한다. 노트북은 조각 바이트의 합과 결합 ZIP 크기를 비교해 `/content/Celeb-DF-v2.zip`을 생성한다. 이 경로의 원본·조각은 runtime 종료 시 삭제된다.
+단일 ZIP 업로드도 불가능할 때만 로컬 ZIP을 2GB 미만의 조각으로 나누어 세션 저장소에 모두 올린 뒤 `ASSEMBLE_RUNTIME_UPLOAD_PARTS=True`로 4번 셀을 실행한다. 조각 이름은 반드시 같은 자릿수의 연속 번호를 사용한다. 예: `Celeb-DF-v2.zip.part-00`, `Celeb-DF-v2.zip.part-01`. 노트북은 숫자 순서와 연속성을 확인한 뒤 조각 바이트의 합과 결합 ZIP 크기를 비교해 `/content/Celeb-DF-v2.zip`을 생성한다. 이 경로의 원본·조각은 runtime 종료 시 삭제된다.

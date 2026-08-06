@@ -161,15 +161,24 @@ Colab에서 GPU runtime을 선택한다. 설치 셀은 Colab CUDA 사용자 라�
         """
 #@title 4. Drive 연결과 runtime 작업 경로
 import json
+import re
 import shutil
 
 source_zip = Path(SOURCE_ZIP_PATH).expanduser()
 source_transport = "configured_path"
 runtime_upload_zip = Path("/content/Celeb-DF-v2.zip")
-runtime_upload_parts = sorted(Path("/content").glob("Celeb-DF-v2.zip.part-*"))
+runtime_upload_parts = list(Path("/content").glob("Celeb-DF-v2.zip.part-*"))
+
+def runtime_part_index(path):
+    match = re.fullmatch(r"Celeb-DF-v2\\.zip\\.part-(\\d+)", path.name)
+    if match is None:
+        raise ValueError(f"Malformed runtime upload part name: {path.name}")
+    return int(match.group(1))
+
+runtime_upload_parts.sort(key=runtime_part_index)
 runtime_upload_zip_matches_expected = runtime_upload_zip.exists() and (
-    not EXPECTED_SOURCE_ZIP_BYTES
-    or runtime_upload_zip.stat().st_size == EXPECTED_SOURCE_ZIP_BYTES
+    bool(EXPECTED_SOURCE_ZIP_BYTES)
+    and runtime_upload_zip.stat().st_size == EXPECTED_SOURCE_ZIP_BYTES
 )
 if IN_HOSTED_COLAB and runtime_upload_zip.exists() and not runtime_upload_zip_matches_expected:
     print({
@@ -180,6 +189,11 @@ if IN_HOSTED_COLAB and runtime_upload_zip.exists() and not runtime_upload_zip_ma
 if IN_HOSTED_COLAB and ASSEMBLE_RUNTIME_UPLOAD_PARTS:
     if not runtime_upload_parts:
         raise FileNotFoundError("No /content/Celeb-DF-v2.zip.part-* uploads were found.")
+    part_indices = [runtime_part_index(part) for part in runtime_upload_parts]
+    if part_indices != list(range(len(part_indices))):
+        raise ValueError(
+            f"Runtime upload part indices must be consecutive from 0: {part_indices}"
+        )
     expected_joined_bytes = sum(part.stat().st_size for part in runtime_upload_parts)
     temporary_joined_zip = runtime_upload_zip.with_suffix(".zip.joining")
     with temporary_joined_zip.open("wb") as sink:
@@ -233,6 +247,8 @@ elif IN_HOSTED_COLAB:
     drive.mount("/content/drive", force_remount=False)
     source_transport = "drivefs"
 
+DRIVE_MOUNTED = source_transport == "drivefs"
+
 if not source_zip.exists():
     raise FileNotFoundError(f"Celeb-DF ZIP not found: {source_zip}")
 if EXPECTED_SOURCE_ZIP_BYTES and source_zip.stat().st_size != EXPECTED_SOURCE_ZIP_BYTES:
@@ -252,6 +268,7 @@ for path in (DATA_ROOT, AUDIT_ROOT, SANITIZED_ROOT):
 print({
     "source_zip_gb": round(source_zip.stat().st_size / 1e9, 3),
     "source_transport": source_transport,
+    "drive_mounted": DRIVE_MOUNTED,
     "runtime_free_gb": round(shutil.disk_usage(AUDIT_ROOT).free / 1e9, 2),
     "audit_root": str(AUDIT_ROOT),
     "sanitized_drive_dir": DRIVE_RESULT_DIR if PERSIST_SANITIZED_RESULTS_TO_DRIVE else None,
@@ -438,6 +455,7 @@ RUNTIME_CONFIG.write_text(json.dumps({
     "code_version": CODE_VERSION,
     "frames_per_video": FRAME_VALUES,
     "reference_counts": REFERENCE_VALUES,
+    "max_reference_count": 5,
     "seeds": SEED_VALUES,
     "bootstrap_repeats": BOOTSTRAP_REPEATS,
     "raw_data_in_bundle": False,
@@ -450,7 +468,7 @@ with zipfile.ZipFile(RESULT_BUNDLE, "w", compression=zipfile.ZIP_DEFLATED) as ar
         archive.write(path, arcname=path.name)
 
 saved_to = None
-if PERSIST_SANITIZED_RESULTS_TO_DRIVE and not DRIVE_SOURCE_FILE_ID.strip():
+if PERSIST_SANITIZED_RESULTS_TO_DRIVE and DRIVE_MOUNTED:
     drive_result_dir = Path(DRIVE_RESULT_DIR)
     drive_result_dir.mkdir(parents=True, exist_ok=True)
     saved_to = shutil.copy2(RESULT_BUNDLE, drive_result_dir / RESULT_BUNDLE.name)
@@ -477,8 +495,8 @@ print({
 ]
 
 
-def main() -> int:
-    notebook = {
+def build_notebook() -> dict[str, object]:
+    return {
         "cells": CELLS,
         "metadata": {
             "accelerator": "GPU",
@@ -496,6 +514,10 @@ def main() -> int:
         "nbformat": 4,
         "nbformat_minor": 5,
     }
+
+
+def main() -> int:
+    notebook = build_notebook()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
         json.dumps(notebook, ensure_ascii=False, indent=1) + "\n",

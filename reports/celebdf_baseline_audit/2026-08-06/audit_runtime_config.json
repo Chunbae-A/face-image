@@ -10,6 +10,7 @@
     3,
     5
   ],
+  "max_reference_count": 5,
   "seeds": [
     20260805,
     20260806,
