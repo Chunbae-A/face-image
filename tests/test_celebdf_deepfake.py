@@ -241,6 +241,16 @@ class RunnerUtilityTests(unittest.TestCase):
             self.assertEqual(transformed.size, image.size)
             self.assertEqual(transformed.mode, "RGB")
 
+    def test_onnx_export_uses_legacy_exporter_without_onnxscript(self):
+        source = (ROOT / "scripts" / "run_celebdf_deepfake.py").read_text(
+            encoding="utf-8"
+        )
+        export_call = source.split("def export_onnx", 1)[1].split(
+            "def smoke_onnx", 1
+        )[0]
+        self.assertIn("torch.onnx.export(", export_call)
+        self.assertIn("dynamo=False", export_call)
+
 
 if __name__ == "__main__":
     unittest.main()

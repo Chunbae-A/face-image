@@ -435,7 +435,9 @@ if not CROP_ROOT.is_dir() or not CROP_MANIFEST.is_file():
     raise RuntimeError("1단계 얼굴 crop 또는 manifest 복원에 실패했습니다.")
 
 OUTPUT_ROOT = Path("/kaggle/working") if IN_KAGGLE else WORK_ROOT / "output"
-PRIVATE_MODEL_ROOT = WORK_ROOT / "private_model"
+# Kaggle에서는 학습 직후 체크포인트를 결과 영역에 저장한다. 이후 ONNX 변환이나
+# 결과 포장이 실패해도 세션 결과에서 모델을 복구해 재학습을 피할 수 있다.
+PRIVATE_MODEL_ROOT = (OUTPUT_ROOT if IN_KAGGLE else WORK_ROOT) / "private_model"
 SANITIZED_ROOT = OUTPUT_ROOT / "sanitized"
 PRIVATE_MODEL_ROOT.mkdir(parents=True, exist_ok=True)
 SANITIZED_ROOT.mkdir(parents=True, exist_ok=True)
@@ -632,6 +634,7 @@ print({"figure": str(FIGURE), "model_card": str(MODEL_CARD)})
         """
 # 10. 비식별 결과와 비공개 API 모델 묶음 저장
 import hashlib
+import shutil
 import zipfile
 
 def file_sha256(path):
@@ -666,6 +669,11 @@ with zipfile.ZipFile(SANITIZED_BUNDLE) as archive:
     assert PRIVATE_SCORES.name not in names
     assert CROP_MANIFEST.name not in names
     assert not any(name.endswith((".jpg", ".mp4", ".pt", ".onnx")) for name in names)
+
+# ZIP 검증까지 성공한 경우에만 중복 원본을 지운다. 중간 단계가 실패하면
+# /kaggle/working/private_model이 남아 체크포인트를 복구할 수 있다.
+if IN_KAGGLE:
+    shutil.rmtree(PRIVATE_MODEL_ROOT)
 
 print({
     "sanitized_results": str(SANITIZED_BUNDLE),

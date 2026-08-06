@@ -1087,6 +1087,10 @@ def export_onnx(args: argparse.Namespace) -> dict[str, object]:
         dynamic_axes={"image": {0: "batch"}, "fake_logit": {0: "batch"}},
         opset_version=17,
         do_constant_folding=True,
+        # PyTorch 2.9+ defaults to the dynamo exporter, which requires the
+        # optional onnxscript package. The legacy exporter matches our
+        # dynamic_axes contract and keeps the Kaggle runtime reproducible.
+        dynamo=False,
     )
     os.replace(temporary, args.output)
     report = {

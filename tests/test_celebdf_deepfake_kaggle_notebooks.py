@@ -94,6 +94,22 @@ class DeepfakeKaggleNotebookTests(unittest.TestCase):
         self.assertIn("CROP_MANIFEST.name not in names", bundle_cell)
         self.assertNotIn("archive.write(PRIVATE_SCORES", bundle_cell)
         self.assertIn("celebdf_deepfake_private_model.zip", bundle_cell)
+        self.assertIn("shutil.rmtree(PRIVATE_MODEL_ROOT)", bundle_cell)
+
+    def test_train_preserves_checkpoint_until_private_bundle_is_verified(self):
+        source = "\n".join(
+            "".join(cell["source"])
+            for cell in self.train["cells"]
+            if cell["cell_type"] == "code"
+        )
+        self.assertIn(
+            "PRIVATE_MODEL_ROOT = (OUTPUT_ROOT if IN_KAGGLE else WORK_ROOT) / \"private_model\"",
+            source,
+        )
+        self.assertLess(
+            source.index("archive.write(CHECKPOINT"),
+            source.index("shutil.rmtree(PRIVATE_MODEL_ROOT)"),
+        )
 
     def test_train_uses_kaggle_torchvision_compatible_pillow(self):
         source = "\n".join(
