@@ -1,115 +1,118 @@
 # 딥소각 얼굴가드
 
-**등록 얼굴과 공개 후보의 동일인 여부를 확인하고, 후보 영상의 딥페이크 위험을 분석하기 위한 모델링·API 프로젝트**다.
+사용자가 등록한 얼굴을 기준으로 **공개 웹 후보에서 같은 사람을 골라내고, 후보 영상의 딥페이크 위험을 수치와 근거로 보여주기 위한 모델링·API 프로젝트**다.
 
-> 핵심 결과물은 `모델링 실험 + 테스트 결과 + 서비스 API`다. API는 필수 범위이며, GCP 같은 외부 배포는 현재 로컬 데모 범위에 포함하지 않는다.
+> 현재 바로 실행할 수 있는 범위는 ArcFace 얼굴 동일인 비교 API다. 공개 웹 검색과 딥페이크 판별까지 연결한 통합 서비스는 개발 중이며, 현재 모델은 운영·본인인증·자동 차단 용도로 승인되지 않았다.
 
-## 프로젝트 한눈에 보기
+## 30초 요약
 
-| 구분 | 현재 내용 | 상태 |
-|---|---|---|
-| 데이터 | 승인받은 Celeb-DF-v2의 `Celeb-real` 590개 영상 | 완료 |
-| 모델 | 사전학습 ArcFace로 512차원 얼굴 특징 추출 | 완료 |
-| 검증 | 인물이 겹치지 않는 Validation/Test 분리와 누수 감사 | 완료 |
-| 기준선 | 영상당 5프레임, 등록 영상 3개 평균 | 완료 |
-| API | 등록 사진 1~5장과 확인 사진 1장의 동일인 후보 비교 | 완료 |
-| 로컬 데모 | Docker CPU에서 같은 사람·다른 사람 HTTP 요청 확인 | 완료 |
-| 고도화 | 흐림·저조도·압축 6조건 평가 완료, FAR Gate 미통과 | 실험 완료·운영 미승인 |
-| 딥페이크 판별 | Celeb-DF 전체 분할·EfficientNet-B4 학습·평가·ONNX 파이프라인 | 코드 완료·전체 GPU 결과 대기 |
-| 운영 적용 | 한국인·실제 촬영 검증, 라이브니스, 상용 사용권 | 미승인 |
-
-현재 수치가 확정된 기능은 **얼굴 동일인 검증**이다. 딥페이크 판별은 별도 모델 파이프라인을 구현했으며 전체 GPU 학습과 공식 Test 결과가 나오기 전에는 정확도를 주장하지 않는다.
-
-## 모델링 과제 흐름
+딥소각이 최종적으로 만들려는 흐름은 다음과 같다.
 
 ```text
-승인받은 Celeb-real 영상
+본인 얼굴 3장 등록
         ↓
-얼굴 탐지·정렬
+공개 웹에서 이미지·영상 후보 수집
         ↓
-사전학습 ArcFace 특징 추출
+ArcFace: 정말 본인 얼굴과 비슷한 후보인지 선별
         ↓
-등록 영상 3개의 특징 평균
+EfficientNet-B4: 후보 영상이 딥페이크인지 분석
         ↓
-확인 얼굴과 코사인 유사도 계산
+얼굴 유사도 + 딥페이크 위험도 + 발견 위치를 화면에 표시
         ↓
-Validation에서 판정 기준 선택
-        ↓
-처음 보는 Test 인물로 성능 확인
-        ↓
-흐림·저조도·압축 조건에서 개선 전후 비교
+사용자가 증거를 확인하고 신고·제외 여부 결정
 ```
 
-ArcFace 신경망을 처음부터 다시 학습한 것은 아니다. 사전학습 모델을 활용해 딥소각에 맞는 등록 방식, 데이터 분리, 판정 기준과 평가 프로토콜을 설계·검증한 전이학습 기반 기준선이다.
+모델의 수치는 판단을 돕는 근거다. 얼굴 유사도만으로 딥페이크라고 결론 내리거나, 모델 결과만으로 게시물을 자동 삭제하지 않는다.
 
-## 데이터와 평가 설계
+## 지금 어디까지 됐나요?
 
-- 원본 규모: 590개 영상, 59명
-- 정상 처리: 589개 영상, **99.83%**
+| 기능 | 하는 일 | 현재 상태 |
+|---|---|---|
+| 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | 설계 완료·구현 예정 ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
+| 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **모델 검증·로컬 API 완료** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
+| 딥페이크 판별 | 후보 영상의 얼굴 프레임이 실제인지 조작인지 분석 | **학습·공식 Test 완료, 모델 포장 재실행 중** ([#15](https://github.com/Chunbae-A/face-image/issues/15)) |
+| 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | 구현 예정 ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
+| 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | 구현 예정 ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
+
+외부 서버 배포는 현재 필수 범위가 아니다. 데모는 로컬 Docker API와 Swagger 화면으로 실행한다.
+
+## 사용한 AI 모델
+
+이 프로젝트에는 목적이 다른 두 모델이 있다.
+
+| 모델 | 질문 | 사용 방법 |
+|---|---|---|
+| ArcFace `buffalo_l` | “두 얼굴이 같은 사람인가?” | 얼굴을 512개 숫자 특징으로 바꾸고 코사인 유사도를 계산 |
+| EfficientNet-B4 | “이 얼굴 프레임이 실제인가, 딥페이크인가?” | Celeb-DF-v2 얼굴 프레임으로 실제·가짜 이진 분류 학습 |
+
+얼굴을 찾고 정렬하는 전처리에는 InsightFace의 SCRFD 계열 검출기를 사용한다. ArcFace는 처음부터 다시 학습하지 않았고, 사전학습 모델에 딥소각의 등록 방식·데이터 분리·판정 기준·API를 설계해 검증했다. EfficientNet-B4는 ImageNet 사전학습 가중치에서 시작해 Celeb-DF-v2로 학습했다.
+
+## 1. 얼굴 동일인 비교 결과
+
+승인받은 Celeb-DF-v2의 실제 얼굴 영상 `Celeb-real`로 등록 사진 수와 판정 기준을 검증했다.
+
+- 전체 영상: 590개, 59명
+- 정상 처리: 589개, **99.83%**
 - 최종 평가 가능 인물: 56명
 - Validation/Test 인물: 17명/39명
-- 채택 설정: 영상당 5프레임, 등록 영상 3개
+- 채택 설정: 영상당 5프레임, 등록 영상 3개 평균
 - 반복 검증: 프레임 수 3종 × 등록 수 3종 × seed 5개 = 45조건
-- 데이터 누수 검사: Validation/Test 인물 교집합 0건, 등록/확인 영상 교집합 0건
-- 판정 기준은 Validation에서만 선택하고 Test에 고정 적용
+- 누수 검사: Validation/Test 인물 교집합 0건, 등록/확인 영상 교집합 0건
 
-`FAR`은 다른 사람을 같은 사람으로 잘못 받아들이는 비율이고, `TAR`은 같은 사람을 올바르게 받아들이는 비율이다.
+| Test 지표 | 결과 | 쉬운 뜻 |
+|---|---:|---|
+| ROC-AUC | 1.000000 | 같은 사람과 다른 사람의 점수 순서를 잘 구분 |
+| EER | 0.000000 | 이 데이터 내부에서 두 오류율이 만나는 지점 |
+| TAR | 1.000000 | 같은 사람을 통과시킨 비율 |
+| 관측 FAR | 0.001380 | 다른 사람을 같은 사람으로 잘못 통과시킨 비율 |
 
-## 핵심 모델 결과
+연구 목표 FAR은 `0.001`, 즉 다른 사람 10,000번 비교 중 최대 10번의 오통과였다. 관측값은 약 13.8번 수준이므로 **Celeb-real 내부 결과가 좋아도 운영 본인인증 기준은 통과하지 못했다.** 연구 판정 기준값은 `0.2823836207389832`이며 API 응답에도 `research_only_unapproved`로 표시한다.
 
-45조건 재현성 감사에서 **영상당 5프레임·등록 영상 3개**를 연구 기준선으로 채택했다.
+전체 45조건과 신뢰구간은 [`reports/celebdf_baseline_audit/2026-08-06`](reports/celebdf_baseline_audit/2026-08-06), 촬영 열화 6조건 결과는 [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06)에 있다.
 
-| Test 지표 | 5프레임·등록 3개 평균 |
+## 2. 딥페이크 영상 판별 결과
+
+전체 Celeb-DF-v2를 사용했다.
+
+| 데이터 | 영상 수 |
 |---|---:|
-| ROC-AUC | 1.000000 |
-| EER | 0.000000 |
-| TAR @ Validation FAR 0.001 | 1.000000 |
-| 관측 FAR | 0.001380 |
+| Celeb-real | 590 |
+| YouTube-real | 300 |
+| Celeb-synthesis | 5,639 |
+| 전체 | **6,529** |
+| 제작자가 고정한 공식 Test | 518 |
 
-ROC-AUC와 TAR은 높았지만 관측 FAR `0.001380`은 목표 `0.001`보다 높다. 따라서 Celeb-real 내부에서는 잘 동작했어도 운영 본인인증 기준이 통과됐다고 해석하지 않는다.
+프레임을 뽑기 전에 영상을 Train/Validation/Test로 나눴다. 같은 영상 장면이 학습과 평가 양쪽에 섞이는 것을 막기 위해서다. 전체 전처리에서는 6,529개 영상 중 6,528개를 처리해 얼굴 crop 208,893개를 만들었고, 1개 영상은 유효 얼굴 프레임 부족으로 제외했다.
 
-전체 45조건 표, 95% 신뢰구간, 누수 검사와 그래프는 [`reports/celebdf_baseline_audit/2026-08-06`](reports/celebdf_baseline_audit/2026-08-06)에 있다.
+Kaggle 3차 실행에서 학습과 공식 Test 평가는 완료됐고, ONNX 변환 단계에서만 선택 의존성 문제로 종료됐다. 아래 값은 그 실행에서 저장된 **연구 중간 결과**다.
 
-## 로컬 API 데모 결과
+| 공식 Test 지표 | 결과 | 판단 |
+|---|---:|---|
+| 선택 프레임 수 | 16 | 영상마다 최대 16개 얼굴 점수 사용 |
+| 점수 통합 | 평균 | 프레임별 점수를 평균해 영상 점수 생성 |
+| 판정 기준값 | 0.751988 | 이 값 이상을 딥페이크 후보로 판단 |
+| Video ROC-AUC | 0.999802 | 실제와 가짜의 전반적인 순위 구분은 높음 |
+| Recall | 1.000000 | 공식 Test 딥페이크를 모두 탐지 |
+| FPR | **0.016854** | 실제 영상을 가짜로 잘못 경고한 비율 약 1.69% |
+| 얼굴 처리 coverage | 1.000000 | 공식 Test 평가 대상 처리 완료 |
 
-승인받은 Celeb-real의 서로 다른 영상에서 전체 프레임을 준비해 실제 Docker HTTP API를 확인했다. 사진·인물 ID·파일명·임베딩은 GitHub에 포함하지 않았다.
+초기 연구 Gate는 `ROC-AUC ≥ 0.90`, `FPR ≤ 0.01`이다. AUC는 통과했지만 FPR이 목표 1%보다 높아 **즉시 경보·자동 차단용 모델로 승인하지 않는다.** 현재 Kaggle 4차 실행은 ONNX 변환을 수정하고 체크포인트가 중간 실패에도 보존되도록 검증하는 단계다. 상세 이력은 [Issue #15](https://github.com/Chunbae-A/face-image/issues/15)에 기록한다.
 
-| 요청 | 유사도 | API 판정 | 처리시간 |
-|---|---:|---|---:|
-| 같은 사람, 첫 모델 준비 포함 | 0.694200 | 일치 후보 | 약 17.8초 |
-| 같은 사람, 예열 후 | 0.694200 | 일치 후보 | 약 0.96초 |
-| 다른 사람, 예열 후 | -0.051950 | 불일치 | 약 1.19초 |
+재현 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md), 데이터 분할과 사전검사·현재 결과는 [`reports/celebdf_deepfake_baseline/2026-08-07`](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
 
-현재 연구 기준값은 `0.2823836207389832`다. 이 결과는 API 연결을 확인한 같은 사람 1건·다른 사람 1건의 기능 시험이며 정확도나 응답시간 SLA를 증명하지 않는다.
+## 얼굴가드 API 실행
 
-상세 실행 환경과 개인정보 제외 항목은 [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06)에 기록했다.
+현재 HTTP API는 **얼굴 동일인 후보 선별 기능**을 제공한다. 딥페이크 ONNX 모델을 연결한 통합 API는 아직 구현 전이다.
 
-## 얼굴가드 API
-
-딥소각 서비스는 모델 코드를 직접 실행하지 않고 HTTP API로 얼굴가드를 호출한다.
-
-| API | 용도 |
-|---|---|
-| `GET /health` | 서버·모델·라이선스·판정 기준 상태 확인 |
-| `POST /v1/faceguard/verify` | 등록 얼굴과 확인 얼굴의 동일인 후보 여부 비교 |
-
-`POST /v1/faceguard/verify`는 다음 입력을 받는다.
-
-- `reference_images`: 등록 얼굴 1~5장, 3장 권장
-- `query_image`: 현재 확인할 얼굴 1장
-- 지원 형식: JPEG·PNG·WEBP
-
-응답에는 동일인 후보 여부, 코사인 유사도, 연구 기준값, 사진별 품질, 처리시간, 실행 제공자와 모델 지문이 들어간다. 원본 사진·얼굴 crop·임베딩은 애플리케이션 파일이나 DB에 영구 저장하지 않는다.
-
-### Docker로 실행
-
-처음 설치한 환경에서는 설정 파일을 만든다.
+### Docker 권장 실행
 
 ```bash
+git clone https://github.com/Chunbae-A/face-image.git
+cd face-image
 cp .env.example .env
 ```
 
-InsightFace 사전학습 가중치의 비상업 연구 조건을 직접 확인한 경우에만 `.env`의 다음 값을 `true`로 변경한다.
+InsightFace 제공 가중치의 비상업 연구 조건을 직접 확인한 경우에만 `.env`에서 다음 값을 변경한다.
 
 ```text
 FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE=true
@@ -122,115 +125,49 @@ docker compose up --build --detach
 curl http://127.0.0.1:8000/health
 ```
 
-브라우저에서 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)를 열면 파일을 직접 선택해 시험할 수 있다. 첫 요청은 모델 준비 때문에 오래 걸릴 수 있으므로 발표 전에 동의받은 샘플로 한 번 예열한다.
+브라우저에서 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)를 열고 `POST /v1/faceguard/verify`를 시험한다.
 
-전체 요청 예제, 오류 코드와 백엔드 연결 규칙은 [`API_RUNBOOK.md`](API_RUNBOOK.md)에 있다.
+- `reference_images`: 본인 등록 얼굴 1~5장, **3장 권장**
+- `query_image`: 확인할 후보 얼굴 1장
+- 지원 형식: JPEG, PNG, WEBP
 
-## 데모에서 보여줄 흐름
+응답의 핵심값은 다음과 같다.
 
-```text
-등록 얼굴 3장 준비
-        +
-현재 얼굴 1장 촬영
-        ↓
-딥소각 백엔드
-        ↓
-얼굴가드 API
-        ↓
-일치 후보 / 불일치 / 재촬영 / 서비스 오류
-```
+| 필드 | 의미 |
+|---|---|
+| `is_same_person` | 연구 기준값을 넘었는지 여부 |
+| `similarity` | 두 얼굴의 코사인 유사도 |
+| `threshold` | 현재 연구 판정 기준값 |
+| `reference_quality`, `query_quality` | 얼굴 크기·선명도·밝기 등 입력 품질 |
+| `processing_ms` | 서버 내부 처리시간 |
 
-Swagger에서 등록·확인 사진을 함께 고르는 것은 개발자 모델 테스트다. 통합 데모에서는 동의받은 발표자의 등록 사진을 미리 준비하고 현장에서는 확인 사진만 촬영한다.
+`is_same_person=true`는 “같은 사람 후보”라는 뜻이지 딥페이크라는 뜻이 아니다. 자세한 실행과 오류 코드는 [`API_QUICKSTART.md`](API_QUICKSTART.md)와 [`API_RUNBOOK.md`](API_RUNBOOK.md)에 있다.
 
-`is_same_person=true`는 “같은 사람 후보”로만 표시한다. 얼굴 결과 하나로 삭제·복구 같은 동작을 자동 실행하지 않는다. 화면 상태와 실패 처리 기준은 [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md)에 있다.
+## 데모에서 보여줄 내용
 
-## 다음 모델 고도화
+현재 안전하게 시연할 수 있는 데모는 다음과 같다.
 
-Kaggle 무료 GPU에서 기존 기준선의 촬영 열화 6조건 평가는 완료했다. 모든 조건에서 TAR 손실은 없었고 처리 성공률은 99.83%였지만, 최악 FAR `0.001609`가 목표 `0.001`을 넘었다. 조건별로 기준값을 다시 정해도 최악 FAR은 `0.002091`이어서 **API 기준값은 변경하지 않는다.**
+1. 동의받은 사람의 등록 사진 3장을 넣는다.
+2. 같은 사람의 다른 사진을 넣어 유사도와 품질 수치를 확인한다.
+3. 다른 사람의 사진을 넣어 불일치 결과를 확인한다.
+4. Celeb-DF 전체 딥페이크 실험 결과에서 AUC와 FPR을 함께 보여준다.
+5. “AUC는 높지만 FPR Gate를 통과하지 못해 운영 승인하지 않았다”고 설명한다.
 
-상세 표, 판정 Gate와 개인정보 제외 검사는 [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06)에 있다.
-
-이번 평가는 기존 모델의 스트레스 검사다. 다음 개선 실험의 목적은 단순히 더 큰 모델을 사용하는 것이 아니라 **나쁜 촬영 조건에서 기존 방식보다 실제로 좋아지는지 증명하는 것**이다.
-
-```text
-기존 방식: 등록 얼굴 특징 단순 평균
-                ↓ 비교
-개선 방식: 선명하고 크게 나온 얼굴에 높은 가중치를 주는 품질 기반 평균
-```
-
-비교 조건은 다음과 같다.
-
-1. 원본
-2. JPEG 압축
-3. 가우시안 흐림
-4. 저조도
-5. 해상도 축소
-6. 휴대전화 복합 열화
-
-다음 PR에서는 품질 가중 평균이나 품질 기반 거절 규칙을 구현하고 같은 프로토콜로 기존 단순 평균과 비교한다. 운영 후보는 목표 FAR, TAR 손실, 처리 성공률 Gate를 모두 통과해야 한다. 비공개 데이터셋 준비와 실행 순서는 [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md)를 따른다.
-
-## 딥페이크 영상 판별 — Issue #15 진행 중
-
-ArcFace 유사도는 “등록한 사람과 후보가 같은 사람인가”를 답하지만 “영상이 조작됐는가”는 답하지 못한다. 이 두 번째 질문을 위해 Celeb-DF-v2 전체 6,529개 영상으로 EfficientNet-B4 기준선을 만드는 코드를 추가했다.
-
-```text
-공식 Test 518개 잠금
-        ↓
-나머지 영상을 Train/Validation으로 먼저 분리
-        ↓
-얼굴 탐지·정렬 → EfficientNet-B4 프레임 점수
-        ↓
-Validation에서 8/16/32프레임과 점수 통합 방식 선택
-        ↓
-공식 Test + JPEG·흐림·저조도·저해상도 평가
-        ↓
-ONNX 내보내기와 CPU 연결 시험
-```
-
-내부 Train/Validation 동일 영상과 원본 대상 인물 그룹 교집합은 0건으로 확인했다. 합성 얼굴의 기증 인물은 여러 대상 조합에 반복되므로 그 교집합은 별도 한계로 공개한다. 공식 Test도 제작자가 정한 목록이라 학습 후보와 대상 인물 ID가 일부 겹친다. 현재는 실행 코드와 누수 테스트가 준비된 단계이고, Video ROC-AUC와 FPR 같은 최종 수치는 Kaggle 전체 실행 후 기록한다. 실행 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md)에 있다.
-
-## 로드맵
-
-### v0.1 — 현재
-
-- Celeb-real ArcFace 기준선과 누수 감사
-- 등록 3장·확인 1장 동일인 비교 API
-- 입력·얼굴·기본 품질 오류 처리
-- Docker 로컬 실행과 실제 HTTP 스모크
-- 개인정보 없는 결과 보고서
-
-### v0.2 — 모델 고도화
-
-- Kaggle 촬영 열화 평가 완료 — FAR Gate 미통과
-- 품질 가중 등록 특징과 단순 평균 비교
-- Validation 기준 판정값 재보정
-- 로컬 `/demo` 화면과 재촬영 상태 연결
-
-### v1.0 — 운영 후보
-
-- 한국인·실제 휴대전화 촬영 데이터 외부 검증
-- 라이브니스와 사진·화면 재생 공격 방어
-- 사용권이 해결된 모델 또는 승인 데이터 기반 학습
-- 신뢰할 수 있는 얼굴 등록과 암호화된 템플릿 저장소
-- 서비스 인증, TLS, 요청 제한, 감사 로그와 모델 롤백
+검색 → 얼굴 선별 → 딥페이크 판별의 완전한 데모는 [Issue #17](https://github.com/Chunbae-A/face-image/issues/17)의 통합 API가 완료된 뒤 제공한다. 화면 흐름과 오류 처리는 [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md)에 있다.
 
 ## 저장소 안내
 
-- [`API_RUNBOOK.md`](API_RUNBOOK.md): API 실행, 요청·응답, 오류 코드, 백엔드 연동
-- [`API_QUICKSTART.md`](API_QUICKSTART.md): 저장소만 받은 사용자를 위한 Docker 빠른 실행
-- [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md): 데모 사용자 흐름, 안전한 판정 분기와 시험표
-- [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 실험 계획
-- [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab 실행과 checkpoint 운영
-- [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md): Kaggle 비공개 데이터셋과 무료 GPU 실험 실행
-- [`DEEPFAKE_BASELINE_RUNBOOK.md`](DEEPFAKE_BASELINE_RUNBOOK.md): Celeb-DF 전체 딥페이크 학습·평가·ONNX 실행
-- [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md): Kaggle 무료 GPU 2단계 실행 안내
-- [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06): 촬영 열화 6조건 결과와 API 적용 결정
-- [`faceguard_api`](faceguard_api): FastAPI 기반 무상태 얼굴가드 API
-- [`configs/faceguard`](configs/faceguard): 데이터 분리·평가 프로토콜 설정
-- [`notebooks`](notebooks): Colab 재현 노트북
-- [`scripts`](scripts): 데이터 점검·추론·평가·감사 도구
-- [`reports`](reports): 개인정보를 제외한 집계 결과와 그래프
-- [`tests`](tests): 데이터 누수·프로토콜·지표·API 테스트
+| 경로 | 내용 |
+|---|---|
+| [`faceguard_api`](faceguard_api) | FastAPI 기반 얼굴 동일인 비교 API |
+| [`notebooks`](notebooks) | Colab·Kaggle 재현 노트북 |
+| [`scripts`](scripts) | 데이터 점검·전처리·학습·평가 도구 |
+| [`configs/faceguard`](configs/faceguard) | 분할·평가 프로토콜 설정 |
+| [`reports`](reports) | 개인정보를 제외한 집계 결과와 그래프 |
+| [`tests`](tests) | 누수·지표·API·노트북 재현 테스트 |
+| [`DEEPFAKE_BASELINE_RUNBOOK.md`](DEEPFAKE_BASELINE_RUNBOOK.md) | 딥페이크 모델 명령 구조 설명 |
+| [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md) | Kaggle 무료 GPU 실행 순서 |
+| [`CONTRIBUTING.md`](CONTRIBUTING.md) | 브랜치·커밋·PR·금지 산출물 규칙 |
 
 ## 로컬 테스트
 
@@ -242,16 +179,25 @@ python -m unittest discover -s tests
 python scripts/check_repository_hygiene.py
 ```
 
-모든 작업은 Issue에서 시작하고 `<type>/<issue-number>-<description>` 브랜치와 PR로 연결한다. 실험 기록, 커밋·PR 규칙과 금지 산출물은 [`CONTRIBUTING.md`](CONTRIBUTING.md)를 따른다.
-
 ## 데이터·개인정보·라이선스
 
-- 얼굴 영상·이미지, 얼굴 crop, 임베딩과 제공기관 압축파일은 Git에 올리지 않는다.
-- Validation/Test 인물을 분리하고 같은 영상 프레임이 등록과 확인에 동시에 들어가지 않게 한다.
-- InsightFace 코드와 제공 사전학습 가중치의 라이선스는 다르다.
-- 현재 `buffalo_l` 가중치는 비상업 연구 범위에서만 사용한다.
-- 현재 `threshold_status`는 `research_only_unapproved`이며 운영 본인인증 수단이 아니다.
+- 얼굴 영상·이미지, 얼굴 crop, 임베딩, 영상별 점수, checkpoint와 ONNX는 GitHub에 올리지 않는다.
+- 공개 웹 검색은 접근이 허용된 공개 영역만 대상으로 하고 비공개 계정이나 접근 제한 영역을 자동 탐색하지 않는다.
+- 원본 사진과 얼굴 특징은 API 요청 처리 후 영구 저장하지 않는다.
+- InsightFace 코드와 제공 사전학습 가중치의 사용 조건은 다르다.
+- 현재 `buffalo_l`와 얼굴 검출 가중치는 비상업 연구 범위로만 사용한다.
+- 현재 얼굴 기준값과 딥페이크 기준값은 모두 연구용이며 한국인·최신 생성 방식·실제 웹 재압축 영상의 운영 성능을 보장하지 않는다.
+
+## 다음 작업 순서
+
+1. Kaggle 4차 완료 후 checkpoint·ONNX·CPU 추론 결과 보존
+2. FPR 1.69%를 낮추기 위한 기준값 보정과 열화 조건별 분석
+3. 공개 후보 검색 어댑터 구현 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
+4. ArcFace 후보 선별 API 연결 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
+5. 화면용 신뢰도 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
+6. 검색·선별·판별 통합 비동기 API 구현 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
+7. 전체 데모 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
 
 ## 발표용 한 문장
 
-> 승인받은 일반 얼굴 영상에 ArcFace를 적용해 인물이 겹치지 않는 동일인 검증 기준선을 만들고, 같은 사람·다른 사람을 약 1초에 비교하는 딥소각 얼굴가드 API까지 구현했습니다. 다만 현재 기준값은 연구용이므로 촬영 열화와 한국인 실제 데이터 검증을 다음 단계로 진행합니다.
+> 딥소각 얼굴가드는 등록 얼굴과 공개 후보의 동일인 가능성을 ArcFace로 선별하고, Celeb-DF-v2 전체로 학습한 별도 모델이 후보 영상의 딥페이크 위험을 분석하도록 설계했습니다. 현재 얼굴 비교 API와 딥페이크 학습·평가는 완료했지만 오경고율이 목표를 넘었기 때문에 연구 결과로 공개하고 운영 적용은 보류했습니다.
