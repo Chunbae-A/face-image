@@ -1,77 +1,224 @@
-# face-image
+# 딥소각 얼굴가드
 
-딥소각 **얼굴가드**의 일반 얼굴 동일인 검증 baseline 저장소다. Celeb-DF-v2의 `Celeb-real` 590개 영상에서 얼굴을 탐지·정렬하고 ArcFace 임베딩을 만든 뒤, 등록 영상 3개/5개 프로토콜을 비교한다.
+**일반 얼굴 이미지로 같은 사람인지 검증하고, 딥소각 서비스가 호출할 수 있는 API까지 제공하는 얼굴인식 프로젝트**다.
 
-> 이 실험은 **얼굴 동일인 검증**이며 딥페이크 탐지 정확도가 아니다.
+> 핵심 결과물은 `모델링 실험 + 테스트 결과 + 서비스 API`다. API는 필수 범위이며, GCP 같은 외부 배포는 현재 로컬 데모 범위에 포함하지 않는다.
 
-## 초기 Celeb-real baseline 결과
+## 프로젝트 한눈에 보기
 
-2026-08-06 Google Colab Tesla T4에서 영상당 10프레임을 사용해 실행한 결과다.
+| 구분 | 현재 내용 | 상태 |
+|---|---|---|
+| 데이터 | 승인받은 Celeb-DF-v2의 `Celeb-real` 590개 영상 | 완료 |
+| 모델 | 사전학습 ArcFace로 512차원 얼굴 특징 추출 | 완료 |
+| 검증 | 인물이 겹치지 않는 Validation/Test 분리와 누수 감사 | 완료 |
+| 기준선 | 영상당 5프레임, 등록 영상 3개 평균 | 완료 |
+| API | 등록 사진 1~5장과 확인 사진 1장의 동일인 후보 비교 | 완료 |
+| 로컬 데모 | Docker CPU에서 같은 사람·다른 사람 HTTP 요청 확인 | 완료 |
+| 고도화 | 흐림·저조도·압축 평가와 품질 가중 평균 비교 | 다음 작업 |
+| 운영 적용 | 한국인·실제 촬영 검증, 라이브니스, 상용 사용권 | 미승인 |
 
-- 전체 590개 영상 중 589개 성공: **99.83%**
-- 평가 가능 인물: 56명
-- subject-disjoint validation/test: 17명/39명
-- 동일 영상의 프레임이 등록과 query에 동시에 들어가지 않음
-- threshold는 validation에서 선택하고 test에 고정 적용
+이 프로젝트는 **얼굴 동일인 검증**을 다룬다. 딥페이크 탐지 정확도나 여러 사람 중 한 명을 찾는 얼굴 검색 모델이 아니다.
 
-| 지표 | 등록 3개 | 등록 5개 |
-|---|---:|---:|
-| Test ROC-AUC | 1.0000 | 1.0000 |
-| Test EER | 0.0000 | 0.0000 |
-| FAR 0.001 기준 threshold | 0.277838 | 0.285558 |
-| FAR 0.001 기준 Test TAR | 1.0000 | 1.0000 |
-| FAR 0.001 기준 Test FAR | 0.000387 | 0.000258 |
+## 모델링 과제 흐름
 
-이 결과는 Celeb-real 내부 baseline이다. 한국인 얼굴, 실제 셀카, 모바일 카메라 및 운영 환경의 일반화 성능은 별도의 데이터로 다시 평가해야 한다.
-
-## 재현성·누수 감사 결과
-
-2026-08-06 Tesla T4에서 `frames={1,5,10} × reference={1,3,5} × seed=5개`의 45개 조건을 감사했다. 모든 seed에서 validation/test identity 교집합, registration/query video 교집합, 전역 중복 video ID가 0건이었다.
-
-| 프레임/영상 | 등록 영상 | Test ROC-AUC 평균 | Test EER 평균 | Test TAR 평균 @ validation FAR 0.001 | 관측 Test FAR 평균 |
-|---:|---:|---:|---:|---:|---:|
-| 1 | 1 | 0.999998 | 0.000194 | 0.999005 | 0.002197 |
-| 1 | 3 | 1.000000 | 0.000013 | 1.000000 | 0.000895 |
-| 1 | 5 | 1.000000 | 0.000000 | 1.000000 | 0.000868 |
-| 5 | 1 | 1.000000 | 0.000000 | 1.000000 | 0.001459 |
-| **5** | **3** | **1.000000** | **0.000000** | **1.000000** | **0.001380** |
-| 5 | 5 | 1.000000 | 0.000000 | 1.000000 | 0.002142 |
-| 10 | 1 | 1.000000 | 0.000000 | 1.000000 | 0.001459 |
-| 10 | 3 | 1.000000 | 0.000000 | 1.000000 | 0.001252 |
-| 10 | 5 | 1.000000 | 0.000000 | 1.000000 | 0.001555 |
-
-고정 decision gate에 따라 **영상당 5프레임·등록 영상 3개**를 연구 baseline으로 채택한다. 10프레임 대비 TAR 손실과 등록 5개 대비 TAR 이득이 모두 0이었다. 다만 선택 조건의 관측 Test FAR 평균 `0.001380`은 목표 `0.001`보다 높으므로, 운영 threshold로 승인된 결과가 아니며 외부 데이터에서 재보정해야 한다.
-
-집계 결과와 그래프는 [`reports/celebdf_baseline_audit/2026-08-06`](reports/celebdf_baseline_audit/2026-08-06)에 있다. 영상, 얼굴 crop, 개별 score와 임베딩은 포함하지 않는다.
-
-## Colab에서 재실행
-
-1. [`notebooks/celebdf_arcface_full_colab.ipynb`](notebooks/celebdf_arcface_full_colab.ipynb)를 Google Colab에 업로드한다.
-2. GPU runtime을 선택한다. Tesla T4에서 검증했다.
-3. 정식 승인받은 `Celeb-DF-v2.zip`을 약관이 허용하는 경로에 둔다. 기본 경로는 `/content/drive/MyDrive/Celeb-DF-v2.zip`이다.
-4. 클라우드 처리 확인과 InsightFace 비상업 연구용 가중치 확인값을 `True`로 변경한다.
-5. 설치 후 runtime을 재시작했다면 2번 설치 셀은 다시 실행하지 않고 1, 3~13번 셀을 실행한다.
-
-노트북은 Colab의 CUDA 사용자 라이브러리와 호환되도록 `onnxruntime-gpu==1.23.2`를 사용한다. 기본 `CODE_SOURCE="embedded"`는 GitHub clone 권한 없이도 필요한 스크립트를 노트북 내부에서 복원한다.
-
-### Baseline 감사
-
-[`notebooks/celebdf_arcface_audit_colab.ipynb`](notebooks/celebdf_arcface_audit_colab.ipynb)는 Issue [#4](https://github.com/Chunbae-A/face-image/issues/4)의 `frames={1,5,10} × reference={1,3,5} × seed=5개` 감사를 실행한다. 원본과 임베딩은 runtime에만 두고, 누수 검사·집계 metric·hash·그래프만 결과 ZIP에 포함한다.
-
-## 구조
-
-- [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 Debug/Pilot/Full 실험 계획
-- [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab, 보안 게이트, checkpoint 운영 가이드
-- [`configs/faceguard`](configs/faceguard): 일반 얼굴가드와 Celeb-DF 고정 프로토콜
-- [`scripts`](scripts): ZIP inventory/안전 추출, ArcFace 추론, 평가 도구
-- [`tests`](tests): 데이터 누수·압축 경로·프로토콜·지표 테스트
-
-## 로컬 검증
-
-```bash
-python3 -m unittest discover -s tests
+```text
+승인받은 Celeb-real 영상
+        ↓
+얼굴 탐지·정렬
+        ↓
+사전학습 ArcFace 특징 추출
+        ↓
+등록 영상 3개의 특징 평균
+        ↓
+확인 얼굴과 코사인 유사도 계산
+        ↓
+Validation에서 판정 기준 선택
+        ↓
+처음 보는 Test 인물로 성능 확인
+        ↓
+흐림·저조도·압축 조건에서 개선 전후 비교
 ```
 
-## 데이터와 라이선스
+ArcFace 신경망을 처음부터 다시 학습한 것은 아니다. 사전학습 모델을 활용해 딥소각에 맞는 등록 방식, 데이터 분리, 판정 기준과 평가 프로토콜을 설계·검증한 전이학습 기반 기준선이다.
 
-실제 얼굴 영상·이미지, 임베딩, 제공기관 압축파일은 Git에 커밋하지 않는다. InsightFace 코드와 제공 사전학습 가중치의 라이선스는 다르며, `buffalo_l` 가중치는 비상업 연구 범위에서만 사용한다.
+## 데이터와 평가 설계
+
+- 원본 규모: 590개 영상, 59명
+- 정상 처리: 589개 영상, **99.83%**
+- 최종 평가 가능 인물: 56명
+- Validation/Test 인물: 17명/39명
+- 채택 설정: 영상당 5프레임, 등록 영상 3개
+- 반복 검증: 프레임 수 3종 × 등록 수 3종 × seed 5개 = 45조건
+- 데이터 누수 검사: Validation/Test 인물 교집합 0건, 등록/확인 영상 교집합 0건
+- 판정 기준은 Validation에서만 선택하고 Test에 고정 적용
+
+`FAR`은 다른 사람을 같은 사람으로 잘못 받아들이는 비율이고, `TAR`은 같은 사람을 올바르게 받아들이는 비율이다.
+
+## 핵심 모델 결과
+
+45조건 재현성 감사에서 **영상당 5프레임·등록 영상 3개**를 연구 기준선으로 채택했다.
+
+| Test 지표 | 5프레임·등록 3개 평균 |
+|---|---:|
+| ROC-AUC | 1.000000 |
+| EER | 0.000000 |
+| TAR @ Validation FAR 0.001 | 1.000000 |
+| 관측 FAR | 0.001380 |
+
+ROC-AUC와 TAR은 높았지만 관측 FAR `0.001380`은 목표 `0.001`보다 높다. 따라서 Celeb-real 내부에서는 잘 동작했어도 운영 본인인증 기준이 통과됐다고 해석하지 않는다.
+
+전체 45조건 표, 95% 신뢰구간, 누수 검사와 그래프는 [`reports/celebdf_baseline_audit/2026-08-06`](reports/celebdf_baseline_audit/2026-08-06)에 있다.
+
+## 로컬 API 데모 결과
+
+승인받은 Celeb-real의 서로 다른 영상에서 전체 프레임을 준비해 실제 Docker HTTP API를 확인했다. 사진·인물 ID·파일명·임베딩은 GitHub에 포함하지 않았다.
+
+| 요청 | 유사도 | API 판정 | 처리시간 |
+|---|---:|---|---:|
+| 같은 사람, 첫 모델 준비 포함 | 0.694200 | 일치 후보 | 약 17.8초 |
+| 같은 사람, 예열 후 | 0.694200 | 일치 후보 | 약 0.96초 |
+| 다른 사람, 예열 후 | -0.051950 | 불일치 | 약 1.19초 |
+
+현재 연구 기준값은 `0.2823836207389832`다. 이 결과는 API 연결을 확인한 같은 사람 1건·다른 사람 1건의 기능 시험이며 정확도나 응답시간 SLA를 증명하지 않는다.
+
+상세 실행 환경과 개인정보 제외 항목은 [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06)에 기록했다.
+
+## 얼굴가드 API
+
+딥소각 서비스는 모델 코드를 직접 실행하지 않고 HTTP API로 얼굴가드를 호출한다.
+
+| API | 용도 |
+|---|---|
+| `GET /health` | 서버·모델·라이선스·판정 기준 상태 확인 |
+| `POST /v1/faceguard/verify` | 등록 얼굴과 확인 얼굴의 동일인 후보 여부 비교 |
+
+`POST /v1/faceguard/verify`는 다음 입력을 받는다.
+
+- `reference_images`: 등록 얼굴 1~5장, 3장 권장
+- `query_image`: 현재 확인할 얼굴 1장
+- 지원 형식: JPEG·PNG·WEBP
+
+응답에는 동일인 후보 여부, 코사인 유사도, 연구 기준값, 사진별 품질, 처리시간, 실행 제공자와 모델 지문이 들어간다. 원본 사진·얼굴 crop·임베딩은 애플리케이션 파일이나 DB에 영구 저장하지 않는다.
+
+### Docker로 실행
+
+처음 설치한 환경에서는 설정 파일을 만든다.
+
+```bash
+cp .env.example .env
+```
+
+InsightFace 사전학습 가중치의 비상업 연구 조건을 직접 확인한 경우에만 `.env`의 다음 값을 `true`로 변경한다.
+
+```text
+FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE=true
+```
+
+서버를 실행한다.
+
+```bash
+docker compose up --build --detach
+curl http://127.0.0.1:8000/health
+```
+
+브라우저에서 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)를 열면 파일을 직접 선택해 시험할 수 있다. 첫 요청은 모델 준비 때문에 오래 걸릴 수 있으므로 발표 전에 동의받은 샘플로 한 번 예열한다.
+
+전체 요청 예제, 오류 코드와 백엔드 연결 규칙은 [`API_RUNBOOK.md`](API_RUNBOOK.md)에 있다.
+
+## 데모에서 보여줄 흐름
+
+```text
+등록 얼굴 3장 준비
+        +
+현재 얼굴 1장 촬영
+        ↓
+딥소각 백엔드
+        ↓
+얼굴가드 API
+        ↓
+일치 후보 / 불일치 / 재촬영 / 서비스 오류
+```
+
+Swagger에서 등록·확인 사진을 함께 고르는 것은 개발자 모델 테스트다. 통합 데모에서는 동의받은 발표자의 등록 사진을 미리 준비하고 현장에서는 확인 사진만 촬영한다.
+
+`is_same_person=true`는 “같은 사람 후보”로만 표시한다. 얼굴 결과 하나로 삭제·복구 같은 동작을 자동 실행하지 않는다. 화면 상태와 실패 처리 기준은 [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md)에 있다.
+
+## 다음 모델 고도화
+
+다음 실험의 목적은 단순히 더 큰 모델을 사용하는 것이 아니라 **나쁜 촬영 조건에서 기존 방식보다 실제로 좋아지는지 증명하는 것**이다.
+
+```text
+기존 방식: 등록 얼굴 특징 단순 평균
+                ↓ 비교
+개선 방식: 선명하고 크게 나온 얼굴에 높은 가중치를 주는 품질 기반 평균
+```
+
+비교 조건은 다음과 같다.
+
+1. 원본
+2. JPEG 압축
+3. 가우시안 흐림
+4. 저조도
+5. 해상도 축소
+6. 휴대전화 복합 열화
+
+Kaggle 무료 GPU에서 처리 성공률, FAR, TAR과 기준값 변화를 비교한다. 운영 후보는 목표 FAR, TAR 손실, 처리 성공률 Gate를 모두 통과해야 한다.
+
+## 로드맵
+
+### v0.1 — 현재
+
+- Celeb-real ArcFace 기준선과 누수 감사
+- 등록 3장·확인 1장 동일인 비교 API
+- 입력·얼굴·기본 품질 오류 처리
+- Docker 로컬 실행과 실제 HTTP 스모크
+- 개인정보 없는 결과 보고서
+
+### v0.2 — 모델 고도화
+
+- Kaggle 촬영 열화 평가
+- 품질 가중 등록 특징과 단순 평균 비교
+- Validation 기준 판정값 재보정
+- 로컬 `/demo` 화면과 재촬영 상태 연결
+
+### v1.0 — 운영 후보
+
+- 한국인·실제 휴대전화 촬영 데이터 외부 검증
+- 라이브니스와 사진·화면 재생 공격 방어
+- 사용권이 해결된 모델 또는 승인 데이터 기반 학습
+- 신뢰할 수 있는 얼굴 등록과 암호화된 템플릿 저장소
+- 서비스 인증, TLS, 요청 제한, 감사 로그와 모델 롤백
+
+## 저장소 안내
+
+- [`API_RUNBOOK.md`](API_RUNBOOK.md): API 실행, 요청·응답, 오류 코드, 백엔드 연동
+- [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md): 데모 사용자 흐름, 안전한 판정 분기와 시험표
+- [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 실험 계획
+- [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab 실행과 checkpoint 운영
+- [`faceguard_api`](faceguard_api): FastAPI 기반 무상태 얼굴가드 API
+- [`configs/faceguard`](configs/faceguard): 데이터 분리·평가 프로토콜 설정
+- [`notebooks`](notebooks): Colab 재현 노트북
+- [`scripts`](scripts): 데이터 점검·추론·평가·감사 도구
+- [`reports`](reports): 개인정보를 제외한 집계 결과와 그래프
+- [`tests`](tests): 데이터 누수·프로토콜·지표·API 테스트
+
+## 로컬 테스트
+
+```bash
+python3.11 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements-api-test.txt
+python -m unittest discover -s tests
+```
+
+## 데이터·개인정보·라이선스
+
+- 얼굴 영상·이미지, 얼굴 crop, 임베딩과 제공기관 압축파일은 Git에 올리지 않는다.
+- Validation/Test 인물을 분리하고 같은 영상 프레임이 등록과 확인에 동시에 들어가지 않게 한다.
+- InsightFace 코드와 제공 사전학습 가중치의 라이선스는 다르다.
+- 현재 `buffalo_l` 가중치는 비상업 연구 범위에서만 사용한다.
+- 현재 `threshold_status`는 `research_only_unapproved`이며 운영 본인인증 수단이 아니다.
+
+## 발표용 한 문장
+
+> 승인받은 일반 얼굴 영상에 ArcFace를 적용해 인물이 겹치지 않는 동일인 검증 기준선을 만들고, 같은 사람·다른 사람을 약 1초에 비교하는 딥소각 얼굴가드 API까지 구현했습니다. 다만 현재 기준값은 연구용이므로 촬영 열화와 한국인 실제 데이터 검증을 다음 단계로 진행합니다.

@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+__pycache__
+*.pyc
+*.zip
+*.mp4
+*.npz
+data
+outputs
+notebooks
+reports
+tests
