@@ -1,6 +1,6 @@
 # 딥소각 얼굴가드
 
-**일반 얼굴 이미지로 같은 사람인지 검증하고, 딥소각 서비스가 호출할 수 있는 API까지 제공하는 얼굴인식 프로젝트**다.
+**등록 얼굴과 공개 후보의 동일인 여부를 확인하고, 후보 영상의 딥페이크 위험을 분석하기 위한 모델링·API 프로젝트**다.
 
 > 핵심 결과물은 `모델링 실험 + 테스트 결과 + 서비스 API`다. API는 필수 범위이며, GCP 같은 외부 배포는 현재 로컬 데모 범위에 포함하지 않는다.
 
@@ -15,9 +15,10 @@
 | API | 등록 사진 1~5장과 확인 사진 1장의 동일인 후보 비교 | 완료 |
 | 로컬 데모 | Docker CPU에서 같은 사람·다른 사람 HTTP 요청 확인 | 완료 |
 | 고도화 | 흐림·저조도·압축 6조건 평가 완료, FAR Gate 미통과 | 실험 완료·운영 미승인 |
+| 딥페이크 판별 | Celeb-DF 전체 분할·EfficientNet-B4 학습·평가·ONNX 파이프라인 | 코드 완료·전체 GPU 결과 대기 |
 | 운영 적용 | 한국인·실제 촬영 검증, 라이브니스, 상용 사용권 | 미승인 |
 
-이 프로젝트는 **얼굴 동일인 검증**을 다룬다. 딥페이크 탐지 정확도나 여러 사람 중 한 명을 찾는 얼굴 검색 모델이 아니다.
+현재 수치가 확정된 기능은 **얼굴 동일인 검증**이다. 딥페이크 판별은 별도 모델 파이프라인을 구현했으며 전체 GPU 학습과 공식 Test 결과가 나오기 전에는 정확도를 주장하지 않는다.
 
 ## 모델링 과제 흐름
 
@@ -168,6 +169,26 @@ Kaggle 무료 GPU에서 기존 기준선의 촬영 열화 6조건 평가는 완�
 
 다음 PR에서는 품질 가중 평균이나 품질 기반 거절 규칙을 구현하고 같은 프로토콜로 기존 단순 평균과 비교한다. 운영 후보는 목표 FAR, TAR 손실, 처리 성공률 Gate를 모두 통과해야 한다. 비공개 데이터셋 준비와 실행 순서는 [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md)를 따른다.
 
+## 딥페이크 영상 판별 — Issue #15 진행 중
+
+ArcFace 유사도는 “등록한 사람과 후보가 같은 사람인가”를 답하지만 “영상이 조작됐는가”는 답하지 못한다. 이 두 번째 질문을 위해 Celeb-DF-v2 전체 6,529개 영상으로 EfficientNet-B4 기준선을 만드는 코드를 추가했다.
+
+```text
+공식 Test 518개 잠금
+        ↓
+나머지 영상을 Train/Validation으로 먼저 분리
+        ↓
+얼굴 탐지·정렬 → EfficientNet-B4 프레임 점수
+        ↓
+Validation에서 8/16/32프레임과 점수 통합 방식 선택
+        ↓
+공식 Test + JPEG·흐림·저조도·저해상도 평가
+        ↓
+ONNX 내보내기와 CPU 연결 시험
+```
+
+내부 Train/Validation 동일 영상과 원본 대상 인물 그룹 교집합은 0건으로 확인했다. 합성 얼굴의 기증 인물은 여러 대상 조합에 반복되므로 그 교집합은 별도 한계로 공개한다. 공식 Test도 제작자가 정한 목록이라 학습 후보와 대상 인물 ID가 일부 겹친다. 현재는 실행 코드와 누수 테스트가 준비된 단계이고, Video ROC-AUC와 FPR 같은 최종 수치는 Kaggle 전체 실행 후 기록한다. 실행 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md)에 있다.
+
 ## 로드맵
 
 ### v0.1 — 현재
@@ -201,6 +222,8 @@ Kaggle 무료 GPU에서 기존 기준선의 촬영 열화 6조건 평가는 완�
 - [`FACEGUARD_EXPERIMENT_PLAN.md`](FACEGUARD_EXPERIMENT_PLAN.md): 한국인 안면 데이터 승인 후 실험 계획
 - [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md): Colab 실행과 checkpoint 운영
 - [`KAGGLE_RUNBOOK.md`](KAGGLE_RUNBOOK.md): Kaggle 비공개 데이터셋과 무료 GPU 실험 실행
+- [`DEEPFAKE_BASELINE_RUNBOOK.md`](DEEPFAKE_BASELINE_RUNBOOK.md): Celeb-DF 전체 딥페이크 학습·평가·ONNX 실행
+- [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md): Kaggle 무료 GPU 2단계 실행 안내
 - [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06): 촬영 열화 6조건 결과와 API 적용 결정
 - [`faceguard_api`](faceguard_api): FastAPI 기반 무상태 얼굴가드 API
 - [`configs/faceguard`](configs/faceguard): 데이터 분리·평가 프로토콜 설정

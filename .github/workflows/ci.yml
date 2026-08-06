@@ -39,3 +39,15 @@ jobs:
         run: |
           python scripts/build_celebdf_colab_notebook.py
           git diff --exit-code -- notebooks/celebdf_arcface_full_colab.ipynb
+
+      - name: Verify generated deepfake Colab notebook
+        run: |
+          python scripts/build_celebdf_deepfake_colab_notebook.py
+          git diff --exit-code -- notebooks/celebdf_efficientnet_b4_colab.ipynb
+
+      - name: Verify generated deepfake Kaggle notebooks
+        run: |
+          python scripts/build_celebdf_deepfake_kaggle_notebooks.py
+          git diff --exit-code -- \
+            notebooks/celebdf_deepfake_preprocess_kaggle.ipynb \
+            notebooks/celebdf_deepfake_train_kaggle.ipynb
