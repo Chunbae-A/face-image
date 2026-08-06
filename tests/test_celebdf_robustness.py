@@ -81,6 +81,67 @@ class InputConditionTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             runner.apply_input_condition(frame, "unknown")
 
+    def test_resume_fingerprint_covers_embedding_contract(self):
+        args = argparse.Namespace(
+            input_condition="clean",
+            frames_per_video=5,
+            minimum_valid_frames=3,
+            video_root=Path("/trusted/videos"),
+            model_name="buffalo_l",
+            det_size=640,
+        )
+        inventory = {"model_hashes": {"model.onnx": "hash-a"}}
+        original = runner._resume_fingerprint(
+            args,
+            manifest_sha256="manifest-a",
+            runtime_inventory=inventory,
+        )
+        changes = (
+            ("frames_per_video", 10),
+            ("minimum_valid_frames", 4),
+            ("input_condition", "jpeg_q30"),
+            ("video_root", Path("/trusted/other-videos")),
+            ("model_name", "other-model"),
+            ("det_size", 320),
+        )
+        for field, value in changes:
+            changed = argparse.Namespace(**vars(args))
+            setattr(changed, field, value)
+            self.assertNotEqual(
+                original,
+                runner._resume_fingerprint(
+                    changed,
+                    manifest_sha256="manifest-a",
+                    runtime_inventory=inventory,
+                ),
+                field,
+            )
+        self.assertNotEqual(
+            original,
+            runner._resume_fingerprint(
+                args,
+                manifest_sha256="manifest-b",
+                runtime_inventory=inventory,
+            ),
+        )
+        self.assertNotEqual(
+            original,
+            runner._resume_fingerprint(
+                args,
+                manifest_sha256="manifest-a",
+                runtime_inventory={"model_hashes": {"model.onnx": "hash-b"}},
+            ),
+        )
+        with mock.patch.object(runner, "_code_version", return_value="sha256:changed"):
+            self.assertNotEqual(
+                original,
+                runner._resume_fingerprint(
+                    args,
+                    manifest_sha256="manifest-a",
+                    runtime_inventory=inventory,
+                ),
+            )
+
     def test_running_condition_checkpoint_can_resume(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
@@ -100,10 +161,6 @@ class InputConditionTests(unittest.TestCase):
                 output,
             )
             run_report = root / "run.json"
-            run_report.write_text(
-                json.dumps({"status": "running", "input_condition": "jpeg_q30"}),
-                encoding="utf-8",
-            )
             args = argparse.Namespace(
                 accept_noncommercial_model_license=True,
                 manifest=manifest,
@@ -134,6 +191,20 @@ class InputConditionTests(unittest.TestCase):
                 "model_root": str(root / "models"),
                 "model_hashes": {"model.onnx": "hash"},
             }
+            run_report.write_text(
+                json.dumps(
+                    {
+                        "status": "running",
+                        "input_condition": "jpeg_q30",
+                        "resume_fingerprint": runner._resume_fingerprint(
+                            args,
+                            manifest_sha256=runner._sha256(manifest),
+                            runtime_inventory=inventory,
+                        ),
+                    }
+                ),
+                encoding="utf-8",
+            )
             with mock.patch.object(
                 runner,
                 "initialize_face_app",
@@ -267,6 +338,49 @@ class RobustnessAuditTests(unittest.TestCase):
             audit.mapping_from_specs(
                 [("clean", Path("a")), ("clean", Path("b"))]
             )
+
+    def test_partial_reject_mapping_does_not_require_clean(self):
+        mapping = audit.mapping_from_specs(
+            [("jpeg_q30", Path("rejects.csv"))],
+            require_clean=False,
+        )
+        self.assertEqual(mapping, {"jpeg_q30": Path("rejects.csv")})
+
+    def test_decision_gate_boundaries_and_failures(self):
+        at_boundary = [
+            {
+                "condition": "clean",
+                "far_0.001_clean_locked_test_tar_mean": 1.0,
+                "far_0.001_clean_locked_test_far_mean": audit.TARGET_FAR,
+                "far_0.001_condition_calibrated_test_far_mean": audit.TARGET_FAR,
+            },
+            {
+                "condition": "jpeg_q30",
+                "far_0.001_clean_locked_test_tar_mean": 1.0 - audit.MAXIMUM_TAR_LOSS,
+                "far_0.001_clean_locked_test_far_mean": audit.TARGET_FAR,
+                "far_0.001_condition_calibrated_test_far_mean": audit.TARGET_FAR,
+            },
+        ]
+        quality = {
+            condition: {"success_rate": audit.MINIMUM_PROCESSING_SUCCESS_RATE}
+            for condition in ("clean", "jpeg_q30")
+        }
+        approved = audit.decision_summary(at_boundary, quality)
+        self.assertTrue(approved["single_global_threshold_approved"])
+        self.assertTrue(approved["condition_calibration_approved"])
+        self.assertEqual(approved["quality_gate_conditions"], [])
+
+        outside = [dict(row) for row in at_boundary]
+        outside[1]["far_0.001_clean_locked_test_tar_mean"] -= 0.001
+        outside[1]["far_0.001_clean_locked_test_far_mean"] += 0.000001
+        outside[1]["far_0.001_condition_calibrated_test_far_mean"] += 0.000001
+        quality["jpeg_q30"] = {
+            "success_rate": audit.MINIMUM_PROCESSING_SUCCESS_RATE - 0.001
+        }
+        rejected = audit.decision_summary(outside, quality)
+        self.assertFalse(rejected["single_global_threshold_approved"])
+        self.assertFalse(rejected["condition_calibration_approved"])
+        self.assertEqual(rejected["quality_gate_conditions"], ["jpeg_q30"])
 
     def test_run_report_with_wrong_frame_protocol_is_rejected(self):
         with tempfile.TemporaryDirectory() as temporary:

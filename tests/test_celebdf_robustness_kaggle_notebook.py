@@ -59,6 +59,8 @@ class RobustnessKaggleNotebookTests(unittest.TestCase):
         )
         self.assertIn("I_CONFIRM_CELEBDF_KAGGLE_PRIVATE_PROCESSING_IS_ALLOWED", source)
         self.assertIn('Path("/kaggle/temp/celebdf_robustness")', source)
+        self.assertIn('Path("/kaggle/temp/face-image")', source)
+        self.assertNotIn('Path("/kaggle/working/face-image")', source)
         self.assertIn('Path("/kaggle/working/celebdf_robustness_results.zip")', source)
         self.assertIn("shutil.rmtree(WORK_ROOT)", source)
         self.assertIn('forbidden_suffixes = {".mp4", ".npz"}', source)
@@ -70,6 +72,7 @@ class RobustnessKaggleNotebookTests(unittest.TestCase):
         self.assertIn("590 * FRAMES_PER_VIDEO * len(CONDITIONS)", source)
         self.assertIn('"raw_data_in_bundle": False', source)
         self.assertIn('"embeddings_in_bundle": False', source)
+        self.assertIn('"Pillow==12.3.0"', source)
 
     def test_python_code_cells_compile(self):
         for index, cell in enumerate(self.notebook["cells"]):

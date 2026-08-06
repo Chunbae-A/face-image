@@ -33,7 +33,7 @@ def repository_bootstrap_cell() -> dict[str, object]:
     replacements = (
         ("#@title 3. 실행 코드 준비 — GitHub 권한이 필요 없는 내장 코드가 기본값", "# 3. 실행 코드 준비 — GitHub 권한이 필요 없는 내장 코드가 기본값"),
         ("IN_HOSTED_COLAB", "IN_KAGGLE"),
-        ('Path("/content/face-image")', 'Path("/kaggle/working/face-image")'),
+        ('Path("/content/face-image")', 'Path("/kaggle/temp/face-image")'),
     )
     for old, new in replacements:
         source = source.replace(old, new)

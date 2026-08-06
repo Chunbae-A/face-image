@@ -63,6 +63,8 @@ class RobustnessNotebookTests(unittest.TestCase):
         self.assertIn('if any(name.endswith(".npz") for name in names)', source)
         self.assertIn('"raw_data_in_bundle": False', source)
         self.assertIn('"embeddings_in_bundle": False', source)
+        self.assertIn('"environment": "colab"', source)
+        self.assertIn('"Pillow==12.3.0"', source)
         for condition in (
             "clean",
             "jpeg_q30",

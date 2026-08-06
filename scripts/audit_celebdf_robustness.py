@@ -15,6 +15,7 @@ from collections import Counter
 import csv
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
@@ -48,11 +49,13 @@ DEFAULT_FAR_POINTS = (0.01, 0.001)
 DEFAULT_MAX_REFERENCE_COUNT = 5
 DEFAULT_REFERENCE_COUNT = 3
 DEFAULT_MINIMUM_QUERIES = 3
+DEFAULT_MINIMUM_SUBJECTS = 4
 EXPECTED_FRAMES_PER_VIDEO = 5
 EXPECTED_MINIMUM_VALID_FRAMES = 3
 TARGET_FAR = 0.001
 MAXIMUM_TAR_LOSS = 0.05
 MINIMUM_PROCESSING_SUCCESS_RATE = 0.98
+DECISION_EPSILON = 1e-12
 
 
 def positive_int(value: str) -> int:
@@ -69,13 +72,17 @@ def parse_named_path(value: str) -> tuple[str, Path]:
     return name.strip(), Path(raw_path).expanduser()
 
 
-def mapping_from_specs(specs: Iterable[tuple[str, Path]]) -> dict[str, Path]:
+def mapping_from_specs(
+    specs: Iterable[tuple[str, Path]],
+    *,
+    require_clean: bool = True,
+) -> dict[str, Path]:
     mapping: dict[str, Path] = {}
     for name, path in specs:
         if name in mapping:
             raise ValueError(f"duplicate condition mapping: {name}")
         mapping[name] = path
-    if CLEAN_CONDITION not in mapping:
+    if require_clean and CLEAN_CONDITION not in mapping:
         raise ValueError("condition mappings must include clean")
     return mapping
 
@@ -275,7 +282,7 @@ def build_common_protocol_records(
                     by_condition[condition][record.video_id] for record in common_queries
                 )
 
-    if len(eligible_subjects) < 4:
+    if len(eligible_subjects) < DEFAULT_MINIMUM_SUBJECTS:
         raise ValueError("fewer than four subjects have a common evaluation query pool")
     if registration_ids & common_query_ids:
         raise AssertionError("registration and common query videos overlap")
@@ -487,8 +494,9 @@ def decision_summary(
         success_rate = float(quality[condition]["success_rate"])
         tar_loss = clean_tar - tar
         quality_gate = (
-            tar_loss > MAXIMUM_TAR_LOSS
-            or success_rate < MINIMUM_PROCESSING_SUCCESS_RATE
+            tar_loss > MAXIMUM_TAR_LOSS + DECISION_EPSILON
+            or success_rate
+            < MINIMUM_PROCESSING_SUCCESS_RATE - DECISION_EPSILON
         )
         if quality_gate:
             quality_gate_conditions.append(condition)
@@ -513,8 +521,12 @@ def decision_summary(
         "minimum_processing_success_rate": MINIMUM_PROCESSING_SUCCESS_RATE,
         "worst_clean_locked_test_far_mean": worst_clean_locked_far,
         "worst_condition_calibrated_test_far_mean": worst_calibrated_far,
-        "single_global_threshold_approved": worst_clean_locked_far <= TARGET_FAR,
-        "condition_calibration_approved": worst_calibrated_far <= TARGET_FAR,
+        "single_global_threshold_approved": (
+            worst_clean_locked_far <= TARGET_FAR + DECISION_EPSILON
+        ),
+        "condition_calibration_approved": (
+            worst_calibrated_far <= TARGET_FAR + DECISION_EPSILON
+        ),
         "quality_gate_conditions": sorted(quality_gate_conditions),
         "condition_findings": sorted(
             condition_findings,
@@ -527,11 +539,29 @@ def write_csv(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
     if not rows:
         raise ValueError("cannot write an empty CSV")
     path.parent.mkdir(parents=True, exist_ok=True)
-    fields = list(rows[0])
-    with path.open("w", newline="", encoding="utf-8") as handle:
+    fields: list[str] = []
+    known: set[str] = set()
+    for row in rows:
+        for key in row:
+            if key not in known:
+                known.add(key)
+                fields.append(key)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with temporary.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fields, lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
+    os.replace(temporary, path)
+
+
+def write_json_atomic(path: Path, payload: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
+    os.replace(temporary, path)
 
 
 def run_audit(
@@ -645,10 +675,7 @@ def run_audit(
             "summary_csv": summary_path.name,
         },
     }
-    report_path.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+    write_json_atomic(report_path, report)
     return report
 
 
@@ -688,7 +715,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    reject_mapping = mapping_from_specs(args.rejects) if args.rejects else {}
+    reject_mapping = (
+        mapping_from_specs(args.rejects, require_clean=False)
+        if args.rejects
+        else {}
+    )
     report = run_audit(
         embeddings=mapping_from_specs(args.embedding_run),
         run_reports=mapping_from_specs(args.run_report),

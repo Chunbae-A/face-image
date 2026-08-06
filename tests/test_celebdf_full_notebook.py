@@ -67,6 +67,21 @@ class FullNotebookTests(unittest.TestCase):
             if python_source.strip():
                 ast.parse(python_source)
 
+    def test_download_bundle_excludes_runtime_paths_and_ids(self):
+        bundle_cell = next(
+            "".join(cell["source"])
+            for cell in self.notebook["cells"]
+            if cell["cell_type"] == "code"
+            and "#@title 13. 비식별 결과 묶음 저장" in "".join(cell["source"])
+        )
+        self.assertIn("PUBLIC_INVENTORY_JSON", bundle_cell)
+        self.assertIn("PUBLIC_RUN_REPORT_JSON", bundle_cell)
+        self.assertIn("REJECT_COUNTS_JSON", bundle_cell)
+        self.assertNotIn("INVENTORY_JSON, RUN_REPORT_JSON", bundle_cell)
+        self.assertNotIn("bundle_files.append(REJECTS_CSV)", bundle_cell)
+        for private_field in ("video_root", '"output"', '"rejects"'):
+            self.assertNotIn(private_field, bundle_cell)
+
 
 if __name__ == "__main__":
     unittest.main()

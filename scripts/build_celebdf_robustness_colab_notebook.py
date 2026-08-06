@@ -147,7 +147,7 @@ Colab에서 GPU runtime을 선택한다. 설치 후 runtime 재시작 안내가 
         """
 #@title 2. 라이브러리 설치
 %pip uninstall -y -q onnxruntime onnxruntime-gpu
-%pip install -q --no-cache-dir "insightface==1.0.1" "onnxruntime-gpu==1.23.2" opencv-python-headless pandas matplotlib seaborn tqdm
+%pip install -q --no-cache-dir "insightface==1.0.1" "onnxruntime-gpu==1.23.2" "Pillow==12.3.0" opencv-python-headless pandas matplotlib seaborn tqdm
 """
     ),
     repository_bootstrap_cell(),
@@ -386,6 +386,7 @@ import zipfile
 
 RUNTIME_CONFIG = SANITIZED_ROOT / "robustness_runtime_config.json"
 RUNTIME_CONFIG.write_text(json.dumps({
+    "environment": "colab",
     "code_version": CODE_VERSION,
     "source_zip_bytes": EXPECTED_SOURCE_ZIP_BYTES,
     "frames_per_video": FRAMES_PER_VIDEO,

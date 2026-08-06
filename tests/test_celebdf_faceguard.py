@@ -4,6 +4,7 @@ import sys
 import tempfile
 import unittest
 import zipfile
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -91,6 +92,7 @@ def synthetic_records(subject_count: int = 8, videos_per_subject: int = 8):
 class EmbeddingEvaluationTests(unittest.TestCase):
     def test_save_load_roundtrip(self):
         records = synthetic_records(subject_count=4)
+        records[0] = replace(records[0], transform_seconds=0.25)
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "records.npz"
             celebdf.save_video_embeddings(records, path)
@@ -98,7 +100,8 @@ class EmbeddingEvaluationTests(unittest.TestCase):
         self.assertEqual(len(loaded), len(records))
         self.assertEqual(loaded[0].video_id, records[0].video_id)
         self.assertTrue(np.allclose(loaded[0].embedding, records[0].embedding))
-        self.assertEqual(loaded[0].transform_seconds, 0.0)
+        self.assertAlmostEqual(loaded[0].transform_seconds, 0.25, places=5)
+        self.assertEqual(loaded[1].transform_seconds, 0.0)
 
     def test_reference_protocol_has_video_disjoint_query_counts(self):
         grouped = celebdf.group_eligible_records(synthetic_records())

@@ -251,6 +251,37 @@ def _git_commit() -> str | None:
         return None
 
 
+def _code_version() -> str:
+    return f"sha256:{_sha256(Path(__file__).resolve())}"
+
+
+def _resume_fingerprint(
+    args: argparse.Namespace,
+    *,
+    manifest_sha256: str,
+    runtime_inventory: dict[str, object],
+) -> str:
+    """Fingerprint every setting that can change checkpoint embeddings."""
+    contract = {
+        "input_condition": args.input_condition,
+        "frames_per_video": args.frames_per_video,
+        "minimum_valid_frames": args.minimum_valid_frames,
+        "manifest_sha256": manifest_sha256,
+        "video_root": str(args.video_root.expanduser().resolve()),
+        "model_name": args.model_name,
+        "model_hashes": runtime_inventory.get("model_hashes", {}),
+        "det_size": args.det_size,
+        "code_version": _code_version(),
+    }
+    payload = json.dumps(
+        contract,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 def _write_rejects(rows: Sequence[dict[str, object]], path: Path) -> None:
     if not rows:
         if path.exists():
@@ -338,30 +369,43 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, object]:
             videos_per_subject=args.smoke_videos_per_subject,
         )
 
+    face_app, runtime_inventory = initialize_face_app(
+        args.model_name,
+        args.model_root,
+        args.det_size,
+    )
+    manifest_sha256 = _sha256(args.manifest)
+    code_version = _code_version()
+    resume_fingerprint = _resume_fingerprint(
+        args,
+        manifest_sha256=manifest_sha256,
+        runtime_inventory=runtime_inventory,
+    )
+
     existing: list[VideoEmbedding] = []
     if args.output.exists():
-        if args.run_report.exists():
-            previous_report = json.loads(args.run_report.read_text(encoding="utf-8"))
-            previous_condition = previous_report.get("input_condition", "clean")
-            if previous_condition != args.input_condition:
-                raise ValueError(
-                    "existing embedding condition mismatch: "
-                    f"{previous_condition} != {args.input_condition}"
-                )
-        elif args.input_condition != "clean":
+        if not args.run_report.exists():
             raise ValueError(
-                "a non-clean existing embedding file requires a matching run report"
+                "an existing embedding file requires a matching run report"
+            )
+        previous_report = json.loads(args.run_report.read_text(encoding="utf-8"))
+        previous_condition = previous_report.get("input_condition")
+        if previous_condition != args.input_condition:
+            raise ValueError(
+                "existing embedding condition mismatch: "
+                f"{previous_condition} != {args.input_condition}"
+            )
+        previous_fingerprint = previous_report.get("resume_fingerprint")
+        if previous_fingerprint != resume_fingerprint:
+            raise ValueError(
+                "existing embedding resume contract mismatch: "
+                f"{previous_fingerprint} != {resume_fingerprint}"
             )
         existing = load_video_embeddings(args.output)
     completed = {record.video_id for record in existing}
     records = list(existing)
     rejects: list[dict[str, object]] = []
 
-    face_app, runtime_inventory = initialize_face_app(
-        args.model_name,
-        args.model_root,
-        args.det_size,
-    )
     started = datetime.now(timezone.utc)
     processed_since_checkpoint = 0
     attempted = 0
@@ -378,11 +422,13 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, object]:
             "frames_per_video": args.frames_per_video,
             "minimum_valid_frames": args.minimum_valid_frames,
             "input_condition": args.input_condition,
+            "code_version": code_version,
+            "resume_fingerprint": resume_fingerprint,
             "started_utc": started.isoformat(),
             "updated_utc": observed.isoformat(),
             "elapsed_seconds": (observed - started).total_seconds(),
             "manifest": str(args.manifest),
-            "manifest_sha256": _sha256(args.manifest),
+            "manifest_sha256": manifest_sha256,
             "video_root": str(args.video_root),
             "output": str(args.output),
             "rejects": str(args.rejects),

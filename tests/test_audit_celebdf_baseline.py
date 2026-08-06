@@ -70,6 +70,7 @@ class BaselineAuditTests(unittest.TestCase):
                             "status": "completed",
                             "frames_per_video": frames,
                             "minimum_valid_frames": min(3, frames),
+                            "input_condition": "clean",
                             "selected_video_count": 64,
                             "successful_video_count_total": 64,
                             "rejected_this_run": 1,
@@ -145,6 +146,7 @@ class BaselineAuditTests(unittest.TestCase):
                 json.dumps(
                     {
                         "frames_per_video": 5,
+                        "input_condition": "clean",
                         "selected_video_count": 64,
                         "video_root": "/content/drive/MyDrive/private-data",
                         "output": "/content/private-embeddings.npz",
@@ -158,6 +160,13 @@ class BaselineAuditTests(unittest.TestCase):
             self.assertNotIn("video_root", sanitized)
             self.assertNotIn("output", sanitized)
             self.assertEqual(sanitized["selected_video_count"], 64)
+
+            report_path.write_text(
+                json.dumps({"frames_per_video": 5, "input_condition": "jpeg_q30"}),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "input_condition=clean"):
+                audit.sanitized_run_report(report_path, 5)
 
     def test_bootstrap_repeats_must_be_positive(self):
         self.assertEqual(audit.positive_int("1"), 1)

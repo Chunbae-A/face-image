@@ -104,6 +104,8 @@ def sanitized_run_report(path: Path, expected_frames: int) -> dict[str, object]:
         raise ValueError(
             f"run report frame mismatch: expected {expected_frames}, got {report['frames_per_video']}"
         )
+    if report.get("input_condition") != "clean":
+        raise ValueError("baseline audit requires input_condition=clean")
     allowed = (
         "status",
         "selected_video_count",
@@ -113,6 +115,8 @@ def sanitized_run_report(path: Path, expected_frames: int) -> dict[str, object]:
         "frames_per_video",
         "minimum_valid_frames",
         "input_condition",
+        "code_version",
+        "resume_fingerprint",
         "elapsed_seconds",
         "manifest_sha256",
         "git_commit",
