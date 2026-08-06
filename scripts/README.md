@@ -42,9 +42,10 @@ GPU 추론은 `notebooks/celebdf_arcface_full_colab.ipynb` 또는 `scripts/run_c
 ```bash
 python3 scripts/build_celebdf_colab_notebook.py
 python3 scripts/build_celebdf_audit_colab_notebook.py
+python3 scripts/build_celebdf_robustness_colab_notebook.py
 ```
 
-노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`, `scripts/run_celebdf_arcface.py`, `scripts/audit_celebdf_baseline.py`의 변경이 정확히 포함됐는지 검증한다.
+노트북은 실행 스크립트를 내장하므로 생성 후 `scripts/celebdf_faceguard.py`, `scripts/run_celebdf_arcface.py`, `scripts/audit_celebdf_baseline.py`, `scripts/audit_celebdf_robustness.py`의 변경이 정확히 포함됐는지 테스트로 검증한다.
 
 ## Baseline 감사
 
@@ -59,4 +60,27 @@ python3 scripts/audit_celebdf_baseline.py \
   --run-report 5=/trusted/frames_5/run.json \
   --run-report 10=/trusted/frames_10/run.json \
   --output-dir outputs/celebdf_baseline_audit/sanitized
+```
+
+## 촬영 열화 강건성 평가
+
+`run_celebdf_arcface.py --input-condition`은 깨끗한 영상, JPEG 압축, 흐림, 어두움, 저해상도, 복합 열화 중 하나를 얼굴 검출 전에 적용한다. 변환은 매번 같은 결과가 나오는 결정론적 처리이며 프레임이나 얼굴 crop을 저장하지 않는다.
+
+`audit_celebdf_robustness.py`는 깨끗한 조건의 등록 임베딩과 모든 조건에서 공통으로 성공한 query만 사용한다. 아래처럼 여섯 조건의 NPZ와 실행 보고서를 전달한다. NPZ·reject ID는 신뢰된 runtime에만 두고 출력 디렉터리에는 집계값만 생성한다.
+
+```bash
+python3 scripts/audit_celebdf_robustness.py \
+  --embedding-run clean=/trusted/clean/video_embeddings.npz \
+  --embedding-run jpeg_q30=/trusted/jpeg_q30/video_embeddings.npz \
+  --embedding-run gaussian_blur_sigma2=/trusted/gaussian_blur_sigma2/video_embeddings.npz \
+  --embedding-run low_light_gamma2=/trusted/low_light_gamma2/video_embeddings.npz \
+  --embedding-run downscale_0_25=/trusted/downscale_0_25/video_embeddings.npz \
+  --embedding-run combined_mobile_stress=/trusted/combined_mobile_stress/video_embeddings.npz \
+  --run-report clean=/trusted/clean/run.json \
+  --run-report jpeg_q30=/trusted/jpeg_q30/run.json \
+  --run-report gaussian_blur_sigma2=/trusted/gaussian_blur_sigma2/run.json \
+  --run-report low_light_gamma2=/trusted/low_light_gamma2/run.json \
+  --run-report downscale_0_25=/trusted/downscale_0_25/run.json \
+  --run-report combined_mobile_stress=/trusted/combined_mobile_stress/run.json \
+  --output-dir outputs/celebdf_robustness/sanitized
 ```

@@ -481,8 +481,8 @@ if IN_HOSTED_COLAB and not PERSIST_DERIVED_RESULTS_TO_DRIVE:
 ]
 
 
-def main() -> int:
-    notebook = {
+def build_notebook() -> dict[str, object]:
+    return {
         "cells": CELLS,
         "metadata": {
             "accelerator": "GPU",
@@ -500,6 +500,10 @@ def main() -> int:
         "nbformat": 4,
         "nbformat_minor": 5,
     }
+
+
+def main() -> int:
+    notebook = build_notebook()
     OUTPUT.parent.mkdir(parents=True, exist_ok=True)
     OUTPUT.write_text(
         json.dumps(notebook, ensure_ascii=False, indent=1) + "\n",
