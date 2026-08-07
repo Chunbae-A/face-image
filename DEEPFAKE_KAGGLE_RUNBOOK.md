@@ -35,7 +35,7 @@ Validation에서 8/16/32프레임·통합 방식·기준값 선택
 
 ## 0. 반드시 지킬 것
 
-- Dataset과 두 Notebook을 모두 `Private`로 유지한다.
+- Dataset과 세 Notebook을 모두 `Private`로 유지한다.
 - 원본 영상, 정렬 얼굴 crop, 영상별 점수, checkpoint와 ONNX를 공개하지 않는다.
 - 비식별 집계 결과 ZIP만 GitHub Issue와 PR에 올린다.
 - Celeb-DF의 Kaggle 비공개 처리 허용 여부와 InsightFace 제공 검출 가중치의 비상업 연구 조건을 직접 확인한다.

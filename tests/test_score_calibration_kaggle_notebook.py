@@ -29,9 +29,10 @@ class ScoreCalibrationKaggleNotebookTests(unittest.TestCase):
         cls.notebook = json.loads(NOTEBOOK.read_text(encoding="utf-8"))
 
     def test_committed_notebook_matches_builder(self):
-        self.assertEqual(cls_notebook := self.notebook, self.builder.build_notebook())
-        self.assertTrue(cls_notebook["metadata"]["kaggle"]["is_private"])
-        self.assertEqual(cls_notebook["metadata"]["kaggle"]["accelerator"], "gpu")
+        notebook = self.notebook
+        self.assertEqual(notebook, self.builder.build_notebook())
+        self.assertTrue(notebook["metadata"]["kaggle"]["is_private"])
+        self.assertEqual(notebook["metadata"]["kaggle"]["accelerator"], "gpu")
 
     def test_code_cells_parse_and_have_no_execution_artifacts(self):
         for cell in self.notebook["cells"]:

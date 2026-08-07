@@ -27,7 +27,7 @@
 
 ## 결과 판단
 
-2026-08-08 실제 실행 결과는 [`reports/deepfake_score_calibration/2026-08-08`](reports/deepfake_score_calibration/2026-08-08)에 있다. Isotonic이 선택됐고 ECE Gate는 통과했지만 공식 Test 실제영상 FPR이 `0.016854`로 목표 `0.01`을 넘어 `display_approved=false`가 됐다.
+2026-08-08 KST 실제 실행 결과는 [`reports/deepfake_score_calibration/2026-08-08`](reports/deepfake_score_calibration/2026-08-08)에 있다. Isotonic이 선택됐고 ECE Gate는 통과했지만 공식 Test 실제영상 FPR이 `0.016854`로 목표 `0.01`을 넘어 `display_approved=false`가 됐다.
 
 `deepfake_video_calibration.json`의 다음 값을 확인한다.
 
@@ -68,5 +68,7 @@ curl http://127.0.0.1:8000/health
 | `risk_level=low` | 낮은 위험 후보, 자동 삭제 금지 |
 | `risk_level=review` | 사람이 원본·출처 확인 |
 | `risk_level=high` | 우선 검토 후보, 피해 확정 표현 금지 |
+
+현재 2026-08-08 KST 결과는 low와 high 목표 경계가 같아 `review_band_empty=true`다. 따라서 이 파일을 적용한 API는 `low` 또는 `high`만 반환하며, 별도 `review` 구간이 있다고 설명하면 안 된다.
 
 얼굴 유사도는 별도 문제다. ArcFace의 개별 동일인·타인 검증 점수가 준비되기 전까지 얼굴 유사도 역시 확률로 표시하지 않는다.

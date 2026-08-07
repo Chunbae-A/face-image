@@ -311,10 +311,11 @@ def build_calibration_report(
     high_threshold = threshold_at_fpr(
         labels_validation, scores_validation, target_fpr
     )
-    low_threshold = threshold_at_fnr(
+    requested_low_threshold = threshold_at_fnr(
         labels_validation, scores_validation, target_fnr
     )
-    low_threshold = min(low_threshold, high_threshold)
+    review_band_empty = requested_low_threshold >= high_threshold
+    low_threshold = min(requested_low_threshold, high_threshold)
     test_decision = classification_metrics(
         labels_test,
         scores_test,
@@ -352,7 +353,13 @@ def build_calibration_report(
             "low_rule": f"validation fake FNR <= {target_fnr:g}를 만족하는 최대 기준값 미만",
             "high_min_raw_score": float(high_threshold),
             "high_rule": f"validation real FPR <= {target_fpr:g} 목표 기준값 이상",
-            "review_rule": "low와 high 사이, 사람 확인 필요",
+            "requested_low_max_raw_score": float(requested_low_threshold),
+            "review_band_empty": review_band_empty,
+            "review_rule": (
+                "두 목표 경계가 만나거나 교차해 별도 review 구간이 없음"
+                if review_band_empty
+                else "low와 high 사이, 사람 확인 필요"
+            ),
         },
         "metrics": {
             "validation_count": len(labels_validation),
@@ -381,6 +388,67 @@ def build_calibration_report(
             "contains_frame_scores": False,
             "contains_faces_or_embeddings": False,
         },
+    }
+
+
+def _compact_calibration_metrics(metrics: dict[str, object]) -> dict[str, float]:
+    """Remove per-bin details from a public API calibration artifact."""
+
+    return {
+        key: float(metrics[key])
+        for key in ("nll", "brier", "ece")
+    }
+
+
+def build_public_calibration_artifact(
+    report: dict[str, object],
+) -> dict[str, object]:
+    """Create the stable, privacy-safe JSON consumed by the HTTP API.
+
+    The full in-memory report retains reliability bins and all three method
+    comparisons for plotting. The committed/public artifact intentionally keeps
+    only aggregate metrics and deployment parameters, never sample-level scores.
+    """
+
+    metrics = report["metrics"]
+    before = metrics["before"]
+    selected = metrics["selected"]
+    return {
+        key: report[key]
+        for key in (
+            "schema_version",
+            "calibration_version",
+            "scope",
+            "model_fingerprint",
+            "selection_split",
+            "evaluation_split",
+            "official_test_used_for_selection",
+            "raw_score_definition",
+            "selected_method",
+            "parameters",
+            "calibration_status",
+            "display_approved",
+            "warning",
+            "risk_bands",
+        )
+    } | {
+        "artifact_profile": "public_api_summary_v1",
+        "methods_compared": sorted(metrics["method_comparison"]),
+        "metrics": {
+            "validation_count": metrics["validation_count"],
+            "official_test_count": metrics["official_test_count"],
+            "before": {
+                split: _compact_calibration_metrics(before[split])
+                for split in ("validation", "official_test")
+            },
+            "selected": {
+                split: _compact_calibration_metrics(selected[split])
+                for split in ("validation", "official_test")
+            },
+            "official_test_decision": metrics["official_test_decision"],
+        },
+        "gate": report["gate"],
+        "privacy": report["privacy"],
     }
 
 
@@ -465,13 +533,14 @@ def main(argv: Sequence[str] | None = None) -> int:
         target_fpr=args.target_fpr,
         target_fnr=args.target_fnr,
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(
-        json.dumps(report, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
     if args.figure:
         plot_reliability(report, args.figure)
+    public_artifact = build_public_calibration_artifact(report)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(public_artifact, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     print(
         json.dumps(
             {

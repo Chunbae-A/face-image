@@ -58,10 +58,12 @@ ECE와 Brier는 개선됐지만 공식 Test NLL은 오히려 나빠졌다. 선�
 - `raw_score`: 모델이 낸 원점수로 제공하지만 확률이라고 부르지 않는다.
 - `calibrated_probability`: 이번 Gate가 실패했으므로 항상 `null`이다.
 - `calibration_status`: `research_only_unapproved`다.
-- `risk_level`: Validation에서 정한 연구용 검토 구간일 뿐 피해 확정값이 아니다.
+- `risk_level`: Validation에서 정한 연구용 검토 구간일 뿐 피해 확정값이 아니다. 이번 결과는 두 목표 경계가 같아 `review_band_empty=true`이며 별도 `review` 구간 없이 `low` 또는 `high`만 반환한다.
 - 자동 신고·삭제는 하지 않고 사람이 원본, 출처, 영상 구간을 확인한다.
 
 API에 설치할 때는 같은 디렉터리의 [`deepfake_video_calibration.json`](deepfake_video_calibration.json)을 `.models/deepfake/deepfake_video_calibration.json`으로 복사한다. 이 파일은 `display_approved=false`이므로 설치해도 확률 숫자는 열리지 않는다.
+
+JSON은 `scripts/calibrate_deepfake_scores.py`의 `public_api_summary_v1` 출력이다. 전체 reliability bin은 그래프 생성 중 메모리에만 사용하고, 공개 파일에는 API 파라미터·비식별 집계 지표·비교한 방법 이름만 남긴다.
 
 ## 개인정보와 재현성
 

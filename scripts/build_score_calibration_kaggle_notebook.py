@@ -40,7 +40,9 @@ def repository_bootstrap_cell() -> dict[str, object]:
         str(path.relative_to(ROOT)): base64.b64encode(path.read_bytes()).decode("ascii")
         for path in paths
     }
-    fingerprint = hashlib.sha256(b"".join(path.read_bytes() for path in paths)).hexdigest()
+    fingerprint = hashlib.sha256(
+        b"".join(path.read_bytes() for path in paths)
+    ).hexdigest()
     source = r'''# 3. 실행 코드 준비 — 현재 저장소 코드를 노트북 안에 포함
 import base64
 import os
@@ -262,12 +264,12 @@ import json
 README = OUTPUT_ROOT / "README_score_calibration.md"
 README.write_text(f'''# 딥소각 딥페이크 점수 보정 결과
 
-- 보정 방법: {calibration['selected_method']}
-- Validation ECE: {calibration['metrics']['selected']['validation']['ece']}
-- 공식 Test ECE: {calibration['metrics']['selected']['official_test']['ece']}
-- 공식 Test 실제영상 FPR: {calibration['metrics']['official_test_decision']['fpr']}
-- 화면 확률 표시 승인: {calibration['display_approved']}
-- 상태: {calibration['calibration_status']}
+- 보정 방법: {calibration["selected_method"]}
+- Validation ECE: {calibration["metrics"]["selected"]["validation"]["ece"]}
+- 공식 Test ECE: {calibration["metrics"]["selected"]["official_test"]["ece"]}
+- 공식 Test 실제영상 FPR: {calibration["metrics"]["official_test_decision"]["fpr"]}
+- 화면 확률 표시 승인: {calibration["display_approved"]}
+- 상태: {calibration["calibration_status"]}
 
 보정은 Validation에서만 선택했고 공식 Test는 최종 평가에만 사용했다.
 Gate 미통과 시 API의 `calibrated_probability`는 `null`이어야 한다.

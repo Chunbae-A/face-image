@@ -31,6 +31,26 @@ def load_module():
     return module
 
 
+def valid_artifact_payload() -> dict[str, object]:
+    return {
+        "schema_version": "1.0",
+        "calibration_version": "test-v1",
+        "scope": "deepfake_video_mean_16_frames",
+        "model_fingerprint": "a" * 64,
+        "selected_method": "platt",
+        "parameters": {"slope": 0.5, "intercept": 0.0},
+        "calibration_status": "validated",
+        "display_approved": True,
+        "warning": "검증 완료",
+        "risk_bands": {
+            "low_max_raw_score": 0.2,
+            "high_min_raw_score": 0.8,
+            "review_band_empty": False,
+        },
+        "gate": {"overall_pass": True},
+    }
+
+
 class ScoreCalibrationTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -65,26 +85,27 @@ class ScoreCalibrationTests(unittest.TestCase):
             report["risk_bands"]["low_max_raw_score"],
             report["risk_bands"]["high_min_raw_score"],
         )
+        self.assertIsInstance(report["risk_bands"]["review_band_empty"], bool)
+        public = self.calibration.build_public_calibration_artifact(report)
+        self.assertEqual(public["artifact_profile"], "public_api_summary_v1")
+        self.assertEqual(
+            public["methods_compared"], ["isotonic", "platt", "temperature"]
+        )
+        self.assertNotIn("bins", public["metrics"]["before"]["validation"])
         serialized = json.dumps(report)
         self.assertNotIn("Celeb-real/", serialized)
         self.assertNotIn("Celeb-synthesis/", serialized)
 
     def test_unapproved_artifact_withholds_probability_but_keeps_risk_band(self):
-        payload = {
-            "schema_version": "1.0",
-            "calibration_version": "test-v1",
-            "scope": "deepfake_video_mean_16_frames",
-            "model_fingerprint": "a" * 64,
-            "selected_method": "temperature",
-            "parameters": {"temperature": 2.0},
-            "calibration_status": "research_only_unapproved",
-            "display_approved": False,
-            "warning": "연구용",
-            "risk_bands": {
-                "low_max_raw_score": 0.2,
-                "high_min_raw_score": 0.8,
-            },
-        }
+        payload = valid_artifact_payload()
+        payload.update(
+            selected_method="temperature",
+            parameters={"temperature": 2.0},
+            calibration_status="research_only_unapproved",
+            display_approved=False,
+            warning="연구용",
+            gate={"overall_pass": False},
+        )
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "calibration.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
@@ -101,21 +122,7 @@ class ScoreCalibrationTests(unittest.TestCase):
         self.assertEqual(result.calibration_version, "test-v1")
 
     def test_approved_artifact_returns_calibrated_probability(self):
-        payload = {
-            "schema_version": "1.0",
-            "calibration_version": "test-v1",
-            "scope": "deepfake_video_mean_16_frames",
-            "model_fingerprint": "a" * 64,
-            "selected_method": "platt",
-            "parameters": {"slope": 0.5, "intercept": 0.0},
-            "calibration_status": "validated",
-            "display_approved": True,
-            "warning": "검증 완료",
-            "risk_bands": {
-                "low_max_raw_score": 0.2,
-                "high_min_raw_score": 0.8,
-            },
-        }
+        payload = valid_artifact_payload()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "calibration.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
@@ -131,21 +138,7 @@ class ScoreCalibrationTests(unittest.TestCase):
         self.assertGreater(result.calibrated_probability, 0.5)
 
     def test_artifact_model_mismatch_is_rejected(self):
-        payload = {
-            "schema_version": "1.0",
-            "calibration_version": "test-v1",
-            "scope": "deepfake_video_mean_16_frames",
-            "model_fingerprint": "a" * 64,
-            "selected_method": "temperature",
-            "parameters": {"temperature": 1.0},
-            "calibration_status": "validated",
-            "display_approved": True,
-            "warning": "검증 완료",
-            "risk_bands": {
-                "low_max_raw_score": 0.2,
-                "high_min_raw_score": 0.8,
-            },
-        }
+        payload = valid_artifact_payload()
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "calibration.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
@@ -155,6 +148,66 @@ class ScoreCalibrationTests(unittest.TestCase):
                     expected_model_fingerprint="b" * 64,
                     expected_scope="deepfake_video_mean_16_frames",
                 )
+
+    def test_artifact_rejection_paths_and_missing_file_fallback(self):
+        mutations = (
+            ("scope", "wrong_scope", "scope"),
+            ("schema_version", "2.0", "schema_version"),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for field, value, message in mutations:
+                payload = valid_artifact_payload()
+                payload[field] = value
+                path = root / f"{field}.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.subTest(field=field), self.assertRaisesRegex(
+                    ValueError, message
+                ):
+                    ScoreCalibration.load(
+                        path,
+                        expected_model_fingerprint="a" * 64,
+                        expected_scope="deepfake_video_mean_16_frames",
+                    )
+
+            payload = valid_artifact_payload()
+            payload["risk_bands"]["low_max_raw_score"] = 0.9
+            inverted = root / "inverted.json"
+            inverted.write_text(json.dumps(payload), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "risk-band"):
+                ScoreCalibration.load(
+                    inverted,
+                    expected_model_fingerprint="a" * 64,
+                    expected_scope="deepfake_video_mean_16_frames",
+                )
+
+            self.assertIsNone(
+                ScoreCalibration.load(
+                    root / "missing.json",
+                    expected_model_fingerprint="a" * 64,
+                    expected_scope="deepfake_video_mean_16_frames",
+                )
+            )
+
+    def test_artifact_rejects_non_boolean_or_inconsistent_gate_approval(self):
+        invalid_values = (
+            ("string display flag", "false", True),
+            ("failed Gate with approval", True, False),
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for name, display_approved, overall_pass in invalid_values:
+                payload = valid_artifact_payload()
+                payload["display_approved"] = display_approved
+                payload["gate"] = {"overall_pass": overall_pass}
+                path = root / f"{name}.json"
+                path.write_text(json.dumps(payload), encoding="utf-8")
+                with self.subTest(name=name), self.assertRaises(ValueError):
+                    ScoreCalibration.load(
+                        path,
+                        expected_model_fingerprint="a" * 64,
+                        expected_scope="deepfake_video_mean_16_frames",
+                    )
 
     def test_missing_artifact_has_explicit_unavailable_status(self):
         result = unavailable_calibration_result()

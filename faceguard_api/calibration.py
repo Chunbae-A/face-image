@@ -35,6 +35,7 @@ class ScoreCalibration:
     model_fingerprint: str
     low_threshold: float
     high_threshold: float
+    review_band_empty: bool
     status: str
     display_approved: bool
     warning: str
@@ -67,6 +68,19 @@ class ScoreCalibration:
             high_threshold = float(risk_bands["high_min_raw_score"])
             if not 0.0 <= low_threshold <= high_threshold <= 1.0:
                 raise ValueError("invalid risk-band thresholds")
+            review_band_empty = risk_bands["review_band_empty"]
+            display_approved = payload["display_approved"]
+            gate_overall_pass = payload["gate"]["overall_pass"]
+            if type(review_band_empty) is not bool:
+                raise ValueError("review_band_empty must be a boolean")
+            if type(display_approved) is not bool:
+                raise ValueError("display_approved must be a boolean")
+            if type(gate_overall_pass) is not bool:
+                raise ValueError("gate.overall_pass must be a boolean")
+            if display_approved != gate_overall_pass:
+                raise ValueError("display approval and overall Gate must match")
+            if review_band_empty != (low_threshold == high_threshold):
+                raise ValueError("review-band metadata does not match its thresholds")
             calibration = cls(
                 version=str(payload["calibration_version"]),
                 scope=str(payload["scope"]),
@@ -75,8 +89,9 @@ class ScoreCalibration:
                 model_fingerprint=str(payload["model_fingerprint"]),
                 low_threshold=low_threshold,
                 high_threshold=high_threshold,
+                review_band_empty=review_band_empty,
                 status=str(payload["calibration_status"]),
-                display_approved=bool(payload["display_approved"]),
+                display_approved=display_approved,
                 warning=str(payload["warning"]),
             )
             # 로딩 시 대표값도 계산해 파라미터 구조와 유한값을 검증한다.

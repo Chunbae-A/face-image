@@ -274,6 +274,7 @@ class FaceguardHttpTests(unittest.TestCase):
             model_fingerprint="b" * 64,
             low_threshold=0.2,
             high_threshold=0.8,
+            review_band_empty=False,
             status="validated",
             display_approved=True,
             warning="내부 검증 Gate 통과",

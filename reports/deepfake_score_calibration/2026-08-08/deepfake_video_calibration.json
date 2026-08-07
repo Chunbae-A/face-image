@@ -27,13 +27,19 @@
     "low_rule": "validation fake FNR <= 0.05를 만족하는 최대 기준값 미만",
     "high_min_raw_score": 0.7519882693886758,
     "high_rule": "validation real FPR <= 0.01 목표 기준값 이상",
-    "review_rule": "low와 high 사이, 사람 확인 필요"
+    "requested_low_max_raw_score": 0.7519882693886758,
+    "review_band_empty": true,
+    "review_rule": "두 목표 경계가 만나거나 교차해 별도 review 구간이 없음"
   },
+  "artifact_profile": "public_api_summary_v1",
+  "methods_compared": [
+    "isotonic",
+    "platt",
+    "temperature"
+  ],
   "metrics": {
     "validation_count": 836,
     "official_test_count": 518,
-    "official_test_real_count": 178,
-    "official_test_fake_count": 340,
     "before": {
       "validation": {
         "nll": 0.02395860723531214,
@@ -59,6 +65,9 @@
       }
     },
     "official_test_decision": {
+      "count": 518,
+      "real_count": 178,
+      "fake_count": 340,
       "threshold": 0.7519882693886758,
       "roc_auc": 0.9998017184401851,
       "average_precision": 0.9998947902983202,
@@ -87,12 +96,5 @@
     "contains_video_ids": false,
     "contains_frame_scores": false,
     "contains_faces_or_embeddings": false
-  },
-  "provenance": {
-    "kaggle_notebook": "https://www.kaggle.com/code/hywznn/deepsogak-score-calibration",
-    "kaggle_version": 1,
-    "accelerator": "GPU T4 x2",
-    "runtime_seconds": 293.8,
-    "public_copy": "API 적용에 필요한 파라미터와 집계 지표만 보존한 GitHub 공개용 비식별 사본"
   }
 }
