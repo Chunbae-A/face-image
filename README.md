@@ -194,9 +194,9 @@ python scripts/check_repository_hygiene.py
 
 ## 다음 작업 순서
 
-1. FPR 1.69%와 축소·흐림 오경고를 낮추기 위한 기준값·품질 Gate 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
-2. 공개 후보 검색 어댑터 구현 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
-3. ArcFace 후보 선별 API 연결 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
+1. 공개 후보 검색 어댑터에 선택형 외부 검색 제공자 연결 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
+2. ArcFace 후보 선별 API 연결 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
+3. 얼굴·딥페이크 기준값과 품질 Gate 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
 4. 연구용 딥페이크 ONNX 추론을 통합 API에 연결 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
 5. 검색·선별·판별 전체 데모 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
 
