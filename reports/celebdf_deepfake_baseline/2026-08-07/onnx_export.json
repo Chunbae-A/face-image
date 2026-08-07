@@ -1,0 +1,15 @@
+{
+  "status": "completed",
+  "architecture": "EfficientNet-B4",
+  "input_shape": [
+    "batch",
+    3,
+    380,
+    380
+  ],
+  "output": "fake_logit; sigmoid(logit) is the fake probability-like score",
+  "opset": 17,
+  "onnx_sha256": "c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1",
+  "checkpoint_sha256": "adf8605655d56b02ec56cf75cc2d92d6da4eb93e7c27c1ed4dda5d1792d03dae",
+  "tracked_in_git": false
+}

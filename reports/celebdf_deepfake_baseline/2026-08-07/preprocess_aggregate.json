@@ -1,0 +1,60 @@
+{
+  "status": "completed",
+  "started_utc": "2026-08-06T17:38:45.872898+00:00",
+  "updated_utc": "2026-08-06T19:05:09.426443+00:00",
+  "elapsed_seconds": 5183.553545,
+  "selected_video_count": 6529,
+  "attempted_this_run": 6529,
+  "successful_video_count_total": 6528,
+  "crop_count_total": 208893,
+  "successful_videos_by_split": {
+    "train": 5174,
+    "validation": 836,
+    "test": 518
+  },
+  "reject_count_this_run": 1,
+  "reject_reasons_this_run": {
+    "insufficient_valid_faces": 1
+  },
+  "preprocess_video_seconds_p50": 0.7499875139999403,
+  "preprocess_video_seconds_p95": 0.8271635592001075,
+  "resume_fingerprint": "c99e56bef3c2bd4a016128b7ea01d320c8181df101df4134adc5b1ab0b1cafa3",
+  "contract": {
+    "manifest_sha256": "463bdd35e98fa59e07c7f6d6a8169306c4b4bad7affda96132357ba1b2ec7914",
+    "frames_per_video": 32,
+    "minimum_valid_frames": 4,
+    "aligned_crop_size": 224,
+    "detector_model": "buffalo_l",
+    "det_size": 640,
+    "detector_model_hashes": {
+      "1k3d68.onnx": "df5c06b8a0c12e422b2ed8947b8869faa4105387f199c477af038aa01f9a45cc",
+      "2d106det.onnx": "f001b856447c413801ef5c42091ed0cd516fcd21f2d6b79635b1e733a7109dbf",
+      "det_10g.onnx": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
+      "genderage.onnx": "4fde69b1c810857b88c64a335084f1c3fe8f01246c9a191b48c7bb756d6652fb",
+      "w600k_r50.onnx": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43"
+    },
+    "mode": "full"
+  },
+  "detector": "InsightFace/buffalo_l/detection",
+  "insightface_version": "1.0.1",
+  "onnxruntime_version": "1.23.2",
+  "available_providers": [
+    "TensorrtExecutionProvider",
+    "CUDAExecutionProvider",
+    "CPUExecutionProvider"
+  ],
+  "selected_providers": [
+    "CUDAExecutionProvider",
+    "CPUExecutionProvider"
+  ],
+  "device": "cuda",
+  "detector_model_hashes": {
+    "1k3d68.onnx": "df5c06b8a0c12e422b2ed8947b8869faa4105387f199c477af038aa01f9a45cc",
+    "2d106det.onnx": "f001b856447c413801ef5c42091ed0cd516fcd21f2d6b79635b1e733a7109dbf",
+    "det_10g.onnx": "5838f7fe053675b1c7a08b633df49e7af5495cee0493c7dcf6697200b85b5b91",
+    "genderage.onnx": "4fde69b1c810857b88c64a335084f1c3fe8f01246c9a191b48c7bb756d6652fb",
+    "w600k_r50.onnx": "4c06341c33c2ca1f86781dab0e829f88ad5b64be9fba56e56bc9ebdefc619e43"
+  },
+  "detector_license_scope": "InsightFace-provided weights: non-commercial research only",
+  "ended_utc": "2026-08-06T19:05:09.426443+00:00"
+}
