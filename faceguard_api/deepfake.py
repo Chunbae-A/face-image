@@ -7,7 +7,7 @@ import math
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
 import numpy as np
@@ -239,17 +239,9 @@ class DeepfakeOnnxAnalyzer:
             aligned_face_size=self.settings.deepfake_aligned_face_size,
         )
         result = self.analyze_aligned(aligned)
-        return DeepfakeAnalysis(
-            is_suspected_deepfake=result.is_suspected_deepfake,
-            deepfake_score=result.deepfake_score,
-            raw_logit=result.raw_logit,
-            threshold=result.threshold,
-            quality=result.quality,
+        return replace(
+            result,
             processing_ms=(time.perf_counter() - started) * 1000.0,
-            inference_ms=result.inference_ms,
-            model_name=result.model_name,
-            execution_provider=result.execution_provider,
-            model_fingerprint=result.model_fingerprint,
         )
 
     def analyze_aligned(self, aligned: AlignedEncodedFace) -> DeepfakeAnalysis:

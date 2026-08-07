@@ -48,6 +48,7 @@ class Settings:
     maximum_image_pixels: int = 20_000_000
     maximum_video_bytes: int = 50 * 1024 * 1024
     maximum_video_seconds: float = 120.0
+    maximum_video_request_bytes: int = 91 * 1024 * 1024
     minimum_detection_score: float = 0.60
     minimum_face_area_ratio: float = 0.01
     maximum_search_candidates: int = 100
@@ -99,6 +100,14 @@ class Settings:
             raise ValueError("이미지 크기 제한은 양수여야 합니다.")
         if self.maximum_video_bytes <= 0 or self.maximum_video_seconds <= 0:
             raise ValueError("영상 크기와 길이 제한은 양수여야 합니다.")
+        minimum_video_request_bytes = (
+            self.maximum_video_bytes
+            + self.maximum_reference_images * self.maximum_image_bytes
+        )
+        if self.maximum_video_request_bytes < minimum_video_request_bytes:
+            raise ValueError(
+                "영상 요청 본문 제한은 영상과 최대 등록 사진 크기의 합 이상이어야 합니다."
+            )
         if not 0.0 <= self.minimum_detection_score <= 1.0:
             raise ValueError("minimum_detection_score는 0과 1 사이여야 합니다.")
         if not 0.0 < self.minimum_face_area_ratio <= 1.0:
@@ -187,6 +196,11 @@ class Settings:
             ),
             maximum_video_seconds=float(
                 os.environ.get("FACEGUARD_MAX_VIDEO_SECONDS", "120")
+            ),
+            maximum_video_request_bytes=int(
+                os.environ.get(
+                    "FACEGUARD_MAX_VIDEO_REQUEST_BYTES", str(91 * 1024 * 1024)
+                )
             ),
             minimum_detection_score=float(
                 os.environ.get("FACEGUARD_MIN_DETECTION_SCORE", "0.60")

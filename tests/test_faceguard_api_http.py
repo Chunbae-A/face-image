@@ -263,6 +263,54 @@ class FaceguardHttpTests(unittest.TestCase):
         )
         self.assertEqual(self.video_analyzer.calls, [])
 
+    def test_deepfake_video_config_version_uses_configured_frame_count(self):
+        settings = Settings(
+            accept_noncommercial_model_license=True,
+            similarity_threshold=0.5,
+            deepfake_video_frame_count=4,
+            deepfake_video_minimum_valid_frames=2,
+        )
+        client = TestClient(
+            create_app(
+                settings,
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+                video_deepfake_analyzer=FakeVideoDeepfakeAnalyzer(),
+            )
+        )
+        response = client.post(
+            "/v1/deepfake/analyze-video",
+            files=[image_file("video", "clip.mp4", b"video", "video/mp4")],
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json()["config_version"],
+            "deepfake-video-4-frame-mean-v1",
+        )
+
+    def test_deepfake_video_total_request_limit_runs_before_multipart_parser(self):
+        settings = Settings(
+            accept_noncommercial_model_license=True,
+            maximum_image_bytes=1,
+            maximum_video_bytes=8,
+            maximum_video_request_bytes=20,
+        )
+        client = TestClient(
+            create_app(
+                settings,
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+                video_deepfake_analyzer=FakeVideoDeepfakeAnalyzer(),
+            )
+        )
+        response = client.post(
+            "/v1/deepfake/analyze-video",
+            content=b"x" * 21,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.json()["error"]["code"], "REQUEST_BODY_TOO_LARGE")
+
     def test_health_reports_configured_searxng_provider(self):
         settings = Settings(
             accept_noncommercial_model_license=True,

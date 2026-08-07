@@ -68,6 +68,17 @@ SearXNG는 Docker 내부망에서만 열리고 호스트 포트를 공개하지 
 
 기본 Docker 이미지는 CPU용이다. Linux CUDA 서버에서는 `requirements-api-gpu.txt`의 `onnxruntime-gpu`를 사용하고 NVIDIA Container Runtime을 별도로 설정한다.
 
+영상 엔드포인트는 ASGI middleware에서 전체 요청을 기본 `91MiB`로 제한한다. 이는 영상 50MB, 등록 사진 5장×8MB와 multipart 여유 1MiB를 합친 값이며 `FACEGUARD_MAX_VIDEO_REQUEST_BYTES`로 조정한다. 인터넷에 배치할 때는 애플리케이션에 도달하기 전에 프록시에서도 같은 제한을 둔다. Nginx 예시는 다음과 같다.
+
+```nginx
+location /v1/deepfake/analyze-video {
+    client_max_body_size 91m;
+    proxy_pass http://faceguard-api:8000;
+}
+```
+
+`Content-Length`가 있으면 multipart 파싱 전에 거절하고, chunked 요청도 수신 누적량이 제한을 넘는 즉시 중단한다. 파일별 50MB 영상·8MB 등록 사진 검사는 보조 방어로 그대로 적용한다.
+
 ## 1. 서버 상태 확인
 
 ```bash
@@ -162,7 +173,7 @@ curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze \
 
 ```json
 {
-  "status": "completed",
+  "status": "partial_failed",
   "is_suspected_deepfake": true,
   "deepfake_score": 0.83,
   "raw_logit": 1.59,
@@ -404,7 +415,7 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 
 이 값은 파이프라인이 끝까지 동작하는지 확인한 **1건의 스모크 테스트**다. 정확도, 오인식률, 한국인 일반화 또는 운영 안전성을 증명하는 결과가 아니다.
 
-영상 연결 시험은 사용 동의를 받은 실제 얼굴 이미지로 런타임에서만 4초 MP4를 만들었고 종료 즉시 삭제했다. 비식별 결과와 한계는 [`reports/video_deepfake_api_smoke/2026-08-08`](reports/video_deepfake_api_smoke/2026-08-08)에 기록했다.
+영상 연결 시험은 **2026-08-08 Asia/Seoul(KST)**에 사용 동의를 받은 실제 얼굴 이미지로 런타임에서만 4초 MP4를 만들었고 종료 즉시 삭제했다. 비식별 결과와 한계는 [`reports/video_deepfake_api_smoke/2026-08-08`](reports/video_deepfake_api_smoke/2026-08-08)에 기록했다.
 
 추가로 Docker HTTP API에 승인받은 Celeb-real 전체 프레임을 직접 전송한 로컬 데모 스모크에서는 같은 사람 `0.694200`, 다른 사람 `-0.051950`이 관측됐다. 예열 후 CPU 처리시간은 두 요청에서 `962.706ms`, `1,188.254ms`였다. 개인정보를 제외한 실행 환경과 한계는 [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06)에 기록했다.
 
@@ -418,6 +429,7 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 | `IMAGE_TOO_LARGE` | 한 장이 8MB 초과 | 이미지 크기 축소 |
 | `VIDEO_TOO_LARGE` | 영상이 50MB 초과 | 영상 길이·해상도 축소 |
 | `VIDEO_TOO_LONG` | 영상이 120초 초과 | 짧은 구간으로 나눠 분석 |
+| `REQUEST_BODY_TOO_LARGE` | 영상·등록 사진을 합친 요청이 91MiB 초과 | 파일 크기를 줄여 재시도 |
 | `INVALID_VIDEO` | 손상되거나 디코딩 불가 | MP4·MOV로 다시 인코딩 |
 | `INSUFFICIENT_VALID_VIDEO_FRAMES` | 유효 얼굴이 4프레임 미만 | 얼굴이 크고 밝은 영상 사용 |
 | `TOO_MANY_PIXELS` | 해상도가 2천만 픽셀 초과 | 해상도 축소 |

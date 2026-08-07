@@ -80,6 +80,65 @@ DEEPFAKE_VIDEO_WARNING = (
 )
 
 
+class _RequestBodyTooLarge(Exception):
+    pass
+
+
+class _RequestBodyLimitMiddleware:
+    """영상 multipart 본문을 파싱하기 전 전체 전송량을 제한한다."""
+
+    def __init__(self, app: Any, *, path: str, maximum_bytes: int) -> None:
+        self.app = app
+        self.path = path
+        self.maximum_bytes = maximum_bytes
+
+    async def _reject(self, scope: Any, receive: Any, send: Any) -> None:
+        response = JSONResponse(
+            status_code=413,
+            content=ErrorResponse(
+                error=ErrorBody(
+                    code="REQUEST_BODY_TOO_LARGE",
+                    message=(
+                        f"영상 분석 요청 전체는 {self.maximum_bytes} bytes 이하여야 합니다."
+                    ),
+                )
+            ).model_dump(),
+        )
+        await response(scope, receive, send)
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or scope.get("path") != self.path:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                declared_bytes = int(content_length)
+            except ValueError:
+                declared_bytes = 0
+            if declared_bytes > self.maximum_bytes:
+                await self._reject(scope, receive, send)
+                return
+
+        received_bytes = 0
+
+        async def limited_receive() -> Any:
+            nonlocal received_bytes
+            message = await receive()
+            if message.get("type") == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > self.maximum_bytes:
+                    raise _RequestBodyTooLarge
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _RequestBodyTooLarge:
+            await self._reject(scope, receive, send)
+
+
 def _quality_response(quality: FaceQuality) -> ImageQualityResponse:
     return ImageQualityResponse(
         detection_score=quality.detection_score,
@@ -196,6 +255,11 @@ def create_app(
             "원본과 임베딩은 애플리케이션에 영구 저장하지 않습니다."
         ),
         version=active_settings.api_version,
+    )
+    application.add_middleware(
+        _RequestBodyLimitMiddleware,
+        path="/v1/deepfake/analyze-video",
+        maximum_bytes=active_settings.maximum_video_request_bytes,
     )
 
     @application.exception_handler(FaceGuardError)
@@ -462,7 +526,9 @@ def create_app(
             model_name=result.model_name,
             execution_provider=result.execution_provider,
             model_fingerprint=result.model_fingerprint,
-            config_version="deepfake-video-16-frame-mean-v1",
+            config_version=(
+                f"deepfake-video-{active_settings.deepfake_video_frame_count}-frame-mean-v1"
+            ),
         )
 
     @application.post(

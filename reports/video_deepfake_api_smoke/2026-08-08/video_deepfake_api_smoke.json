@@ -1,5 +1,7 @@
 {
   "status": "completed",
+  "executed_date": "2026-08-08",
+  "executed_timezone": "Asia/Seoul",
   "scope": "local_video_pipeline_smoke_only",
   "input": {
     "duration_seconds": 4.0,

@@ -1,5 +1,7 @@
 # 영상 딥페이크 API 로컬 연결 시험
 
+- 실행일: `2026-08-08 Asia/Seoul(KST)`
+
 ## 결론
 
 `POST /v1/deepfake/analyze-video`에 연결되는 영상 16프레임 분석 로직을 실제 비공개 EfficientNet-B4 ONNX와 `CPUExecutionProvider`로 실행해 정상 완료했다.
