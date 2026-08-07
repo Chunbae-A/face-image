@@ -1,6 +1,6 @@
 # 딥소각 얼굴가드 API 사용 가이드
 
-이 API는 **등록 얼굴 사진과 공개 후보의 동일인 가능성을 비교**하고, 넓은 후보 기준을 통과한 단일 얼굴 이미지를 Celeb-DF EfficientNet-B4 ONNX로 분석한다. 실제 얼굴 비교에서는 등록 사진 3장을 권장한다.
+이 API는 **등록 얼굴 사진과 공개 후보의 동일인 가능성을 비교**하고, 이미지 또는 짧은 영상의 얼굴을 Celeb-DF EfficientNet-B4 ONNX로 분석한다. 실제 얼굴 비교에서는 등록 사진 3장을 권장한다.
 
 현재 버전은 연구·해커톤 검증용이다. Celeb-real 기준선의 관측 오인식률이 목표보다 높았으므로 응답의 `threshold_status`는 항상 `research_only_unapproved`로 표시한다. 한국인 얼굴·실제 휴대전화 데이터 검증과 모델 가중치의 상용 사용권 해결 전에는 운영 본인인증 수단으로 사용하지 않는다.
 
@@ -68,6 +68,17 @@ SearXNG는 Docker 내부망에서만 열리고 호스트 포트를 공개하지 
 
 기본 Docker 이미지는 CPU용이다. Linux CUDA 서버에서는 `requirements-api-gpu.txt`의 `onnxruntime-gpu`를 사용하고 NVIDIA Container Runtime을 별도로 설정한다.
 
+영상 엔드포인트는 ASGI middleware에서 전체 요청을 기본 `91MiB`로 제한한다. 이는 영상 50MB, 등록 사진 5장×8MB와 multipart 여유 1MiB를 합친 값이며 `FACEGUARD_MAX_VIDEO_REQUEST_BYTES`로 조정한다. 인터넷에 배치할 때는 애플리케이션에 도달하기 전에 프록시에서도 같은 제한을 둔다. Nginx 예시는 다음과 같다.
+
+```nginx
+location /v1/deepfake/analyze-video {
+    client_max_body_size 91m;
+    proxy_pass http://faceguard-api:8000;
+}
+```
+
+`Content-Length`가 있으면 multipart 파싱 전에 거절하고, chunked 요청도 수신 누적량이 제한을 넘는 즉시 중단한다. 파일별 50MB 영상·8MB 등록 사진 검사는 보조 방어로 그대로 적용한다.
+
 ## 1. 서버 상태 확인
 
 ```bash
@@ -79,7 +90,7 @@ curl http://127.0.0.1:8000/health
 ```json
 {
   "status": "ok",
-  "api_version": "0.5.0",
+  "api_version": "0.6.0",
   "model_name": "buffalo_l",
   "model_loaded": false,
   "execution_provider": null,
@@ -92,7 +103,8 @@ curl http://127.0.0.1:8000/health
   "deepfake_model_loaded": false,
   "deepfake_execution_provider": null,
   "deepfake_model_fingerprint": null,
-  "deepfake_threshold_status": "research_only_single_image_unvalidated"
+  "deepfake_threshold_status": "research_only_single_image_unvalidated",
+  "deepfake_video_threshold_status": "research_only_unapproved"
 }
 ```
 
@@ -161,7 +173,7 @@ curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze \
 
 ```json
 {
-  "status": "completed",
+  "status": "partial_failed",
   "is_suspected_deepfake": true,
   "deepfake_score": 0.83,
   "raw_logit": 1.59,
@@ -183,7 +195,61 @@ curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze \
 
 처리 순서는 `SCRFD 얼굴 검출 → 5점 랜드마크 정렬(224×224) → 380×380 Resize → ImageNet 정규화 → EfficientNet-B4 ONNX → sigmoid`다. 이미지·정렬 crop·모델 입력 텐서는 저장하지 않는다.
 
-## 4. 무료 공개 URL 후보 정규화
+## 4. 짧은 영상 16프레임 딥페이크 분석
+
+등록 사진 없이 주인공 얼굴을 추적하려면 다음처럼 호출한다.
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze-video \
+  -F "video=@./samples/candidate.mp4"
+```
+
+영상에 여러 사람이 나오고 특정 사람만 분석하려면 등록 사진을 함께 보낸다.
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze-video \
+  -F "video=@./samples/candidate.mp4" \
+  -F "reference_images=@./samples/register-1.jpg" \
+  -F "reference_images=@./samples/register-2.jpg" \
+  -F "reference_images=@./samples/register-3.jpg"
+```
+
+핵심 응답은 다음과 같다.
+
+```json
+{
+  "status": "completed",
+  "is_suspected_deepfake": true,
+  "video_score": 0.84,
+  "threshold": 0.7519882693886758,
+  "threshold_status": "research_only_unapproved",
+  "aggregation": "mean",
+  "requested_frame_count": 16,
+  "analyzed_frame_count": 15,
+  "skipped_frame_count": 1,
+  "reference_count": 3,
+  "suspicious_segments": [
+    {
+      "start_seconds": 4.2,
+      "end_seconds": 7.8,
+      "peak_score": 0.94,
+      "analyzed_frame_count": 2
+    }
+  ],
+  "config_version": "deepfake-video-16-frame-mean-v1"
+}
+```
+
+- MP4·MOV, 최대 50MB·120초만 허용한다.
+- 학습 전처리와 같이 영상 시작·끝을 조금 피하고 최대 16개 프레임을 균등 추출한다.
+- 등록 사진이 있으면 프레임의 여러 얼굴 중 등록 대표 얼굴과 가장 비슷한 얼굴을 고른다.
+- 등록 사진이 없으면 첫 프레임의 가장 큰 얼굴을 기준으로 다음 프레임을 추적한다.
+- 유효 얼굴이 4프레임 미만이면 점수를 만들지 않고 오류를 반환한다.
+- `video_score`는 유효 프레임 점수의 평균이며 보정된 확률이 아니다.
+- `suspicious_segments`는 표본 프레임 주변을 묶은 **대략적인 검토 시간대**이지 모든 원본 프레임을 정밀 판독한 구간이 아니다.
+- 요청 영상은 임시 디렉터리에서 디코딩하고 요청 종료 전에 삭제한다. 얼굴 crop과 임베딩은 영구 저장하지 않는다.
+
+## 5. 무료 공개 URL 후보 정규화
 
 외부 검색 API 키 없이 사용자가 알고 있는 공개 페이지·미디어 URL을 공통 후보 형식으로 바꿀 수 있다. 이 경로는 얼굴 모델 가중치를 실행하지 않으므로 InsightFace 이용 조건 확인값과 무관하게 사용할 수 있다.
 
@@ -253,7 +319,7 @@ curl -X POST http://127.0.0.1:8000/v1/search/candidates \
 
 `privacy_strict`에서는 외부 검색을 호출하지 않는다. `web_monitoring`은 사용자의 명시적 동의와 별도 외부 검색 제공자 설정이 모두 있을 때만 사용할 수 있다. 기본 Compose에는 외부 검색 제공자가 없으므로 `web_monitoring` 요청은 `SEARCH_PROVIDER_UNAVAILABLE`로 거절한다.
 
-## 5. SearXNG 무료 키워드 검색
+## 6. SearXNG 무료 키워드 검색
 
 SearXNG 결합 Compose를 켠 뒤 다음처럼 호출한다.
 
@@ -282,7 +348,7 @@ API는 SearXNG의 결과 URL도 내부망·로컬 주소인지 다시 검사하�
 
 중요한 한계가 있다. SearXNG는 **검색어 기반 후보 수집기**이므로 얼굴 사진 자체로 같은 얼굴을 찾아주는 역이미지 검색이 아니다. 이미지 후보의 다운로드·ArcFace 선별은 아래 통합 API로 연결됐지만 다중 얼굴 이미지와 영상 트랙은 Issue #14, 얼굴 역검색 제공자 비교는 Issue #13의 후속 범위다.
 
-## 6. 검색 이미지 → ArcFace → 딥페이크 ONNX 통합 API
+## 7. 검색 이미지 → ArcFace → 딥페이크 ONNX 통합 API
 
 `POST /v1/pipeline/search-and-filter`는 한 요청에서 다음 순서로 처리한다.
 
@@ -344,8 +410,12 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 - 원본 프레임과 임베딩 저장 없음
 - 비공개 EfficientNet-B4 ONNX SHA-256 일치와 CPU 유한 출력 smoke 통과
 - 단일 이미지 API는 테스트용 가짜 모델 없이 실제 ONNX 로딩 경로 검증
+- 4초 임시 MP4에서 대표 프레임 16/16개 실제 ONNX 분석과 평균 집계 통과
+- 영상 연결 시험의 전체 처리 약 `5,293.5ms`, ONNX 추론 합계 약 `1,235.4ms`
 
 이 값은 파이프라인이 끝까지 동작하는지 확인한 **1건의 스모크 테스트**다. 정확도, 오인식률, 한국인 일반화 또는 운영 안전성을 증명하는 결과가 아니다.
+
+영상 연결 시험은 **2026-08-08 Asia/Seoul(KST)**에 사용 동의를 받은 실제 얼굴 이미지로 런타임에서만 4초 MP4를 만들었고 종료 즉시 삭제했다. 비식별 결과와 한계는 [`reports/video_deepfake_api_smoke/2026-08-08`](reports/video_deepfake_api_smoke/2026-08-08)에 기록했다.
 
 추가로 Docker HTTP API에 승인받은 Celeb-real 전체 프레임을 직접 전송한 로컬 데모 스모크에서는 같은 사람 `0.694200`, 다른 사람 `-0.051950`이 관측됐다. 예열 후 CPU 처리시간은 두 요청에서 `962.706ms`, `1,188.254ms`였다. 개인정보를 제외한 실행 환경과 한계는 [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06)에 기록했다.
 
@@ -355,7 +425,13 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 |---|---|---|
 | `MODEL_LICENSE_NOT_ACCEPTED` | 모델 가중치 이용 조건 미확인 | 서버 설정 확인 |
 | `UNSUPPORTED_CONTENT_TYPE` | 지원하지 않는 파일 형식 | JPEG·PNG·WEBP로 변환 |
+| `UNSUPPORTED_VIDEO_CONTENT_TYPE` | 지원하지 않는 영상 형식 | MP4·MOV로 변환 |
 | `IMAGE_TOO_LARGE` | 한 장이 8MB 초과 | 이미지 크기 축소 |
+| `VIDEO_TOO_LARGE` | 영상이 50MB 초과 | 영상 길이·해상도 축소 |
+| `VIDEO_TOO_LONG` | 영상이 120초 초과 | 짧은 구간으로 나눠 분석 |
+| `REQUEST_BODY_TOO_LARGE` | 영상·등록 사진을 합친 요청이 91MiB 초과 | 파일 크기를 줄여 재시도 |
+| `INVALID_VIDEO` | 손상되거나 디코딩 불가 | MP4·MOV로 다시 인코딩 |
+| `INSUFFICIENT_VALID_VIDEO_FRAMES` | 유효 얼굴이 4프레임 미만 | 얼굴이 크고 밝은 영상 사용 |
 | `TOO_MANY_PIXELS` | 해상도가 2천만 픽셀 초과 | 해상도 축소 |
 | `NO_FACE` | 얼굴을 찾지 못함 | 정면에서 밝게 재촬영 |
 | `MULTIPLE_FACES` | 얼굴이 둘 이상 있음 | 혼자 나온 사진 사용 |

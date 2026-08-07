@@ -17,6 +17,11 @@ from faceguard_api.search import (
     UserSubmittedUrlProvider,
 )
 from faceguard_api.settings import Settings
+from faceguard_api.video import (
+    DeepfakeVideoAnalysis,
+    SuspiciousSegment,
+    VideoFrameAnalysis,
+)
 
 QUALITY = FaceQuality(
     detection_score=0.99,
@@ -70,6 +75,68 @@ class FakeDeepfakeAnalyzer:
         )
 
 
+class FakeVideoDeepfakeAnalyzer:
+    def __init__(self):
+        self.calls = []
+
+    def analyze(
+        self,
+        payload: bytes,
+        *,
+        suffix: str,
+        reference_payloads=(),
+    ) -> DeepfakeVideoAnalysis:
+        self.calls.append((payload, suffix, tuple(reference_payloads)))
+        frames = (
+            VideoFrameAnalysis(
+                frame_index=10,
+                timestamp_seconds=1.0,
+                status="analyzed",
+                deepfake_score=0.9,
+                is_suspected_deepfake=True,
+                face_similarity=1.0 if reference_payloads else None,
+                quality=QUALITY,
+                error_code=None,
+                processing_ms=5.0,
+                inference_ms=2.0,
+            ),
+            VideoFrameAnalysis(
+                frame_index=20,
+                timestamp_seconds=2.0,
+                status="analyzed",
+                deepfake_score=0.8,
+                is_suspected_deepfake=True,
+                face_similarity=0.9 if reference_payloads else 1.0,
+                quality=QUALITY,
+                error_code=None,
+                processing_ms=5.0,
+                inference_ms=2.0,
+            ),
+        )
+        return DeepfakeVideoAnalysis(
+            status="completed",
+            is_suspected_deepfake=True,
+            video_score=0.85,
+            threshold=0.75,
+            aggregation="mean",
+            duration_seconds=3.0,
+            fps=10.0,
+            total_frame_count=30,
+            requested_frame_count=2,
+            decoded_frame_count=2,
+            analyzed_frame_count=2,
+            skipped_frame_count=0,
+            reference_count=len(reference_payloads),
+            frames=frames,
+            suspicious_segments=(SuspiciousSegment(0.5, 2.5, 0.9, 2),),
+            processing_ms=15.0,
+            inference_ms=4.0,
+            model_name="fake_deepfake_video_model",
+            execution_provider="FakeDeepfakeExecutionProvider",
+            model_fingerprint="b" * 64,
+        )
+
+
 def test_settings(*, license_accepted: bool = True) -> Settings:
     return Settings(
         accept_noncommercial_model_license=license_accepted,
@@ -84,11 +151,13 @@ def image_file(field: str, name: str, payload: bytes, content_type: str = "image
 
 class FaceguardHttpTests(unittest.TestCase):
     def setUp(self):
+        self.video_analyzer = FakeVideoDeepfakeAnalyzer()
         self.client = TestClient(
             create_app(
                 test_settings(),
                 FakeEncoder(),
                 deepfake_analyzer=FakeDeepfakeAnalyzer(),
+                video_deepfake_analyzer=self.video_analyzer,
             )
         )
 
@@ -107,6 +176,10 @@ class FaceguardHttpTests(unittest.TestCase):
             response.json()["deepfake_execution_provider"],
             "FakeDeepfakeExecutionProvider",
         )
+        self.assertEqual(
+            response.json()["deepfake_video_threshold_status"],
+            "research_only_unapproved",
+        )
 
     def test_deepfake_image_endpoint_returns_score_without_filename(self):
         response = self.client.post(
@@ -117,7 +190,9 @@ class FaceguardHttpTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["is_suspected_deepfake"])
         self.assertEqual(body["deepfake_score"], 0.9)
-        self.assertEqual(body["threshold_status"], "research_only_single_image_unvalidated")
+        self.assertEqual(
+            body["threshold_status"], "research_only_single_image_unvalidated"
+        )
         self.assertEqual(body["config_version"], "deepfake-single-image-v1")
         self.assertNotIn("private-candidate", json.dumps(body))
         self.assertIn("단일 얼굴 이미지 점수", body["warning"])
@@ -148,9 +223,93 @@ class FaceguardHttpTests(unittest.TestCase):
             files=[image_file("image", "candidate.jpg", b"candidate")],
         )
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            response.json()["error"]["code"], "MODEL_LICENSE_NOT_ACCEPTED"
+        self.assertEqual(response.json()["error"]["code"], "MODEL_LICENSE_NOT_ACCEPTED")
+
+    def test_deepfake_video_endpoint_returns_mean_score_and_segments(self):
+        response = self.client.post(
+            "/v1/deepfake/analyze-video",
+            files=[
+                image_file("video", "private-video.mp4", b"video-bytes", "video/mp4"),
+                image_file("reference_images", "private-reference.jpg", b"reference"),
+            ],
         )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertTrue(body["is_suspected_deepfake"])
+        self.assertEqual(body["video_score"], 0.85)
+        self.assertEqual(body["aggregation"], "mean")
+        self.assertEqual(body["reference_count"], 1)
+        self.assertEqual(body["analyzed_frame_count"], 2)
+        self.assertEqual(len(body["suspicious_segments"]), 1)
+        self.assertEqual(body["config_version"], "deepfake-video-16-frame-mean-v1")
+        self.assertEqual(
+            self.video_analyzer.calls,
+            [(b"video-bytes", ".mp4", (b"reference",))],
+        )
+        serialized = json.dumps(body, ensure_ascii=False)
+        self.assertNotIn("private-video", serialized)
+        self.assertNotIn("private-reference", serialized)
+        self.assertIn("오경고율", body["warning"])
+
+    def test_deepfake_video_rejects_unsupported_content_type(self):
+        response = self.client.post(
+            "/v1/deepfake/analyze-video",
+            files=[image_file("video", "clip.avi", b"video", "video/x-msvideo")],
+        )
+        self.assertEqual(response.status_code, 415)
+        self.assertEqual(
+            response.json()["error"]["code"],
+            "UNSUPPORTED_VIDEO_CONTENT_TYPE",
+        )
+        self.assertEqual(self.video_analyzer.calls, [])
+
+    def test_deepfake_video_config_version_uses_configured_frame_count(self):
+        settings = Settings(
+            accept_noncommercial_model_license=True,
+            similarity_threshold=0.5,
+            deepfake_video_frame_count=4,
+            deepfake_video_minimum_valid_frames=2,
+        )
+        client = TestClient(
+            create_app(
+                settings,
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+                video_deepfake_analyzer=FakeVideoDeepfakeAnalyzer(),
+            )
+        )
+        response = client.post(
+            "/v1/deepfake/analyze-video",
+            files=[image_file("video", "clip.mp4", b"video", "video/mp4")],
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(
+            response.json()["config_version"],
+            "deepfake-video-4-frame-mean-v1",
+        )
+
+    def test_deepfake_video_total_request_limit_runs_before_multipart_parser(self):
+        settings = Settings(
+            accept_noncommercial_model_license=True,
+            maximum_image_bytes=1,
+            maximum_video_bytes=8,
+            maximum_video_request_bytes=20,
+        )
+        client = TestClient(
+            create_app(
+                settings,
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+                video_deepfake_analyzer=FakeVideoDeepfakeAnalyzer(),
+            )
+        )
+        response = client.post(
+            "/v1/deepfake/analyze-video",
+            content=b"x" * 21,
+            headers={"Content-Type": "application/octet-stream"},
+        )
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.json()["error"]["code"], "REQUEST_BODY_TOO_LARGE")
 
     def test_health_reports_configured_searxng_provider(self):
         settings = Settings(
@@ -291,9 +450,7 @@ class FaceguardHttpTests(unittest.TestCase):
     def test_search_blocks_private_network_url(self):
         response = self.client.post(
             "/v1/search/candidates",
-            json={
-                "candidates": [{"page_url": "http://127.0.0.1/private"}]
-            },
+            json={"candidates": [{"page_url": "http://127.0.0.1/private"}]},
         )
         self.assertEqual(response.status_code, 422)
         self.assertEqual(
@@ -386,9 +543,7 @@ class FaceguardHttpTests(unittest.TestCase):
         body = response.json()
         self.assertEqual(body["candidate_count"], 1)
         self.assertEqual(body["candidates"][0]["provider"], "searxng")
-        self.assertEqual(
-            body["candidates"][0]["source_engine"], "duckduckgo images"
-        )
+        self.assertEqual(body["candidates"][0]["source_engine"], "duckduckgo images")
         self.assertIn("역검색이 아닙니다", body["warning"])
         self.assertNotIn("query_text", body)
         self.assertNotIn("동의받은 이름", json.dumps(body, ensure_ascii=False))
@@ -469,15 +624,9 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertEqual(body["candidates"][0]["matched_frame_count"], 1)
         self.assertEqual(body["candidates"][0]["analyzed_frame_count"], 1)
         self.assertIn("quality_summary", body["candidates"][0])
-        self.assertEqual(
-            body["candidates"][0]["deepfake"]["deepfake_score"], 0.9
-        )
-        self.assertEqual(
-            body["candidates"][1]["deepfake"]["status"], "not_analyzed"
-        )
-        self.assertEqual(
-            body["config_version"], "search-arcface-deepfake-image-v1"
-        )
+        self.assertEqual(body["candidates"][0]["deepfake"]["deepfake_score"], 0.9)
+        self.assertEqual(body["candidates"][1]["deepfake"]["status"], "not_analyzed")
+        self.assertEqual(body["config_version"], "search-arcface-deepfake-image-v1")
         serialized = json.dumps(body, ensure_ascii=False)
         self.assertNotIn("동의받은 비공개 테스트 검색어", serialized)
         self.assertNotIn("private-ref", serialized)
@@ -510,9 +659,7 @@ class FaceguardHttpTests(unittest.TestCase):
             files=[image_file("reference_images", "ref.jpg", b"ref")],
         )
         self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            response.json()["error"]["code"], "MODEL_LICENSE_NOT_ACCEPTED"
-        )
+        self.assertEqual(response.json()["error"]["code"], "MODEL_LICENSE_NOT_ACCEPTED")
         self.assertEqual(calls, [])
 
     def test_search_and_filter_validates_reference_face_before_web_search(self):

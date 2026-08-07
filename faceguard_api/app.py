@@ -21,6 +21,7 @@ from .schemas import (
     CandidateDeepfakeDecisionResponse,
     CandidateFaceDecisionResponse,
     DeepfakeAnalysisResponse,
+    DeepfakeVideoAnalysisResponse,
     ErrorBody,
     ErrorResponse,
     HealthResponse,
@@ -30,7 +31,9 @@ from .schemas import (
     SearchCandidatesRequest,
     SearchCandidatesResponse,
     SearchProviderResponse,
+    SuspiciousSegmentResponse,
     VerificationResponse,
+    VideoFrameAnalysisResponse,
 )
 from .search import (
     SearchQuery,
@@ -41,8 +44,13 @@ from .search import (
 )
 from .service import FaceGuardService
 from .settings import Settings
+from .video import VideoDeepfakeAnalyzer
 
 ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
+ALLOWED_VIDEO_CONTENT_TYPES = {
+    "video/mp4": ".mp4",
+    "video/quicktime": ".mov",
+}
 RESEARCH_WARNING = (
     "현재 판정 기준값은 Celeb-real 연구 기준선이며 운영 확정값이 아닙니다. "
     "Kaggle 열화 실험과 외부 한국인·실제 촬영 데이터 검증이 필요합니다."
@@ -65,6 +73,70 @@ DEEPFAKE_WARNING = (
     "현재 기준값은 영상 16프레임 평균에서 선택됐으므로 단일 이미지 정확도와 운영 신뢰도를 "
     "보장하지 않습니다."
 )
+DEEPFAKE_VIDEO_WARNING = (
+    "영상 점수는 대표 얼굴 프레임의 ONNX 점수를 평균한 연구 결과입니다. "
+    "Celeb-DF-v2 공식 Test에서 실제 영상 오경고율 목표를 통과하지 못했으므로, "
+    "사람 검토 없이 피해 사실을 확정하거나 자동 신고·삭제하지 않습니다."
+)
+
+
+class _RequestBodyTooLarge(Exception):
+    pass
+
+
+class _RequestBodyLimitMiddleware:
+    """영상 multipart 본문을 파싱하기 전 전체 전송량을 제한한다."""
+
+    def __init__(self, app: Any, *, path: str, maximum_bytes: int) -> None:
+        self.app = app
+        self.path = path
+        self.maximum_bytes = maximum_bytes
+
+    async def _reject(self, scope: Any, receive: Any, send: Any) -> None:
+        response = JSONResponse(
+            status_code=413,
+            content=ErrorResponse(
+                error=ErrorBody(
+                    code="REQUEST_BODY_TOO_LARGE",
+                    message=(
+                        f"영상 분석 요청 전체는 {self.maximum_bytes} bytes 이하여야 합니다."
+                    ),
+                )
+            ).model_dump(),
+        )
+        await response(scope, receive, send)
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope.get("type") != "http" or scope.get("path") != self.path:
+            await self.app(scope, receive, send)
+            return
+
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        content_length = headers.get(b"content-length")
+        if content_length is not None:
+            try:
+                declared_bytes = int(content_length)
+            except ValueError:
+                declared_bytes = 0
+            if declared_bytes > self.maximum_bytes:
+                await self._reject(scope, receive, send)
+                return
+
+        received_bytes = 0
+
+        async def limited_receive() -> Any:
+            nonlocal received_bytes
+            message = await receive()
+            if message.get("type") == "http.request":
+                received_bytes += len(message.get("body", b""))
+                if received_bytes > self.maximum_bytes:
+                    raise _RequestBodyTooLarge
+            return message
+
+        try:
+            await self.app(scope, limited_receive, send)
+        except _RequestBodyTooLarge:
+            await self._reject(scope, receive, send)
 
 
 def _quality_response(quality: FaceQuality) -> ImageQualityResponse:
@@ -98,12 +170,36 @@ async def _read_upload(upload: UploadFile, settings: Settings) -> bytes:
     return payload
 
 
+async def _read_video_upload(
+    upload: UploadFile, settings: Settings
+) -> tuple[bytes, str]:
+    suffix = ALLOWED_VIDEO_CONTENT_TYPES.get(upload.content_type or "")
+    if suffix is None:
+        raise FaceGuardError(
+            "UNSUPPORTED_VIDEO_CONTENT_TYPE",
+            "MP4 또는 MOV 영상만 전송할 수 있습니다.",
+            415,
+        )
+    payload = await upload.read(settings.maximum_video_bytes + 1)
+    await upload.close()
+    if len(payload) > settings.maximum_video_bytes:
+        raise FaceGuardError(
+            "VIDEO_TOO_LARGE",
+            f"영상은 {settings.maximum_video_bytes} bytes 이하여야 합니다.",
+            413,
+        )
+    if not payload:
+        raise FaceGuardError("EMPTY_VIDEO", "빈 영상 파일은 사용할 수 없습니다.")
+    return payload, suffix
+
+
 def create_app(
     settings: Settings | None = None,
     encoder: Any | None = None,
     search_service: Any | None = None,
     image_downloader: Any | None = None,
     deepfake_analyzer: Any | None = None,
+    video_deepfake_analyzer: Any | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     active_encoder = encoder or InsightFaceEncoder(active_settings)
@@ -139,6 +235,11 @@ def create_app(
         active_settings,
         active_encoder,
     )
+    active_video_deepfake_analyzer = video_deepfake_analyzer or VideoDeepfakeAnalyzer(
+        active_settings,
+        active_encoder,
+        active_deepfake_analyzer,
+    )
     candidate_filter_service = CandidateFilterService(
         active_settings,
         active_encoder,
@@ -149,11 +250,16 @@ def create_app(
     application = FastAPI(
         title="딥소각 얼굴가드 API",
         description=(
-            "등록 얼굴 비교, 공개 웹 후보 수집·선별과 단일 얼굴 딥페이크 ONNX 분석을 제공하는 "
+            "등록 얼굴 비교, 공개 웹 후보 수집·선별과 이미지·짧은 영상 딥페이크 ONNX 분석을 제공하는 "
             "연구용 API입니다. "
             "원본과 임베딩은 애플리케이션에 영구 저장하지 않습니다."
         ),
         version=active_settings.api_version,
+    )
+    application.add_middleware(
+        _RequestBodyLimitMiddleware,
+        path="/v1/deepfake/analyze-video",
+        maximum_bytes=active_settings.maximum_video_request_bytes,
     )
 
     @application.exception_handler(FaceGuardError)
@@ -175,6 +281,10 @@ def create_app(
             message = "등록 사진과 검색어를 multipart/form-data 형식으로 보내세요."
         elif request.url.path == "/v1/deepfake/analyze":
             message = "분석할 얼굴 이미지를 multipart/form-data 형식으로 보내세요."
+        elif request.url.path == "/v1/deepfake/analyze-video":
+            message = (
+                "분석할 MP4 또는 MOV 영상을 multipart/form-data 형식으로 보내세요."
+            )
         else:
             message = "등록 사진과 확인 사진을 multipart/form-data 형식으로 보내세요."
         body = ErrorResponse(
@@ -205,10 +315,11 @@ def create_app(
             deepfake_model_name=active_settings.deepfake_model_name,
             deepfake_model_loaded=bool(active_deepfake_analyzer.loaded),
             deepfake_execution_provider=active_deepfake_analyzer.provider,
-            deepfake_model_fingerprint=(
-                active_deepfake_analyzer.model_fingerprint
-            ),
+            deepfake_model_fingerprint=(active_deepfake_analyzer.model_fingerprint),
             deepfake_threshold_status=active_settings.deepfake_threshold_status,
+            deepfake_video_threshold_status=(
+                active_settings.deepfake_video_threshold_status
+            ),
         )
 
     @application.post(
@@ -320,6 +431,104 @@ def create_app(
             execution_provider=result.execution_provider,
             model_fingerprint=result.model_fingerprint,
             config_version="deepfake-single-image-v1",
+        )
+
+    @application.post(
+        "/v1/deepfake/analyze-video",
+        response_model=DeepfakeVideoAnalysisResponse,
+        responses={
+            413: {"model": ErrorResponse},
+            415: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            503: {"model": ErrorResponse},
+        },
+        tags=["딥페이크 분석"],
+        summary="짧은 영상의 16개 대표 얼굴 프레임을 분석",
+    )
+    async def analyze_deepfake_video(
+        video: Annotated[
+            UploadFile,
+            File(description="최대 120초의 MP4 또는 MOV 영상"),
+        ],
+        reference_images: Annotated[
+            list[UploadFile] | None,
+            File(description="영상에서 본인 얼굴을 고를 등록 사진 0~5장, 3장 권장"),
+        ] = None,
+    ) -> DeepfakeVideoAnalysisResponse:
+        if not active_settings.accept_noncommercial_model_license:
+            raise FaceGuardError(
+                "MODEL_LICENSE_NOT_ACCEPTED",
+                "InsightFace 비상업 연구용 얼굴 검출 가중치 조건 확인이 필요합니다.",
+                503,
+            )
+        references = reference_images or []
+        if len(references) > active_settings.maximum_reference_images:
+            raise FaceGuardError(
+                "TOO_MANY_REFERENCES",
+                f"등록 사진은 최대 {active_settings.maximum_reference_images}장까지 사용할 수 있습니다.",
+            )
+        reference_payloads = [
+            await _read_upload(upload, active_settings) for upload in references
+        ]
+        payload, suffix = await _read_video_upload(video, active_settings)
+        result = await run_in_threadpool(
+            active_video_deepfake_analyzer.analyze,
+            payload,
+            suffix=suffix,
+            reference_payloads=reference_payloads,
+        )
+        return DeepfakeVideoAnalysisResponse(
+            request_id=str(uuid4()),
+            status=result.status,
+            is_suspected_deepfake=result.is_suspected_deepfake,
+            video_score=result.video_score,
+            threshold=result.threshold,
+            threshold_status=active_settings.deepfake_video_threshold_status,
+            threshold_source=active_settings.deepfake_video_threshold_source,
+            aggregation=result.aggregation,
+            warning=DEEPFAKE_VIDEO_WARNING,
+            duration_seconds=result.duration_seconds,
+            fps=result.fps,
+            total_frame_count=result.total_frame_count,
+            requested_frame_count=result.requested_frame_count,
+            decoded_frame_count=result.decoded_frame_count,
+            analyzed_frame_count=result.analyzed_frame_count,
+            skipped_frame_count=result.skipped_frame_count,
+            reference_count=result.reference_count,
+            frames=[
+                VideoFrameAnalysisResponse(
+                    frame_index=item.frame_index,
+                    timestamp_seconds=item.timestamp_seconds,
+                    status=item.status,
+                    deepfake_score=item.deepfake_score,
+                    is_suspected_deepfake=item.is_suspected_deepfake,
+                    face_similarity=item.face_similarity,
+                    quality_summary=(
+                        _quality_response(item.quality) if item.quality else None
+                    ),
+                    error_code=item.error_code,
+                    processing_ms=item.processing_ms,
+                    inference_ms=item.inference_ms,
+                )
+                for item in result.frames
+            ],
+            suspicious_segments=[
+                SuspiciousSegmentResponse(
+                    start_seconds=item.start_seconds,
+                    end_seconds=item.end_seconds,
+                    peak_score=item.peak_score,
+                    analyzed_frame_count=item.analyzed_frame_count,
+                )
+                for item in result.suspicious_segments
+            ],
+            processing_ms=result.processing_ms,
+            inference_ms=result.inference_ms,
+            model_name=result.model_name,
+            execution_provider=result.execution_provider,
+            model_fingerprint=result.model_fingerprint,
+            config_version=(
+                f"deepfake-video-{active_settings.deepfake_video_frame_count}-frame-mean-v1"
+            ),
         )
 
     @application.post(
@@ -546,9 +755,7 @@ def create_app(
                     deepfake=CandidateDeepfakeDecisionResponse(
                         status=item.deepfake.status,
                         deepfake_score=item.deepfake.deepfake_score,
-                        is_suspected_deepfake=(
-                            item.deepfake.is_suspected_deepfake
-                        ),
+                        is_suspected_deepfake=(item.deepfake.is_suspected_deepfake),
                         error_code=item.deepfake.error_code,
                         processing_ms=item.deepfake.processing_ms,
                         inference_ms=item.deepfake.inference_ms,

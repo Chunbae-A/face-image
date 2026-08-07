@@ -178,28 +178,15 @@ class InsightFaceEncoder:
             raise FaceGuardError("INVALID_IMAGE", "3채널 컬러 이미지가 필요합니다.")
         return decoded
 
-    def _encode(
+    def _encode_detected_face(
         self,
-        payload: bytes,
+        image: np.ndarray,
+        face: Any,
         *,
-        aligned_face_size: int | None = None,
+        aligned_face_size: int | None,
     ) -> tuple[EncodedFace, np.ndarray | None]:
-        self._initialize()
-        image = self._decode_image(payload)
-        assert self._application is not None
-        with self._inference_lock:
-            faces = self._application.get(image)
-        if not faces:
-            raise FaceGuardError(
-                "NO_FACE",
-                "얼굴을 찾지 못했습니다. 정면에서 더 밝고 가깝게 다시 촬영하세요.",
-            )
-        if len(faces) != 1:
-            raise FaceGuardError(
-                "MULTIPLE_FACES", "사진에는 한 사람의 얼굴만 있어야 합니다."
-            )
+        """검출 결과 하나를 품질 검사하고 임베딩·정렬 얼굴로 변환한다."""
 
-        face = faces[0]
         height, width = image.shape[:2]
         bbox = np.asarray(getattr(face, "bbox", []), dtype=np.float32).reshape(-1)
         if bbox.size != 4 or not np.all(np.isfinite(bbox)):
@@ -276,9 +263,36 @@ class InsightFaceEncoder:
             or aligned.shape != (aligned_face_size, aligned_face_size, 3)
         ):
             raise FaceGuardError(
-                "FACE_ALIGNMENT_FAILED", "딥페이크 분석용 얼굴 정렬 결과가 올바르지 않습니다."
+                "FACE_ALIGNMENT_FAILED",
+                "딥페이크 분석용 얼굴 정렬 결과가 올바르지 않습니다.",
             )
         return encoded, np.ascontiguousarray(aligned)
+
+    def _encode(
+        self,
+        payload: bytes,
+        *,
+        aligned_face_size: int | None = None,
+    ) -> tuple[EncodedFace, np.ndarray | None]:
+        self._initialize()
+        image = self._decode_image(payload)
+        assert self._application is not None
+        with self._inference_lock:
+            faces = self._application.get(image)
+        if not faces:
+            raise FaceGuardError(
+                "NO_FACE",
+                "얼굴을 찾지 못했습니다. 정면에서 더 밝고 가깝게 다시 촬영하세요.",
+            )
+        if len(faces) != 1:
+            raise FaceGuardError(
+                "MULTIPLE_FACES", "사진에는 한 사람의 얼굴만 있어야 합니다."
+            )
+        return self._encode_detected_face(
+            image,
+            faces[0],
+            aligned_face_size=aligned_face_size,
+        )
 
     def encode(self, payload: bytes) -> EncodedFace:
         encoded, _ = self._encode(payload)
@@ -295,3 +309,57 @@ class InsightFaceEncoder:
         )
         assert aligned is not None
         return AlignedEncodedFace(face=encoded, aligned_bgr=aligned)
+
+    def encode_frame_faces(
+        self,
+        frame_bgr: np.ndarray,
+        *,
+        aligned_face_size: int,
+    ) -> tuple[AlignedEncodedFace, ...]:
+        """영상 프레임의 유효한 모든 얼굴을 반환해 등록 얼굴로 고를 수 있게 한다."""
+
+        self._initialize()
+        image = np.asarray(frame_bgr)
+        if image.ndim != 3 or image.shape[2] != 3 or image.dtype != np.uint8:
+            raise FaceGuardError(
+                "INVALID_VIDEO_FRAME", "영상에서 올바른 컬러 프레임을 읽지 못했습니다."
+            )
+        height, width = image.shape[:2]
+        if (
+            height <= 0
+            or width <= 0
+            or height * width > self.settings.maximum_image_pixels
+        ):
+            raise FaceGuardError(
+                "VIDEO_FRAME_TOO_LARGE",
+                f"영상 프레임은 {self.settings.maximum_image_pixels} 픽셀 이하여야 합니다.",
+                413,
+            )
+        assert self._application is not None
+        with self._inference_lock:
+            faces = self._application.get(image)
+        if not faces:
+            raise FaceGuardError("NO_FACE", "영상 프레임에서 얼굴을 찾지 못했습니다.")
+
+        encoded_faces: list[AlignedEncodedFace] = []
+        first_error: FaceGuardError | None = None
+        for face in faces:
+            try:
+                encoded, aligned = self._encode_detected_face(
+                    image,
+                    face,
+                    aligned_face_size=aligned_face_size,
+                )
+            except FaceGuardError as error:
+                if first_error is None:
+                    first_error = error
+                continue
+            assert aligned is not None
+            encoded_faces.append(AlignedEncodedFace(face=encoded, aligned_bgr=aligned))
+        if not encoded_faces:
+            if first_error is not None:
+                raise first_error
+            raise FaceGuardError(
+                "NO_VALID_FACE", "영상 프레임에서 분석 가능한 얼굴을 찾지 못했습니다."
+            )
+        return tuple(encoded_faces)

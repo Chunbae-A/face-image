@@ -29,7 +29,7 @@ def _environment_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    api_version: str = "0.5.0"
+    api_version: str = "0.6.0"
     model_name: str = "buffalo_l"
     model_root: Path = Path(".models/insightface")
     device: str = "auto"
@@ -46,6 +46,9 @@ class Settings:
     maximum_reference_images: int = 5
     maximum_image_bytes: int = 8 * 1024 * 1024
     maximum_image_pixels: int = 20_000_000
+    maximum_video_bytes: int = 50 * 1024 * 1024
+    maximum_video_seconds: float = 120.0
+    maximum_video_request_bytes: int = 91 * 1024 * 1024
     minimum_detection_score: float = 0.60
     minimum_face_area_ratio: float = 0.01
     maximum_search_candidates: int = 100
@@ -65,8 +68,12 @@ class Settings:
     deepfake_aligned_face_size: int = 224
     deepfake_threshold: float = DEEPFAKE_RESEARCH_THRESHOLD
     deepfake_threshold_status: str = "research_only_single_image_unvalidated"
-    deepfake_threshold_source: str = (
-        "Celeb-DF-v2 영상 16프레임 평균 기준값 0.7519882694를 단일 이미지 연결 시험에 재사용"
+    deepfake_threshold_source: str = "Celeb-DF-v2 영상 16프레임 평균 기준값 0.7519882694를 단일 이미지 연결 시험에 재사용"
+    deepfake_video_frame_count: int = 16
+    deepfake_video_minimum_valid_frames: int = 4
+    deepfake_video_threshold_status: str = "research_only_unapproved"
+    deepfake_video_threshold_source: str = (
+        "Celeb-DF-v2 Validation에서 선택한 영상 16프레임 평균 연구 기준값"
     )
 
     def __post_init__(self) -> None:
@@ -77,7 +84,9 @@ class Settings:
         if not -1.0 <= self.retrieval_similarity_threshold <= 1.0:
             raise ValueError("retrieval_similarity_threshold는 -1과 1 사이여야 합니다.")
         if self.retrieval_similarity_threshold > self.similarity_threshold:
-            raise ValueError("후보 수집 기준값은 최종 동일인 기준값보다 높을 수 없습니다.")
+            raise ValueError(
+                "후보 수집 기준값은 최종 동일인 기준값보다 높을 수 없습니다."
+            )
         if self.detection_size <= 0:
             raise ValueError("detection_size는 양수여야 합니다.")
         if not (
@@ -89,6 +98,16 @@ class Settings:
             raise ValueError("등록 사진 수 설정의 순서가 올바르지 않습니다.")
         if self.maximum_image_bytes <= 0 or self.maximum_image_pixels <= 0:
             raise ValueError("이미지 크기 제한은 양수여야 합니다.")
+        if self.maximum_video_bytes <= 0 or self.maximum_video_seconds <= 0:
+            raise ValueError("영상 크기와 길이 제한은 양수여야 합니다.")
+        minimum_video_request_bytes = (
+            self.maximum_video_bytes
+            + self.maximum_reference_images * self.maximum_image_bytes
+        )
+        if self.maximum_video_request_bytes < minimum_video_request_bytes:
+            raise ValueError(
+                "영상 요청 본문 제한은 영상과 최대 등록 사진 크기의 합 이상이어야 합니다."
+            )
         if not 0.0 <= self.minimum_detection_score <= 1.0:
             raise ValueError("minimum_detection_score는 0과 1 사이여야 합니다.")
         if not 0.0 < self.minimum_face_area_ratio <= 1.0:
@@ -107,7 +126,9 @@ class Settings:
                 or parsed.query
                 or parsed.fragment
             ):
-                raise ValueError("searxng_base_url은 인증정보·쿼리 없는 HTTP(S) URL이어야 합니다.")
+                raise ValueError(
+                    "searxng_base_url은 인증정보·쿼리 없는 HTTP(S) URL이어야 합니다."
+                )
         if self.searxng_request_timeout_seconds <= 0:
             raise ValueError("searxng_request_timeout_seconds는 양수여야 합니다.")
         if self.searxng_maximum_retries < 0:
@@ -119,19 +140,24 @@ class Settings:
         if self.candidate_download_timeout_seconds <= 0:
             raise ValueError("candidate_download_timeout_seconds는 양수여야 합니다.")
         if self.candidate_download_maximum_redirects < 0:
-            raise ValueError("candidate_download_maximum_redirects는 0 이상이어야 합니다.")
+            raise ValueError(
+                "candidate_download_maximum_redirects는 0 이상이어야 합니다."
+            )
         if self.deepfake_device not in {"auto", "cpu", "cuda"}:
             raise ValueError("deepfake_device는 auto, cpu, cuda 중 하나여야 합니다.")
         if self.deepfake_input_size <= 0 or self.deepfake_aligned_face_size <= 0:
             raise ValueError("딥페이크 모델 이미지 크기는 양수여야 합니다.")
         if not 0.0 <= self.deepfake_threshold <= 1.0:
             raise ValueError("deepfake_threshold는 0과 1 사이여야 합니다.")
-        if (
-            len(self.deepfake_model_sha256) != 64
-            or any(
-                character not in "0123456789abcdef"
-                for character in self.deepfake_model_sha256.lower()
-            )
+        if not (
+            1
+            <= self.deepfake_video_minimum_valid_frames
+            <= self.deepfake_video_frame_count
+        ):
+            raise ValueError("영상 유효 프레임 수 설정의 순서가 올바르지 않습니다.")
+        if len(self.deepfake_model_sha256) != 64 or any(
+            character not in "0123456789abcdef"
+            for character in self.deepfake_model_sha256.lower()
         ):
             raise ValueError("deepfake_model_sha256은 64자리 16진수여야 합니다.")
 
@@ -164,6 +190,17 @@ class Settings:
             ),
             maximum_image_pixels=int(
                 os.environ.get("FACEGUARD_MAX_IMAGE_PIXELS", "20000000")
+            ),
+            maximum_video_bytes=int(
+                os.environ.get("FACEGUARD_MAX_VIDEO_BYTES", str(50 * 1024 * 1024))
+            ),
+            maximum_video_seconds=float(
+                os.environ.get("FACEGUARD_MAX_VIDEO_SECONDS", "120")
+            ),
+            maximum_video_request_bytes=int(
+                os.environ.get(
+                    "FACEGUARD_MAX_VIDEO_REQUEST_BYTES", str(91 * 1024 * 1024)
+                )
             ),
             minimum_detection_score=float(
                 os.environ.get("FACEGUARD_MIN_DETECTION_SCORE", "0.60")
@@ -212,9 +249,7 @@ class Settings:
             )
             .strip()
             .lower(),
-            deepfake_device=os.environ.get(
-                "FACEGUARD_DEEPFAKE_DEVICE", "cpu"
-            )
+            deepfake_device=os.environ.get("FACEGUARD_DEEPFAKE_DEVICE", "cpu")
             .strip()
             .lower(),
             deepfake_input_size=int(
@@ -231,5 +266,15 @@ class Settings:
             deepfake_threshold_status=os.environ.get(
                 "FACEGUARD_DEEPFAKE_THRESHOLD_STATUS",
                 "research_only_single_image_unvalidated",
+            ),
+            deepfake_video_frame_count=int(
+                os.environ.get("FACEGUARD_DEEPFAKE_VIDEO_FRAME_COUNT", "16")
+            ),
+            deepfake_video_minimum_valid_frames=int(
+                os.environ.get("FACEGUARD_DEEPFAKE_VIDEO_MINIMUM_VALID_FRAMES", "4")
+            ),
+            deepfake_video_threshold_status=os.environ.get(
+                "FACEGUARD_DEEPFAKE_VIDEO_THRESHOLD_STATUS",
+                "research_only_unapproved",
             ),
         )

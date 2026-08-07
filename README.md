@@ -2,7 +2,7 @@
 
 사용자가 등록한 얼굴을 기준으로 **공개 웹 후보에서 같은 사람을 골라내고, 후보 영상의 딥페이크 위험을 수치와 근거로 보여주기 위한 모델링·API 프로젝트**다.
 
-> 현재 바로 실행할 수 있는 범위는 ArcFace 얼굴 동일인 비교, SearXNG 공개 이미지 후보 수집, 후보 이미지 ArcFace 선별과 EfficientNet-B4 ONNX 단일 이미지 분석 API다. 얼굴 사진 자체로 웹을 찾는 역이미지 검색, 다중 얼굴·영상 트랙과 비동기 작업 API는 개발 중이며 현재 모델은 운영·본인인증·자동 차단 용도로 승인되지 않았다.
+> 현재 바로 실행할 수 있는 범위는 ArcFace 얼굴 동일인 비교, SearXNG 공개 이미지 후보 수집, 후보 이미지 ArcFace 선별, EfficientNet-B4 ONNX 이미지 분석과 **짧은 영상 16프레임 분석 API**다. 얼굴 사진 자체로 웹을 찾는 역이미지 검색과 비동기 작업 API는 개발 중이며 현재 모델은 운영·본인인증·자동 차단 용도로 승인되지 않았다.
 
 ## 30초 요약
 
@@ -30,7 +30,7 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 |---|---|---|
 | 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | **무료 URL 제보 + SearXNG 키워드 검색 구현, 얼굴 역검색 미연결** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
 | 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
-| 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 단일 이미지 API 연결 완료, 영상 16프레임 분석·운영 Gate 미통과** ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
+| 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 이미지·영상 16프레임 평균 API 구현, 운영 Gate 미통과** ([#25](https://github.com/Chunbae-A/face-image/issues/25)) |
 | 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | 구현 예정 ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | **동기 이미지 경로 완료, 작업 ID·영상 경로 구현 예정** ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
 
@@ -104,7 +104,7 @@ Kaggle 4차 실행에서 학습·공식 Test·ONNX 변환·CPU 추론 시험을 
 
 ## 얼굴가드 API 실행
 
-현재 HTTP API는 **얼굴 동일인 후보 선별**, **공개 URL 정규화**, **SearXNG 후보 수집**, **단일 얼굴 딥페이크 ONNX 분석**, **검색 이미지 → ArcFace → ONNX 통합 경로**를 제공한다. 얼굴 역이미지 검색, 다중 얼굴·영상 트랙과 비동기 작업 API는 아직 구현 전이다.
+현재 HTTP API는 **얼굴 동일인 후보 선별**, **공개 URL 정규화**, **SearXNG 후보 수집**, **단일 얼굴 딥페이크 ONNX 분석**, **짧은 영상 16프레임 평균 분석**, **검색 이미지 → ArcFace → ONNX 통합 경로**를 제공한다. 얼굴 역이미지 검색과 비동기 작업 API는 아직 구현 전이다.
 
 ### Docker 권장 실행
 
@@ -135,11 +135,13 @@ curl http://127.0.0.1:8000/health
 docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --detach
 ```
 
-브라우저에서 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)를 열고 `POST /v1/faceguard/verify` 또는 `POST /v1/deepfake/analyze`를 시험한다.
+브라우저에서 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)를 열고 `POST /v1/faceguard/verify`, `POST /v1/deepfake/analyze` 또는 `POST /v1/deepfake/analyze-video`를 시험한다.
 
 - `reference_images`: 본인 등록 얼굴 1~5장, **3장 권장**
 - `query_image`: 확인할 후보 얼굴 1장
 - 지원 형식: JPEG, PNG, WEBP
+
+영상 분석은 MP4·MOV, 최대 50MB·120초를 지원한다. 영상 전체에서 최대 16개 대표 프레임을 뽑고 프레임별 얼굴 점수의 평균과 대략적인 의심 시간 구간을 반환한다. 등록 사진을 함께 보내면 여러 얼굴 중 등록 얼굴과 가장 비슷한 얼굴을 우선 분석한다. 원본 영상과 얼굴 crop은 영구 저장하지 않는다.
 
 응답의 핵심값은 다음과 같다.
 
@@ -172,7 +174,7 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 4. Celeb-DF 전체 딥페이크 실험 결과에서 AUC와 FPR을 함께 보여준다.
 5. “AUC는 높지만 FPR Gate를 통과하지 못해 운영 승인하지 않았다”고 설명한다.
 
-검색 → 얼굴 선별 → 단일 이미지 딥페이크 판별은 지금 시연할 수 있다. 다만 `deepfake_score`는 확률이나 확정 신뢰도가 아니며 영상 16프레임 평균 경로, 진행률과 작업 ID는 [Issue #17](https://github.com/Chunbae-A/face-image/issues/17)의 후속 범위다. 화면 흐름과 오류 처리는 [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md)에 있다.
+검색 → 얼굴 선별 → 단일 이미지 딥페이크 판별과 별도 영상 16프레임 분석은 지금 시연할 수 있다. 다만 `deepfake_score`와 `video_score`는 확률이나 확정 신뢰도가 아니며, 검색 후보 영상을 자동으로 내려받아 비동기로 처리하는 진행률·작업 ID는 [Issue #17](https://github.com/Chunbae-A/face-image/issues/17)의 후속 범위다. 화면 흐름과 오류 처리는 [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md)에 있다.
 
 ## 저장소 안내
 
@@ -214,8 +216,8 @@ python scripts/check_repository_hygiene.py
 2. 넓은 후보 기준값을 공개 웹 validation 데이터로 보정 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
 3. 얼굴 역이미지 검색 제공자 후보와 Recall·비용을 별도 검증 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
 4. 얼굴·딥페이크 기준값과 품질 Gate 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
-5. 영상 16프레임·다중 얼굴 트랙·비동기 작업 API 완성 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
-6. 검색·선별·단일 이미지 ONNX 연결 결과를 실제 동의 데이터로 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
+5. 영상 분석을 검색 후보·진행률·작업 ID와 연결하는 비동기 API 완성 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
+6. 검색·선별·이미지·영상 ONNX 연결 결과를 실제 동의 데이터로 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
 
 ## 발표용 한 문장
 

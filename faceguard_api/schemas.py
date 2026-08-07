@@ -33,6 +33,7 @@ class HealthResponse(BaseModel):
     deepfake_execution_provider: str | None = None
     deepfake_model_fingerprint: str | None = None
     deepfake_threshold_status: str
+    deepfake_video_threshold_status: str
 
 
 class ImageQualityResponse(BaseModel):
@@ -73,6 +74,54 @@ class DeepfakeAnalysisResponse(BaseModel):
     threshold_source: str
     warning: str
     quality_summary: ImageQualityResponse
+    processing_ms: float = Field(ge=0.0)
+    inference_ms: float = Field(ge=0.0)
+    model_name: str
+    execution_provider: str
+    model_fingerprint: str
+    config_version: str
+
+
+class VideoFrameAnalysisResponse(BaseModel):
+    frame_index: int = Field(ge=0)
+    timestamp_seconds: float = Field(ge=0.0)
+    status: Literal["analyzed", "skipped"]
+    deepfake_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    is_suspected_deepfake: bool | None = None
+    face_similarity: float | None = Field(default=None, ge=-1.0, le=1.0)
+    quality_summary: ImageQualityResponse | None = None
+    error_code: str | None = None
+    processing_ms: float = Field(ge=0.0)
+    inference_ms: float | None = Field(default=None, ge=0.0)
+
+
+class SuspiciousSegmentResponse(BaseModel):
+    start_seconds: float = Field(ge=0.0)
+    end_seconds: float = Field(ge=0.0)
+    peak_score: float = Field(ge=0.0, le=1.0)
+    analyzed_frame_count: int = Field(gt=0)
+
+
+class DeepfakeVideoAnalysisResponse(BaseModel):
+    request_id: str
+    status: Literal["completed", "partial_failed"]
+    is_suspected_deepfake: bool
+    video_score: float = Field(ge=0.0, le=1.0)
+    threshold: float = Field(ge=0.0, le=1.0)
+    threshold_status: str
+    threshold_source: str
+    aggregation: Literal["mean"]
+    warning: str
+    duration_seconds: float = Field(gt=0.0)
+    fps: float = Field(gt=0.0)
+    total_frame_count: int = Field(gt=0)
+    requested_frame_count: int = Field(gt=0)
+    decoded_frame_count: int = Field(gt=0)
+    analyzed_frame_count: int = Field(gt=0)
+    skipped_frame_count: int = Field(ge=0)
+    reference_count: int = Field(ge=0)
+    frames: list[VideoFrameAnalysisResponse]
+    suspicious_segments: list[SuspiciousSegmentResponse]
     processing_ms: float = Field(ge=0.0)
     inference_ms: float = Field(ge=0.0)
     model_name: str
@@ -160,9 +209,7 @@ class CandidateFaceDecisionResponse(BaseModel):
     thumbnail_url: str | None = None
     provider: str
     source_engine: str | None = None
-    status: Literal[
-        "identity_match", "retrieval_match", "not_matched", "skipped"
-    ]
+    status: Literal["identity_match", "retrieval_match", "not_matched", "skipped"]
     similarity_raw: float | None = Field(default=None, ge=-1.0, le=1.0)
     retrieval_match: bool | None = None
     identity_match: bool | None = None
