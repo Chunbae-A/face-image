@@ -8,6 +8,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 RESEARCH_THRESHOLD = 0.2823836207389832
+RESEARCH_RETRIEVAL_THRESHOLD = 0.20
 
 
 def _environment_bool(name: str, default: bool) -> bool:
@@ -24,12 +25,13 @@ def _environment_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    api_version: str = "0.3.0"
+    api_version: str = "0.4.0"
     model_name: str = "buffalo_l"
     model_root: Path = Path(".models/insightface")
     device: str = "auto"
     detection_size: int = 640
     similarity_threshold: float = RESEARCH_THRESHOLD
+    retrieval_similarity_threshold: float = RESEARCH_RETRIEVAL_THRESHOLD
     threshold_status: str = "research_only_unapproved"
     threshold_source: str = (
         "Celeb-real 기준선 5프레임·등록 3개, FAR 0.001 목표의 seed별 기준값 최댓값"
@@ -48,12 +50,19 @@ class Settings:
     searxng_request_timeout_seconds: float = 4.0
     searxng_maximum_retries: int = 1
     searxng_retry_backoff_seconds: float = 0.25
+    maximum_pipeline_candidates: int = 10
+    candidate_download_timeout_seconds: float = 4.0
+    candidate_download_maximum_redirects: int = 2
 
     def __post_init__(self) -> None:
         if self.device not in {"auto", "cpu", "cuda"}:
             raise ValueError("device는 auto, cpu, cuda 중 하나여야 합니다.")
         if not -1.0 <= self.similarity_threshold <= 1.0:
             raise ValueError("similarity_threshold는 -1과 1 사이여야 합니다.")
+        if not -1.0 <= self.retrieval_similarity_threshold <= 1.0:
+            raise ValueError("retrieval_similarity_threshold는 -1과 1 사이여야 합니다.")
+        if self.retrieval_similarity_threshold > self.similarity_threshold:
+            raise ValueError("후보 수집 기준값은 최종 동일인 기준값보다 높을 수 없습니다.")
         if self.detection_size <= 0:
             raise ValueError("detection_size는 양수여야 합니다.")
         if not (
@@ -90,6 +99,12 @@ class Settings:
             raise ValueError("searxng_maximum_retries는 0 이상이어야 합니다.")
         if self.searxng_retry_backoff_seconds < 0:
             raise ValueError("searxng_retry_backoff_seconds는 0 이상이어야 합니다.")
+        if self.maximum_pipeline_candidates <= 0:
+            raise ValueError("maximum_pipeline_candidates는 양수여야 합니다.")
+        if self.candidate_download_timeout_seconds <= 0:
+            raise ValueError("candidate_download_timeout_seconds는 양수여야 합니다.")
+        if self.candidate_download_maximum_redirects < 0:
+            raise ValueError("candidate_download_maximum_redirects는 0 이상이어야 합니다.")
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -102,6 +117,12 @@ class Settings:
             detection_size=int(os.environ.get("FACEGUARD_DETECTION_SIZE", "640")),
             similarity_threshold=float(
                 os.environ.get("FACEGUARD_SIMILARITY_THRESHOLD", RESEARCH_THRESHOLD)
+            ),
+            retrieval_similarity_threshold=float(
+                os.environ.get(
+                    "FACEGUARD_RETRIEVAL_SIMILARITY_THRESHOLD",
+                    RESEARCH_RETRIEVAL_THRESHOLD,
+                )
             ),
             threshold_status=os.environ.get(
                 "FACEGUARD_THRESHOLD_STATUS", "research_only_unapproved"
@@ -138,5 +159,14 @@ class Settings:
             ),
             searxng_retry_backoff_seconds=float(
                 os.environ.get("FACEGUARD_SEARXNG_RETRY_BACKOFF_SECONDS", "0.25")
+            ),
+            maximum_pipeline_candidates=int(
+                os.environ.get("FACEGUARD_MAXIMUM_PIPELINE_CANDIDATES", "10")
+            ),
+            candidate_download_timeout_seconds=float(
+                os.environ.get("FACEGUARD_CANDIDATE_DOWNLOAD_TIMEOUT_SECONDS", "4.0")
+            ),
+            candidate_download_maximum_redirects=int(
+                os.environ.get("FACEGUARD_CANDIDATE_DOWNLOAD_MAXIMUM_REDIRECTS", "2")
             ),
         )

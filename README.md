@@ -2,7 +2,7 @@
 
 사용자가 등록한 얼굴을 기준으로 **공개 웹 후보에서 같은 사람을 골라내고, 후보 영상의 딥페이크 위험을 수치와 근거로 보여주기 위한 모델링·API 프로젝트**다.
 
-> 현재 바로 실행할 수 있는 범위는 ArcFace 얼굴 동일인 비교, 사용자가 제보한 공개 URL 정리, SearXNG 검색어 기반 공개 이미지·영상 후보 수집 API다. 얼굴 사진 자체로 웹을 찾는 역이미지 검색과 딥페이크 판별 통합은 개발 중이며, 현재 모델은 운영·본인인증·자동 차단 용도로 승인되지 않았다.
+> 현재 바로 실행할 수 있는 범위는 ArcFace 얼굴 동일인 비교, SearXNG 검색어 기반 공개 이미지 후보 수집, 후보 이미지 다운로드·동일인 가능성 선별 API다. 얼굴 사진 자체로 웹을 찾는 역이미지 검색, 영상 얼굴 트랙, 딥페이크 판별 통합은 개발 중이며 현재 모델은 운영·본인인증·자동 차단 용도로 승인되지 않았다.
 
 ## 30초 요약
 
@@ -29,7 +29,7 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 | 기능 | 하는 일 | 현재 상태 |
 |---|---|---|
 | 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | **무료 URL 제보 + SearXNG 키워드 검색 구현, 얼굴 역검색 미연결** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
-| 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **독립 모델·로컬 API 완료, 검색 연결 대기** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
+| 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
 | 딥페이크 판별 | 후보 영상의 얼굴 프레임이 실제인지 조작인지 분석 | **연구 기준선·ONNX 완료, 운영 Gate 미통과** ([#15](https://github.com/Chunbae-A/face-image/issues/15)) |
 | 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | 구현 예정 ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | 구현 예정 ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
@@ -104,7 +104,7 @@ Kaggle 4차 실행에서 학습·공식 Test·ONNX 변환·CPU 추론 시험을 
 
 ## 얼굴가드 API 실행
 
-현재 HTTP API는 **얼굴 동일인 후보 선별**, **사용자 제보 공개 URL 정규화**, **SearXNG 검색어 기반 공개 후보 수집**을 제공한다. 얼굴 역이미지 검색과 딥페이크 ONNX 통합 API 연결은 아직 구현 전이다.
+현재 HTTP API는 **얼굴 동일인 후보 선별**, **공개 URL 정규화**, **SearXNG 후보 수집**, **검색 이미지 → ArcFace 선별 통합 경로**를 제공한다. 얼굴 역이미지 검색, 영상 트랙, 딥페이크 ONNX 통합은 아직 구현 전이다.
 
 ### Docker 권장 실행
 
@@ -158,6 +158,8 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --
 
 SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮은 웹 사진을 자동으로 찾는 얼굴 역검색은 아니며, 찾은 후보가 본인인지와 딥페이크인지는 다음 ArcFace·ONNX 단계에서 별도로 검사해야 한다. 자세한 실행법은 [`SEARXNG_RUNBOOK.md`](SEARXNG_RUNBOOK.md)에 있다.
 
+검색과 얼굴 선별을 한 번에 시험할 때는 `POST /v1/pipeline/search-and-filter`를 사용한다. 등록 사진은 로컬 ArcFace에만 입력되고, SearXNG에는 검색어만 전달된다. 결과에는 후보별 `similarity_raw`, 넓은 후보 기준 통과 여부, 최종 동일인 기준 통과 여부, 이미지 품질과 실패 코드가 포함된다.
+
 ## 데모에서 보여줄 내용
 
 현재 안전하게 시연할 수 있는 데모는 다음과 같다.
@@ -206,11 +208,12 @@ python scripts/check_repository_hygiene.py
 
 ## 다음 작업 순서
 
-1. SearXNG 후보를 다운로드하지 않고 ArcFace 입력으로 안전하게 전달 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
-2. 얼굴 역이미지 검색 제공자 후보와 Recall·비용을 별도 검증 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
-3. 얼굴·딥페이크 기준값과 품질 Gate 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
-4. 연구용 딥페이크 ONNX 추론을 통합 API에 연결 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
-5. 검색·선별·판별 전체 데모 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
+1. 검색 이미지의 다중 얼굴 처리와 영상 얼굴 트랙 비교 구현 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
+2. 넓은 후보 기준값을 공개 웹 validation 데이터로 보정 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
+3. 얼굴 역이미지 검색 제공자 후보와 Recall·비용을 별도 검증 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
+4. 얼굴·딥페이크 기준값과 품질 Gate 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
+5. 연구용 딥페이크 ONNX 추론을 통합 API에 연결 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
+6. 검색·선별·판별 전체 데모 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
 
 ## 발표용 한 문장
 

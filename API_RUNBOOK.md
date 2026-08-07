@@ -236,7 +236,42 @@ curl -X POST http://127.0.0.1:8000/v1/search/candidates \
 
 API는 SearXNG의 결과 URL도 내부망·로컬 주소인지 다시 검사하고, 제공자 오류가 일부 발생하면 `partial_failed` 상태로 정상 후보만 반환한다. 입력 검색어는 API 응답에 되돌려 주지 않는다.
 
-중요한 한계가 있다. SearXNG는 **검색어 기반 후보 수집기**이므로 얼굴 사진 자체로 같은 얼굴을 찾아주는 역이미지 검색이 아니다. 실제 URL 다운로드·ArcFace 얼굴 선별은 Issue #14, 얼굴 역검색 제공자 비교는 Issue #13의 후속 범위다.
+중요한 한계가 있다. SearXNG는 **검색어 기반 후보 수집기**이므로 얼굴 사진 자체로 같은 얼굴을 찾아주는 역이미지 검색이 아니다. 이미지 후보의 다운로드·ArcFace 선별은 아래 통합 API로 연결됐지만 다중 얼굴 이미지와 영상 트랙은 Issue #14, 얼굴 역검색 제공자 비교는 Issue #13의 후속 범위다.
+
+## 5. 검색 이미지 → ArcFace 선별 통합 API
+
+`POST /v1/pipeline/search-and-filter`는 한 요청에서 다음 순서로 처리한다.
+
+```text
+등록 얼굴 먼저 로컬 검증
+        ↓
+검색어만 SearXNG로 전송
+        ↓
+후보 URL의 DNS·리다이렉트·형식·크기 검사
+        ↓
+후보 이미지를 메모리에서 ArcFace 비교
+        ↓
+후보별 유사도·통과 여부·품질·실패 코드 반환
+```
+
+Swagger에서 등록 얼굴 사진과 폼 값을 입력하는 방법은 [`API_QUICKSTART.md`](API_QUICKSTART.md)에 있다. 명령줄 예시는 다음과 같다.
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
+  -F "reference_images=@./samples/register-1.jpg" \
+  -F "reference_images=@./samples/register-2.jpg" \
+  -F "reference_images=@./samples/register-3.jpg" \
+  -F "query_text=동의받은 검색어" \
+  -F "web_monitoring_consent=true" \
+  -F "maximum_results=3"
+```
+
+판정값은 두 단계다.
+
+- `retrieval_threshold=0.20`: 실제 본인 후보를 넓게 남기기 위한 **미보정 임시값**
+- `identity_threshold=0.2823836207389832`: Celeb-real 연구 기준값이며 운영 미승인
+
+현재 이 엔드포인트는 ArcFace 후보 선별 결과까지만 반환한다. 향후에는 `retrieval_match=true` 후보를 딥페이크 분석 단계로 넘길 계획이지만 아직 연결되지 않았으며, **현재 응답에는 딥페이크 판정값이 없다.** `identity_match=true`도 피해 사실 확정이 아니며 화면에는 얼굴 유사도 근거로만 표시한다. 등록 사진·후보 이미지·임베딩은 응답이나 GitHub에 저장하지 않는다.
 
 ## 딥소각 백엔드 연결 규칙
 
@@ -282,6 +317,12 @@ API는 SearXNG의 결과 URL도 내부망·로컬 주소인지 다시 검사하�
 | `URL_SECRET_PARAMETER_NOT_ALLOWED` | URL에 토큰·키로 보이는 쿼리 포함 | 비밀 쿼리를 제거한 공개 URL 사용 |
 | `WEB_MONITORING_CONSENT_REQUIRED` | 외부 이미지 검색 동의 없음 | 개인정보 엄격 모드 사용 또는 별도 동의 |
 | `SEARCH_PROVIDER_UNAVAILABLE` | 외부 검색 제공자 미설정 | 무료 URL 제보 모드 사용 |
+| `CANDIDATE_DNS_FAILED` | 후보 이미지 도메인 확인 실패 | 다른 공개 후보 사용 |
+| `CANDIDATE_DOWNLOAD_TIMEOUT` | 후보 이미지 다운로드 제한시간 초과 | 나중에 재시도 |
+| `CANDIDATE_IMAGE_TOO_LARGE` | 후보 이미지가 8MB 초과 | 더 작은 공개 이미지 사용 |
+| `UNSUPPORTED_CANDIDATE_CONTENT_TYPE` | 후보가 JPEG·PNG·WEBP가 아님 | 이미지 직접 URL 확인 |
+
+위 네 개 후보 다운로드 코드는 최상위 HTTP 오류가 아니라 `status="partial_failed"` 응답의 `candidates[].error_code`에 들어간다. 따라서 한 후보가 실패해도 다른 정상 후보와 그 유사도 결과는 함께 반환될 수 있다.
 
 오류 응답은 항상 같은 형태다.
 

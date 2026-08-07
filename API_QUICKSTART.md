@@ -113,7 +113,27 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --
 
 응답의 `provider`가 `searxng`이면 정상이다. 이 기능은 검색어로 후보 URL을 모으는 단계이며 얼굴 사진 역검색이나 동일인 판정은 하지 않는다.
 
-## 8. 종료
+## 8. 검색부터 얼굴 선별까지 한 번에 시험
+
+같은 Swagger 화면에서 `POST /v1/pipeline/search-and-filter`를 선택한다.
+
+1. `reference_images`에 동의받은 등록 얼굴 3장을 넣는다.
+2. `query_text`에 공개 검색에 동의한 검색어를 넣는다.
+3. `web_monitoring_consent`를 `true`로 설정한다.
+4. `maximum_results`는 처음에는 `3`으로 설정한다.
+5. `Execute`를 누른다.
+
+결과에서 확인할 값은 다음과 같다.
+
+- `similarity_raw`: 등록 얼굴과 후보 얼굴의 코사인 유사도 원값
+- `retrieval_match`: 넓은 후보수집 기준을 통과했는지
+- `identity_match`: 더 엄격한 연구용 동일인 기준을 통과했는지
+- `quality_summary`: 후보 얼굴 크기·선명도·밝기
+- `error_code`: 다운로드·얼굴 검출에 실패한 이유
+
+현재 `retrieval_threshold=0.20`은 기능 연결용 임시값이며 정확도 검증을 마친 운영값이 아니다. 여러 얼굴이 있는 이미지와 영상 후보는 아직 이 경로에서 처리하지 않는다.
+
+## 9. 종료
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.searxng.yml down

@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from faceguard_api.app import create_app
 from faceguard_api.domain import EncodedFace, FaceQuality
 from faceguard_api.errors import FaceGuardError
+from faceguard_api.media import DownloadedImage
 from faceguard_api.search import (
     SearchService,
     SearXNGProvider,
@@ -38,6 +39,12 @@ class FakeEncoder:
         else:
             embedding = np.array([1.0, 0.0], dtype=np.float32)
         return EncodedFace(embedding=embedding, quality=QUALITY)
+
+
+class FakeImageDownloader:
+    async def download(self, url: str) -> DownloadedImage:
+        payload = b"different" if "different" in url else b"same-candidate"
+        return DownloadedImage(payload, url, "image/jpeg")
 
 
 def test_settings(*, license_accepted: bool = True) -> Settings:
@@ -319,6 +326,134 @@ class FaceguardHttpTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "INVALID_REQUEST")
+
+    def test_search_and_filter_pipeline_returns_numeric_face_decisions(self):
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                200,
+                json={
+                    "results": [
+                        {
+                            "url": "https://example.com/same-post",
+                            "img_src": "https://cdn.example.com/same.jpg",
+                            "engine": "test images",
+                        },
+                        {
+                            "url": "https://example.com/different-post",
+                            "img_src": "https://cdn.example.com/different.jpg",
+                            "engine": "test images",
+                        },
+                    ]
+                },
+            )
+
+        provider = SearXNGProvider(
+            "http://searxng:8080", transport=httpx.MockTransport(handler)
+        )
+        search_service = SearchService([provider])
+        client = TestClient(
+            create_app(
+                test_settings(),
+                FakeEncoder(),
+                search_service=search_service,
+                image_downloader=FakeImageDownloader(),
+            )
+        )
+        response = client.post(
+            "/v1/pipeline/search-and-filter",
+            data={
+                "query_text": "동의받은 비공개 테스트 검색어",
+                "web_monitoring_consent": "true",
+                "maximum_results": "2",
+            },
+            files=[
+                image_file("reference_images", "private-ref-1.jpg", b"ref-1"),
+                image_file("reference_images", "private-ref-2.jpg", b"ref-2"),
+                image_file("reference_images", "private-ref-3.jpg", b"ref-3"),
+            ],
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["status"], "completed")
+        self.assertEqual(body["searched_candidate_count"], 2)
+        self.assertEqual(body["analyzed_candidate_count"], 2)
+        self.assertEqual(body["skipped_candidate_count"], 0)
+        self.assertEqual(body["retrieval_match_count"], 1)
+        self.assertEqual(body["identity_match_count"], 1)
+        self.assertEqual(
+            [item["status"] for item in body["candidates"]],
+            ["identity_match", "not_matched"],
+        )
+        self.assertEqual(body["candidates"][0]["matched_frame_count"], 1)
+        self.assertEqual(body["candidates"][0]["analyzed_frame_count"], 1)
+        self.assertIn("quality_summary", body["candidates"][0])
+        self.assertEqual(body["config_version"], "search-arcface-image-v1")
+        serialized = json.dumps(body, ensure_ascii=False)
+        self.assertNotIn("동의받은 비공개 테스트 검색어", serialized)
+        self.assertNotIn("private-ref", serialized)
+        self.assertNotIn("embedding", serialized)
+
+    def test_search_and_filter_checks_model_license_before_web_search(self):
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            return httpx.Response(200, json={"results": []})
+
+        provider = SearXNGProvider(
+            "http://searxng:8080", transport=httpx.MockTransport(handler)
+        )
+        client = TestClient(
+            create_app(
+                test_settings(license_accepted=False),
+                FakeEncoder(),
+                search_service=SearchService([provider]),
+                image_downloader=FakeImageDownloader(),
+            )
+        )
+        response = client.post(
+            "/v1/pipeline/search-and-filter",
+            data={
+                "query_text": "외부로 나가면 안 되는 검색어",
+                "web_monitoring_consent": "true",
+            },
+            files=[image_file("reference_images", "ref.jpg", b"ref")],
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json()["error"]["code"], "MODEL_LICENSE_NOT_ACCEPTED"
+        )
+        self.assertEqual(calls, [])
+
+    def test_search_and_filter_validates_reference_face_before_web_search(self):
+        calls = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            return httpx.Response(200, json={"results": []})
+
+        provider = SearXNGProvider(
+            "http://searxng:8080", transport=httpx.MockTransport(handler)
+        )
+        client = TestClient(
+            create_app(
+                test_settings(),
+                FakeEncoder(),
+                search_service=SearchService([provider]),
+                image_downloader=FakeImageDownloader(),
+            )
+        )
+        response = client.post(
+            "/v1/pipeline/search-and-filter",
+            data={
+                "query_text": "등록 사진 실패 시 전송하면 안 되는 검색어",
+                "web_monitoring_consent": "true",
+            },
+            files=[image_file("reference_images", "ref.jpg", b"no-face")],
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "NO_FACE")
+        self.assertEqual(calls, [])
 
 
 if __name__ == "__main__":
