@@ -27,6 +27,7 @@ from .schemas import (
 from .search import (
     SearchQuery,
     SearchService,
+    SearXNGProvider,
     SubmittedCandidate,
     UserSubmittedUrlProvider,
 )
@@ -41,6 +42,10 @@ RESEARCH_WARNING = (
 SEARCH_WARNING = (
     "현재 무료 모드는 사용자가 직접 넣은 공개 URL의 안전성 검사·정규화·중복 제거만 "
     "수행합니다. 인터넷 자동 검색이나 후보 발견을 완료했다는 뜻이 아닙니다."
+)
+SEARXNG_WARNING = (
+    "SearXNG은 검색어 기반 공개 후보 수집이며 얼굴 사진 역검색이 아닙니다. "
+    "후보가 본인인지와 딥페이크인지는 ArcFace·딥페이크 모델 단계에서 별도로 확인해야 합니다."
 )
 
 
@@ -83,16 +88,33 @@ def create_app(
     active_settings = settings or Settings.from_environment()
     active_encoder = encoder or InsightFaceEncoder(active_settings)
     service = FaceGuardService(active_settings, active_encoder)
-    active_search_service = search_service or SearchService(
-        [UserSubmittedUrlProvider()],
-        maximum_candidates=active_settings.maximum_search_candidates,
-        provider_timeout_seconds=active_settings.search_provider_timeout_seconds,
-    )
+    if search_service is None:
+        search_providers: list[Any] = [UserSubmittedUrlProvider()]
+        if active_settings.searxng_base_url:
+            search_providers.append(
+                SearXNGProvider(
+                    active_settings.searxng_base_url,
+                    request_timeout_seconds=(
+                        active_settings.searxng_request_timeout_seconds
+                    ),
+                    maximum_retries=active_settings.searxng_maximum_retries,
+                    retry_backoff_seconds=(
+                        active_settings.searxng_retry_backoff_seconds
+                    ),
+                )
+            )
+        active_search_service = SearchService(
+            search_providers,
+            maximum_candidates=active_settings.maximum_search_candidates,
+            provider_timeout_seconds=active_settings.search_provider_timeout_seconds,
+        )
+    else:
+        active_search_service = search_service
 
     application = FastAPI(
         title="딥소각 얼굴가드 API",
         description=(
-            "등록 얼굴 사진과 확인 사진을 비교하고 공개 후보 URL을 정규화하는 연구용 API입니다. "
+            "등록 얼굴 사진과 확인 사진을 비교하고 공개 웹 후보를 수집·정규화하는 연구용 API입니다. "
             "원본과 임베딩은 애플리케이션에 영구 저장하지 않습니다."
         ),
         version=active_settings.api_version,
@@ -126,6 +148,7 @@ def create_app(
     @application.get("/health", response_model=HealthResponse, tags=["운영"])
     async def health() -> HealthResponse:
         license_accepted = active_settings.accept_noncommercial_model_license
+        providers = list(getattr(active_search_service, "providers", ()))
         return HealthResponse(
             status="ok" if license_accepted else "license_confirmation_required",
             api_version=active_settings.api_version,
@@ -135,6 +158,10 @@ def create_app(
             model_fingerprint=active_encoder.model_fingerprint,
             license_accepted=license_accepted,
             threshold_status=active_settings.threshold_status,
+            search_providers=[provider.name for provider in providers],
+            web_search_enabled=any(
+                provider.accesses_external_network for provider in providers
+            ),
         )
 
     @application.post(
@@ -211,7 +238,7 @@ def create_app(
             503: {"model": ErrorResponse},
         },
         tags=["공개 후보 검색"],
-        summary="사용자가 제보한 공개 URL 후보 정규화·중복 제거",
+        summary="공개 URL 제보 또는 SearXNG 검색어로 후보 수집·중복 제거",
     )
     async def search_candidates(
         payload: SearchCandidatesRequest,
@@ -219,6 +246,11 @@ def create_app(
         query = SearchQuery(
             privacy_mode=payload.privacy_mode,
             web_monitoring_consent=payload.web_monitoring_consent,
+            text_query=payload.query_text,
+            categories=tuple(payload.categories),
+            language=payload.language,
+            safe_search=payload.safe_search,
+            maximum_results=payload.maximum_results,
             submitted_candidates=[
                 SubmittedCandidate(
                     page_url=candidate.page_url,
@@ -244,6 +276,7 @@ def create_app(
                     providers=list(candidate.providers),
                     rank=candidate.rank,
                     retrieved_at=candidate.retrieved_at,
+                    source_engine=candidate.source_engine,
                 )
                 for candidate in result.candidates
             ],
@@ -262,7 +295,11 @@ def create_app(
             duplicate_count=result.duplicate_count,
             truncated_count=result.truncated_count,
             processing_ms=result.processing_ms,
-            warning=SEARCH_WARNING,
+            warning=(
+                SEARXNG_WARNING
+                if any(provider.provider == "searxng" for provider in result.providers)
+                else SEARCH_WARNING
+            ),
         )
 
     return application
