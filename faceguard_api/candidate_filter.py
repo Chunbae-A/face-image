@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 
 import numpy as np
 
+from .deepfake import DeepfakeAnalysis
 from .domain import (
     EncodedFace,
     FaceQuality,
@@ -27,6 +28,22 @@ class ImageDownloader(Protocol):
     async def download(self, url: str) -> DownloadedImage: ...
 
 
+class DeepfakeImageAnalyzer(Protocol):
+    def analyze(self, payload: bytes) -> DeepfakeAnalysis: ...
+
+
+@dataclass(frozen=True)
+class CandidateDeepfakeDecision:
+    status: Literal["analyzed", "not_analyzed", "failed", "unavailable"]
+    deepfake_score: float | None
+    is_suspected_deepfake: bool | None
+    error_code: str | None
+    processing_ms: float
+    inference_ms: float | None
+    execution_provider: str | None
+    model_fingerprint: str | None
+
+
 @dataclass(frozen=True)
 class CandidateFaceDecision:
     page_url: str
@@ -41,6 +58,7 @@ class CandidateFaceDecision:
     analyzed_url: str | None
     error_code: str | None
     quality: FaceQuality | None
+    deepfake: CandidateDeepfakeDecision
     processing_ms: float
 
 
@@ -52,6 +70,9 @@ class CandidateFilterResult:
     skipped_candidate_count: int
     retrieval_match_count: int
     identity_match_count: int
+    deepfake_analyzed_candidate_count: int
+    deepfake_suspected_candidate_count: int
+    deepfake_failed_candidate_count: int
     processing_ms: float
 
 
@@ -68,10 +89,62 @@ class CandidateFilterService:
         settings: Settings,
         encoder: FaceEncoder,
         downloader: ImageDownloader,
+        deepfake_analyzer: DeepfakeImageAnalyzer | None = None,
     ) -> None:
         self.settings = settings
         self.encoder = encoder
         self.downloader = downloader
+        self.deepfake_analyzer = deepfake_analyzer
+
+    @staticmethod
+    def _deepfake_not_analyzed() -> CandidateDeepfakeDecision:
+        return CandidateDeepfakeDecision(
+            status="not_analyzed",
+            deepfake_score=None,
+            is_suspected_deepfake=None,
+            error_code=None,
+            processing_ms=0.0,
+            inference_ms=None,
+            execution_provider=None,
+            model_fingerprint=None,
+        )
+
+    async def _analyze_deepfake(self, payload: bytes) -> CandidateDeepfakeDecision:
+        if self.deepfake_analyzer is None:
+            return CandidateDeepfakeDecision(
+                status="unavailable",
+                deepfake_score=None,
+                is_suspected_deepfake=None,
+                error_code="DEEPFAKE_ANALYZER_UNAVAILABLE",
+                processing_ms=0.0,
+                inference_ms=None,
+                execution_provider=None,
+                model_fingerprint=None,
+            )
+        started = time.perf_counter()
+        try:
+            result = await asyncio.to_thread(self.deepfake_analyzer.analyze, payload)
+            return CandidateDeepfakeDecision(
+                status="analyzed",
+                deepfake_score=result.deepfake_score,
+                is_suspected_deepfake=result.is_suspected_deepfake,
+                error_code=None,
+                processing_ms=result.processing_ms,
+                inference_ms=result.inference_ms,
+                execution_provider=result.execution_provider,
+                model_fingerprint=result.model_fingerprint,
+            )
+        except FaceGuardError as error:
+            return CandidateDeepfakeDecision(
+                status=("unavailable" if error.code == "MODEL_UNAVAILABLE" else "failed"),
+                deepfake_score=None,
+                is_suspected_deepfake=None,
+                error_code=error.code,
+                processing_ms=(time.perf_counter() - started) * 1000.0,
+                inference_ms=None,
+                execution_provider=None,
+                model_fingerprint=None,
+            )
 
     def _encode_references(self, references: Sequence[bytes]) -> PreparedReferences:
         started = time.perf_counter()
@@ -154,6 +227,11 @@ class CandidateFilterService:
                     similarity >= self.settings.retrieval_similarity_threshold
                 )
                 identity_match = similarity >= self.settings.similarity_threshold
+                deepfake = (
+                    await self._analyze_deepfake(downloaded.payload)
+                    if retrieval_match
+                    else self._deepfake_not_analyzed()
+                )
                 if identity_match:
                     status = "identity_match"
                 elif retrieval_match:
@@ -174,6 +252,7 @@ class CandidateFilterService:
                         analyzed_url=downloaded.source_url,
                         error_code=None,
                         quality=query_face.quality,
+                        deepfake=deepfake,
                         processing_ms=(time.perf_counter() - candidate_started)
                         * 1000.0,
                     )
@@ -193,6 +272,7 @@ class CandidateFilterService:
                         analyzed_url=None,
                         error_code=error.code,
                         quality=None,
+                        deepfake=self._deepfake_not_analyzed(),
                         processing_ms=(time.perf_counter() - candidate_started)
                         * 1000.0,
                     )
@@ -214,6 +294,7 @@ class CandidateFilterService:
                         analyzed_url=None,
                         error_code=error.code,
                         quality=None,
+                        deepfake=self._deepfake_not_analyzed(),
                         processing_ms=(time.perf_counter() - candidate_started)
                         * 1000.0,
                     )
@@ -230,6 +311,16 @@ class CandidateFilterService:
                 item.retrieval_match is True for item in decisions
             ),
             identity_match_count=sum(item.identity_match is True for item in decisions),
+            deepfake_analyzed_candidate_count=sum(
+                item.deepfake.status == "analyzed" for item in decisions
+            ),
+            deepfake_suspected_candidate_count=sum(
+                item.deepfake.is_suspected_deepfake is True for item in decisions
+            ),
+            deepfake_failed_candidate_count=sum(
+                item.deepfake.status in {"failed", "unavailable"}
+                for item in decisions
+            ),
             processing_ms=(time.perf_counter() - started) * 1000.0,
         )
 
@@ -247,5 +338,12 @@ class CandidateFilterService:
             skipped_candidate_count=filtered.skipped_candidate_count,
             retrieval_match_count=filtered.retrieval_match_count,
             identity_match_count=filtered.identity_match_count,
+            deepfake_analyzed_candidate_count=(
+                filtered.deepfake_analyzed_candidate_count
+            ),
+            deepfake_suspected_candidate_count=(
+                filtered.deepfake_suspected_candidate_count
+            ),
+            deepfake_failed_candidate_count=filtered.deepfake_failed_candidate_count,
             processing_ms=prepared.processing_ms + filtered.processing_ms,
         )

@@ -10,7 +10,7 @@ from typing import Any
 
 import numpy as np
 
-from .domain import EncodedFace, FaceQuality, l2_normalize
+from .domain import AlignedEncodedFace, EncodedFace, FaceQuality, l2_normalize
 from .errors import FaceGuardError, ModelUnavailableError
 from .settings import Settings
 
@@ -178,7 +178,12 @@ class InsightFaceEncoder:
             raise FaceGuardError("INVALID_IMAGE", "3채널 컬러 이미지가 필요합니다.")
         return decoded
 
-    def encode(self, payload: bytes) -> EncodedFace:
+    def _encode(
+        self,
+        payload: bytes,
+        *,
+        aligned_face_size: int | None = None,
+    ) -> tuple[EncodedFace, np.ndarray | None]:
         self._initialize()
         image = self._decode_image(payload)
         assert self._application is not None
@@ -233,7 +238,7 @@ class InsightFaceEncoder:
         if embedding is None:
             raise ModelUnavailableError("얼굴 모델이 임베딩을 반환하지 않았습니다.")
 
-        return EncodedFace(
+        encoded = EncodedFace(
             embedding=l2_normalize(np.asarray(embedding, dtype=np.float32)),
             quality=FaceQuality(
                 detection_score=detection_score,
@@ -244,3 +249,49 @@ class InsightFaceEncoder:
                 image_height=height,
             ),
         )
+        if aligned_face_size is None:
+            return encoded, None
+
+        landmarks = np.asarray(getattr(face, "kps", []), dtype=np.float32)
+        if landmarks.shape != (5, 2) or not np.all(np.isfinite(landmarks)):
+            raise FaceGuardError(
+                "INVALID_FACE_LANDMARKS",
+                "얼굴 정렬에 필요한 눈·코·입 위치를 확인하지 못했습니다.",
+            )
+        try:
+            from insightface.utils import face_align
+
+            aligned = face_align.norm_crop(
+                image,
+                landmark=landmarks,
+                image_size=aligned_face_size,
+            )
+        except Exception as error:
+            raise FaceGuardError(
+                "FACE_ALIGNMENT_FAILED", "딥페이크 분석용 얼굴 정렬에 실패했습니다."
+            ) from error
+        if (
+            aligned is None
+            or aligned.ndim != 3
+            or aligned.shape != (aligned_face_size, aligned_face_size, 3)
+        ):
+            raise FaceGuardError(
+                "FACE_ALIGNMENT_FAILED", "딥페이크 분석용 얼굴 정렬 결과가 올바르지 않습니다."
+            )
+        return encoded, np.ascontiguousarray(aligned)
+
+    def encode(self, payload: bytes) -> EncodedFace:
+        encoded, _ = self._encode(payload)
+        return encoded
+
+    def encode_and_align(
+        self, payload: bytes, *, aligned_face_size: int
+    ) -> AlignedEncodedFace:
+        """얼굴 검출을 한 번만 수행해 ArcFace 특징과 정렬 얼굴을 반환한다."""
+
+        encoded, aligned = self._encode(
+            payload,
+            aligned_face_size=aligned_face_size,
+        )
+        assert aligned is not None
+        return AlignedEncodedFace(face=encoded, aligned_bgr=aligned)

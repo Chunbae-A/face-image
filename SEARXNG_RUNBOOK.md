@@ -20,7 +20,7 @@
 - 보내는 정보: `query_text`, 검색 종류, 언어, Safe Search 값
 - 보내지 않는 정보: 등록 얼굴 사진, 얼굴 임베딩, 사용자 계정 ID
 - 추가 통합 경로: 후보 이미지를 등록 얼굴과 비교해 동일인 가능성 수치 반환
-- 하지 않는 일: 얼굴 역이미지 검색, 영상 얼굴 트랙, 딥페이크 판정
+- 하지 않는 일: 얼굴 역이미지 검색, 영상 얼굴 트랙. 딥페이크 판정은 SearXNG가 아니라 후속 로컬 ONNX 단계가 수행한다.
 
 ## 1. 실행
 
@@ -76,7 +76,7 @@ curl http://127.0.0.1:8000/health
 
 Swagger에서 `POST /v1/pipeline/search-and-filter`를 선택한다. 등록 얼굴 3장, 동의받은 검색어, `web_monitoring_consent=true`, `maximum_results=3`을 입력한다.
 
-등록 얼굴은 로컬 ArcFace에만 사용되고 외부 검색엔진에는 전달되지 않는다. 결과의 `retrieval_match`는 넓은 후보 통과, `identity_match`는 더 엄격한 연구 기준 통과를 뜻한다. 두 값 모두 딥페이크 확정값은 아니다.
+등록 얼굴은 로컬 ArcFace에만 사용되고 외부 검색엔진에는 전달되지 않는다. 결과의 `retrieval_match`는 넓은 후보 통과, `identity_match`는 더 엄격한 연구 기준 통과를 뜻한다. `retrieval_match=true`인 단일 얼굴 이미지만 로컬 ONNX가 추가 분석하며 `deepfake_score`도 확정값은 아니다.
 
 ## 5. 종료
 
@@ -88,7 +88,7 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml down
 
 ## 데모에서 설명할 한 문장
 
-> 무료 SearXNG가 검색어로 공개 이미지 후보를 모으고, 안전한 이미지만 내려받아 로컬 ArcFace가 등록 얼굴과 유사도를 계산하도록 연결했습니다. 얼굴 역검색과 딥페이크 판정은 아직 별도 후속 단계입니다.
+> 무료 SearXNG가 공개 이미지 후보를 모으면 로컬 ArcFace가 본인 후보를 선별하고, 넓은 기준을 통과한 이미지에만 비공개 EfficientNet-B4 ONNX가 딥페이크 점수를 계산합니다. 얼굴 역검색과 영상 분석은 후속 단계입니다.
 
 ## 라이선스와 참고
 

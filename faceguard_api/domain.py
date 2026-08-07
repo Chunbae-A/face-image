@@ -24,6 +24,14 @@ class EncodedFace:
     quality: FaceQuality
 
 
+@dataclass(frozen=True)
+class AlignedEncodedFace:
+    """동일인 임베딩과 딥페이크 모델용 정렬 얼굴을 함께 보관한다."""
+
+    face: EncodedFace
+    aligned_bgr: np.ndarray
+
+
 def l2_normalize(vector: np.ndarray) -> np.ndarray:
     value = np.asarray(vector, dtype=np.float32).reshape(-1)
     if value.size == 0 or not np.all(np.isfinite(value)):

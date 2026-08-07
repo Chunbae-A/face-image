@@ -1,6 +1,6 @@
 # 딥소각 얼굴가드 API 사용 가이드
 
-이 API는 **등록 얼굴 사진 1~5장과 확인 사진 1장을 받아 같은 사람 후보인지 비교**하고, 공개 URL 제보 또는 검색어로 웹 후보를 정리한다. 실제 얼굴 비교에서는 등록 사진 3장을 권장한다.
+이 API는 **등록 얼굴 사진과 공개 후보의 동일인 가능성을 비교**하고, 넓은 후보 기준을 통과한 단일 얼굴 이미지를 Celeb-DF EfficientNet-B4 ONNX로 분석한다. 실제 얼굴 비교에서는 등록 사진 3장을 권장한다.
 
 현재 버전은 연구·해커톤 검증용이다. Celeb-real 기준선의 관측 오인식률이 목표보다 높았으므로 응답의 `threshold_status`는 항상 `research_only_unapproved`로 표시한다. 한국인 얼굴·실제 휴대전화 데이터 검증과 모델 가중치의 상용 사용권 해결 전에는 운영 본인인증 수단으로 사용하지 않는다.
 
@@ -18,6 +18,7 @@
 - 얼굴이 너무 작거나 탐지 신뢰도가 낮으면 재촬영 오류를 반환한다.
 - 원본 사진, 얼굴 crop, 512차원 임베딩을 애플리케이션의 영구 파일·DB·응답·로그에 저장하지 않는다.
 - 업로드 본문은 요청 처리 중 메모리 또는 프레임워크의 임시 버퍼에만 존재하며, 처리 후 닫는다.
+- 딥페이크 모델 점수는 보정된 확률이 아니며 단일 이미지 분석을 영상 판정 정확도로 표현하지 않는다.
 
 ## 가장 빠른 로컬 실행
 
@@ -35,8 +36,11 @@ InsightFace `buffalo_l` 가중치의 비상업 연구 조건을 직접 확인한
 ```bash
 export FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE=true
 export FACEGUARD_DEVICE=auto
+export FACEGUARD_DEEPFAKE_MODEL_PATH=.models/deepfake/efficientnet_b4.onnx
 python -m uvicorn faceguard_api.app:app --host 127.0.0.1 --port 8000
 ```
+
+딥페이크 경로에는 권한이 있는 비공개 모델 ZIP의 `efficientnet_b4.onnx`가 있어야 한다. API는 실행 전에 SHA-256 `c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1`을 검증하며 ONNX를 GitHub에 커밋하지 않는다.
 
 첫 추론에서는 모델 파일을 내려받고 준비하므로 이후 요청보다 오래 걸릴 수 있다. 서버가 켜지면 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)에서 요청을 직접 시험할 수 있다.
 
@@ -47,6 +51,8 @@ cp .env.example .env
 ```
 
 `.env`에서 이용 조건 확인값을 `true`로 바꾼 뒤 실행한다.
+
+딥페이크 API까지 사용할 때는 호스트의 `.models/deepfake/efficientnet_b4.onnx`를 준비한다. Compose는 이 디렉터리를 컨테이너 `/models/deepfake`에 읽기 전용으로 마운트한다.
 
 ```bash
 docker compose up --build
@@ -73,7 +79,7 @@ curl http://127.0.0.1:8000/health
 ```json
 {
   "status": "ok",
-  "api_version": "0.3.0",
+  "api_version": "0.5.0",
   "model_name": "buffalo_l",
   "model_loaded": false,
   "execution_provider": null,
@@ -81,11 +87,16 @@ curl http://127.0.0.1:8000/health
   "license_accepted": true,
   "threshold_status": "research_only_unapproved",
   "search_providers": ["user_url", "searxng"],
-  "web_search_enabled": true
+  "web_search_enabled": true,
+  "deepfake_model_name": "efficientnet_b4_celebdf_v2",
+  "deepfake_model_loaded": false,
+  "deepfake_execution_provider": null,
+  "deepfake_model_fingerprint": null,
+  "deepfake_threshold_status": "research_only_single_image_unvalidated"
 }
 ```
 
-`model_loaded`가 `false`인 것은 아직 첫 추론을 하지 않아 모델을 지연 로딩하는 상태다. 기본 Compose에서는 `search_providers`가 `["user_url"]`, SearXNG 결합 구성에서는 `["user_url", "searxng"]`이다.
+`model_loaded`와 `deepfake_model_loaded`가 `false`인 것은 아직 첫 추론을 하지 않아 모델을 지연 로딩하는 상태다. 기본 Compose에서는 `search_providers`가 `["user_url"]`, SearXNG 결합 구성에서는 `["user_url", "searxng"]`이다.
 
 ## 2. 동일인 확인 요청
 
@@ -139,7 +150,40 @@ curl -X POST http://127.0.0.1:8000/v1/faceguard/verify \
 
 실제 응답의 `reference_quality`에는 등록 사진 수만큼 품질 정보가 들어간다. 위 예시는 읽기 쉽게 한 장만 표시했다.
 
-## 3. 무료 공개 URL 후보 정규화
+## 3. 단일 얼굴 이미지 딥페이크 분석
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze \
+  -F "image=@./samples/candidate.jpg"
+```
+
+핵심 응답은 다음과 같다.
+
+```json
+{
+  "status": "completed",
+  "is_suspected_deepfake": true,
+  "deepfake_score": 0.83,
+  "raw_logit": 1.59,
+  "threshold": 0.7519882693886758,
+  "threshold_status": "research_only_single_image_unvalidated",
+  "inference_ms": 171.0,
+  "model_name": "efficientnet_b4_celebdf_v2",
+  "execution_provider": "CPUExecutionProvider",
+  "model_fingerprint": "c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1",
+  "config_version": "deepfake-single-image-v1"
+}
+```
+
+- `deepfake_score`: sigmoid를 적용한 0~1 모델 점수다. 보정된 확률이나 UI 신뢰도가 아니다.
+- `is_suspected_deepfake`: 연구 기준값을 넘었는지만 표시한다.
+- `raw_logit`: sigmoid 적용 전 모델 출력으로 재현성과 디버깅에 사용한다.
+- `threshold_status`: 영상 16프레임 평균 기준을 단일 이미지에 임시 재사용했음을 명시한다.
+- `quality_summary`: 얼굴 검출 신뢰도, 얼굴 면적, 선명도와 밝기다.
+
+처리 순서는 `SCRFD 얼굴 검출 → 5점 랜드마크 정렬(224×224) → 380×380 Resize → ImageNet 정규화 → EfficientNet-B4 ONNX → sigmoid`다. 이미지·정렬 crop·모델 입력 텐서는 저장하지 않는다.
+
+## 4. 무료 공개 URL 후보 정규화
 
 외부 검색 API 키 없이 사용자가 알고 있는 공개 페이지·미디어 URL을 공통 후보 형식으로 바꿀 수 있다. 이 경로는 얼굴 모델 가중치를 실행하지 않으므로 InsightFace 이용 조건 확인값과 무관하게 사용할 수 있다.
 
@@ -209,7 +253,7 @@ curl -X POST http://127.0.0.1:8000/v1/search/candidates \
 
 `privacy_strict`에서는 외부 검색을 호출하지 않는다. `web_monitoring`은 사용자의 명시적 동의와 별도 외부 검색 제공자 설정이 모두 있을 때만 사용할 수 있다. 기본 Compose에는 외부 검색 제공자가 없으므로 `web_monitoring` 요청은 `SEARCH_PROVIDER_UNAVAILABLE`로 거절한다.
 
-## 4. SearXNG 무료 키워드 검색
+## 5. SearXNG 무료 키워드 검색
 
 SearXNG 결합 Compose를 켠 뒤 다음처럼 호출한다.
 
@@ -238,7 +282,7 @@ API는 SearXNG의 결과 URL도 내부망·로컬 주소인지 다시 검사하�
 
 중요한 한계가 있다. SearXNG는 **검색어 기반 후보 수집기**이므로 얼굴 사진 자체로 같은 얼굴을 찾아주는 역이미지 검색이 아니다. 이미지 후보의 다운로드·ArcFace 선별은 아래 통합 API로 연결됐지만 다중 얼굴 이미지와 영상 트랙은 Issue #14, 얼굴 역검색 제공자 비교는 Issue #13의 후속 범위다.
 
-## 5. 검색 이미지 → ArcFace 선별 통합 API
+## 6. 검색 이미지 → ArcFace → 딥페이크 ONNX 통합 API
 
 `POST /v1/pipeline/search-and-filter`는 한 요청에서 다음 순서로 처리한다.
 
@@ -251,7 +295,9 @@ API는 SearXNG의 결과 URL도 내부망·로컬 주소인지 다시 검사하�
         ↓
 후보 이미지를 메모리에서 ArcFace 비교
         ↓
-후보별 유사도·통과 여부·품질·실패 코드 반환
+retrieval_match=true 후보만 단일 이미지 ONNX 분석
+        ↓
+후보별 유사도·딥페이크 점수·품질·실패 코드 반환
 ```
 
 Swagger에서 등록 얼굴 사진과 폼 값을 입력하는 방법은 [`API_QUICKSTART.md`](API_QUICKSTART.md)에 있다. 명령줄 예시는 다음과 같다.
@@ -266,12 +312,13 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
   -F "maximum_results=3"
 ```
 
-판정값은 두 단계다.
+판정값은 얼굴 두 단계와 딥페이크 한 단계다.
 
 - `retrieval_threshold=0.20`: 실제 본인 후보를 넓게 남기기 위한 **미보정 임시값**
 - `identity_threshold=0.2823836207389832`: Celeb-real 연구 기준값이며 운영 미승인
+- `deepfake_threshold=0.7519882693886758`: Celeb-DF **영상 평균** 연구 기준값을 단일 이미지에 임시 재사용
 
-현재 이 엔드포인트는 ArcFace 후보 선별 결과까지만 반환한다. 향후에는 `retrieval_match=true` 후보를 딥페이크 분석 단계로 넘길 계획이지만 아직 연결되지 않았으며, **현재 응답에는 딥페이크 판정값이 없다.** `identity_match=true`도 피해 사실 확정이 아니며 화면에는 얼굴 유사도 근거로만 표시한다. 등록 사진·후보 이미지·임베딩은 응답이나 GitHub에 저장하지 않는다.
+각 후보의 `deepfake.status`는 `analyzed`, `not_analyzed`, `failed`, `unavailable` 중 하나다. ArcFace 넓은 기준을 통과하지 않은 후보는 불필요한 오경고와 연산을 피하기 위해 `not_analyzed`로 남긴다. 모델이 없거나 실패하면 얼굴 유사도 결과는 유지하고 딥페이크 점수를 만들지 않으며 최상위 상태는 `partial_failed`가 된다. `identity_match=true`나 `is_suspected_deepfake=true`도 피해 사실 확정이 아니다. 등록 사진·후보 이미지·정렬 crop·임베딩은 응답이나 GitHub에 저장하지 않는다.
 
 ## 딥소각 백엔드 연결 규칙
 
@@ -295,6 +342,8 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 - 등록 영상 3개 평균과 같은 사람 영상 1개: 유사도 `0.718976`, 동일인 후보 통과
 - 같은 등록과 다른 사람 영상 1개: 유사도 `-0.047100`, 동일인 후보 거절
 - 원본 프레임과 임베딩 저장 없음
+- 비공개 EfficientNet-B4 ONNX SHA-256 일치와 CPU 유한 출력 smoke 통과
+- 단일 이미지 API는 테스트용 가짜 모델 없이 실제 ONNX 로딩 경로 검증
 
 이 값은 파이프라인이 끝까지 동작하는지 확인한 **1건의 스모크 테스트**다. 정확도, 오인식률, 한국인 일반화 또는 운영 안전성을 증명하는 결과가 아니다.
 
@@ -310,6 +359,8 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 | `TOO_MANY_PIXELS` | 해상도가 2천만 픽셀 초과 | 해상도 축소 |
 | `NO_FACE` | 얼굴을 찾지 못함 | 정면에서 밝게 재촬영 |
 | `MULTIPLE_FACES` | 얼굴이 둘 이상 있음 | 혼자 나온 사진 사용 |
+| `INVALID_FACE_LANDMARKS` | 정렬용 눈·코·입 위치 부족 | 정면에 가까운 선명한 사진 사용 |
+| `FACE_ALIGNMENT_FAILED` | ONNX 입력용 얼굴 정렬 실패 | 다른 얼굴 사진으로 재시도 |
 | `FACE_TOO_SMALL` | 얼굴 면적이 너무 작음 | 카메라에 더 가까이 촬영 |
 | `LOW_DETECTION_SCORE` | 얼굴이 불분명함 | 흔들림·가림을 없애고 재촬영 |
 | `MODEL_UNAVAILABLE` | 모델 또는 실행 환경 문제 | 서버 로그와 모델 설치 확인 |
@@ -322,7 +373,7 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 | `CANDIDATE_IMAGE_TOO_LARGE` | 후보 이미지가 8MB 초과 | 더 작은 공개 이미지 사용 |
 | `UNSUPPORTED_CANDIDATE_CONTENT_TYPE` | 후보가 JPEG·PNG·WEBP가 아님 | 이미지 직접 URL 확인 |
 
-위 네 개 후보 다운로드 코드는 최상위 HTTP 오류가 아니라 `status="partial_failed"` 응답의 `candidates[].error_code`에 들어간다. 따라서 한 후보가 실패해도 다른 정상 후보와 그 유사도 결과는 함께 반환될 수 있다.
+후보 다운로드 코드는 최상위 HTTP 오류가 아니라 `status="partial_failed"` 응답의 `candidates[].error_code`에 들어간다. 후보별 딥페이크 실패는 `candidates[].deepfake.error_code`에 들어간다. 따라서 한 후보나 ONNX가 실패해도 다른 정상 후보와 ArcFace 유사도 결과는 함께 반환되며, 실패한 모델 점수는 임의로 생성하지 않는다.
 
 오류 응답은 항상 같은 형태다.
 

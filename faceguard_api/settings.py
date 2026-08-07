@@ -9,6 +9,10 @@ from urllib.parse import urlsplit
 
 RESEARCH_THRESHOLD = 0.2823836207389832
 RESEARCH_RETRIEVAL_THRESHOLD = 0.20
+DEEPFAKE_RESEARCH_THRESHOLD = 0.7519882693886758
+DEEPFAKE_MODEL_SHA256 = (
+    "c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1"
+)
 
 
 def _environment_bool(name: str, default: bool) -> bool:
@@ -25,7 +29,7 @@ def _environment_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    api_version: str = "0.4.0"
+    api_version: str = "0.5.0"
     model_name: str = "buffalo_l"
     model_root: Path = Path(".models/insightface")
     device: str = "auto"
@@ -53,6 +57,17 @@ class Settings:
     maximum_pipeline_candidates: int = 10
     candidate_download_timeout_seconds: float = 4.0
     candidate_download_maximum_redirects: int = 2
+    deepfake_model_name: str = "efficientnet_b4_celebdf_v2"
+    deepfake_model_path: Path = Path(".models/deepfake/efficientnet_b4.onnx")
+    deepfake_model_sha256: str = DEEPFAKE_MODEL_SHA256
+    deepfake_device: str = "cpu"
+    deepfake_input_size: int = 380
+    deepfake_aligned_face_size: int = 224
+    deepfake_threshold: float = DEEPFAKE_RESEARCH_THRESHOLD
+    deepfake_threshold_status: str = "research_only_single_image_unvalidated"
+    deepfake_threshold_source: str = (
+        "Celeb-DF-v2 영상 16프레임 평균 기준값 0.7519882694를 단일 이미지 연결 시험에 재사용"
+    )
 
     def __post_init__(self) -> None:
         if self.device not in {"auto", "cpu", "cuda"}:
@@ -105,6 +120,20 @@ class Settings:
             raise ValueError("candidate_download_timeout_seconds는 양수여야 합니다.")
         if self.candidate_download_maximum_redirects < 0:
             raise ValueError("candidate_download_maximum_redirects는 0 이상이어야 합니다.")
+        if self.deepfake_device not in {"auto", "cpu", "cuda"}:
+            raise ValueError("deepfake_device는 auto, cpu, cuda 중 하나여야 합니다.")
+        if self.deepfake_input_size <= 0 or self.deepfake_aligned_face_size <= 0:
+            raise ValueError("딥페이크 모델 이미지 크기는 양수여야 합니다.")
+        if not 0.0 <= self.deepfake_threshold <= 1.0:
+            raise ValueError("deepfake_threshold는 0과 1 사이여야 합니다.")
+        if (
+            len(self.deepfake_model_sha256) != 64
+            or any(
+                character not in "0123456789abcdef"
+                for character in self.deepfake_model_sha256.lower()
+            )
+        ):
+            raise ValueError("deepfake_model_sha256은 64자리 16진수여야 합니다.")
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -168,5 +197,39 @@ class Settings:
             ),
             candidate_download_maximum_redirects=int(
                 os.environ.get("FACEGUARD_CANDIDATE_DOWNLOAD_MAXIMUM_REDIRECTS", "2")
+            ),
+            deepfake_model_name=os.environ.get(
+                "FACEGUARD_DEEPFAKE_MODEL_NAME", "efficientnet_b4_celebdf_v2"
+            ),
+            deepfake_model_path=Path(
+                os.environ.get(
+                    "FACEGUARD_DEEPFAKE_MODEL_PATH",
+                    ".models/deepfake/efficientnet_b4.onnx",
+                )
+            ).expanduser(),
+            deepfake_model_sha256=os.environ.get(
+                "FACEGUARD_DEEPFAKE_MODEL_SHA256", DEEPFAKE_MODEL_SHA256
+            )
+            .strip()
+            .lower(),
+            deepfake_device=os.environ.get(
+                "FACEGUARD_DEEPFAKE_DEVICE", "cpu"
+            )
+            .strip()
+            .lower(),
+            deepfake_input_size=int(
+                os.environ.get("FACEGUARD_DEEPFAKE_INPUT_SIZE", "380")
+            ),
+            deepfake_aligned_face_size=int(
+                os.environ.get("FACEGUARD_DEEPFAKE_ALIGNED_FACE_SIZE", "224")
+            ),
+            deepfake_threshold=float(
+                os.environ.get(
+                    "FACEGUARD_DEEPFAKE_THRESHOLD", DEEPFAKE_RESEARCH_THRESHOLD
+                )
+            ),
+            deepfake_threshold_status=os.environ.get(
+                "FACEGUARD_DEEPFAKE_THRESHOLD_STATUS",
+                "research_only_single_image_unvalidated",
             ),
         )
