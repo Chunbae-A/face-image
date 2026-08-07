@@ -11,6 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from .calibration import ScoreCalibration, unavailable_calibration_result
 from .candidate_filter import CandidateFilterService
 from .deepfake import DeepfakeOnnxAnalyzer
 from .domain import FaceQuality
@@ -200,6 +201,7 @@ def create_app(
     image_downloader: Any | None = None,
     deepfake_analyzer: Any | None = None,
     video_deepfake_analyzer: Any | None = None,
+    video_score_calibration: ScoreCalibration | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     active_encoder = encoder or InsightFaceEncoder(active_settings)
@@ -239,6 +241,11 @@ def create_app(
         active_settings,
         active_encoder,
         active_deepfake_analyzer,
+    )
+    active_video_score_calibration = video_score_calibration or ScoreCalibration.load(
+        active_settings.deepfake_calibration_path,
+        expected_model_fingerprint=active_settings.deepfake_model_sha256,
+        expected_scope="deepfake_video_mean_16_frames",
     )
     candidate_filter_service = CandidateFilterService(
         active_settings,
@@ -320,6 +327,16 @@ def create_app(
             deepfake_video_threshold_status=(
                 active_settings.deepfake_video_threshold_status
             ),
+            deepfake_video_calibration_status=(
+                active_video_score_calibration.status
+                if active_video_score_calibration is not None
+                else "not_available"
+            ),
+            deepfake_video_calibration_version=(
+                active_video_score_calibration.version
+                if active_video_score_calibration is not None
+                else None
+            ),
         )
 
     @application.post(
@@ -372,7 +389,12 @@ def create_app(
             request_id=str(uuid4()),
             is_same_person=verification.is_same_person,
             similarity=verification.similarity,
+            raw_score=verification.similarity,
+            calibrated_probability=None,
+            calibration_status="not_available",
+            calibration_version=None,
             threshold=verification.threshold,
+            decision_threshold=verification.threshold,
             threshold_status=verification.threshold_status,
             threshold_source=verification.threshold_source,
             warning=RESEARCH_WARNING,
@@ -419,8 +441,14 @@ def create_app(
             status="completed",
             is_suspected_deepfake=result.is_suspected_deepfake,
             deepfake_score=result.deepfake_score,
+            raw_score=result.deepfake_score,
+            calibrated_probability=None,
+            calibration_status="not_applicable_single_image",
+            calibration_version=None,
+            risk_level=None,
             raw_logit=result.raw_logit,
             threshold=result.threshold,
+            decision_threshold=result.threshold,
             threshold_status=active_settings.deepfake_threshold_status,
             threshold_source=active_settings.deepfake_threshold_source,
             warning=DEEPFAKE_WARNING,
@@ -477,16 +505,27 @@ def create_app(
             suffix=suffix,
             reference_payloads=reference_payloads,
         )
+        calibration = (
+            active_video_score_calibration.apply(result.video_score)
+            if active_video_score_calibration is not None
+            else unavailable_calibration_result()
+        )
         return DeepfakeVideoAnalysisResponse(
             request_id=str(uuid4()),
             status=result.status,
             is_suspected_deepfake=result.is_suspected_deepfake,
             video_score=result.video_score,
+            raw_score=result.video_score,
+            calibrated_probability=calibration.calibrated_probability,
+            calibration_status=calibration.calibration_status,
+            calibration_version=calibration.calibration_version,
+            risk_level=calibration.risk_level,
             threshold=result.threshold,
+            decision_threshold=result.threshold,
             threshold_status=active_settings.deepfake_video_threshold_status,
             threshold_source=active_settings.deepfake_video_threshold_source,
             aggregation=result.aggregation,
-            warning=DEEPFAKE_VIDEO_WARNING,
+            warning=f"{DEEPFAKE_VIDEO_WARNING} {calibration.warning}",
             duration_seconds=result.duration_seconds,
             fps=result.fps,
             total_frame_count=result.total_frame_count,
@@ -755,6 +794,15 @@ def create_app(
                     deepfake=CandidateDeepfakeDecisionResponse(
                         status=item.deepfake.status,
                         deepfake_score=item.deepfake.deepfake_score,
+                        raw_score=item.deepfake.deepfake_score,
+                        calibrated_probability=None,
+                        calibration_status=(
+                            "not_applicable_single_image"
+                            if item.deepfake.status == "analyzed"
+                            else "not_analyzed"
+                        ),
+                        calibration_version=None,
+                        risk_level=None,
                         is_suspected_deepfake=(item.deepfake.is_suspected_deepfake),
                         error_code=item.deepfake.error_code,
                         processing_ms=item.deepfake.processing_ms,

@@ -42,6 +42,8 @@ python -m uvicorn faceguard_api.app:app --host 127.0.0.1 --port 8000
 
 딥페이크 경로에는 권한이 있는 비공개 모델 ZIP의 `efficientnet_b4.onnx`가 있어야 한다. API는 실행 전에 SHA-256 `c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1`을 검증하며 ONNX를 GitHub에 커밋하지 않는다.
 
+영상 점수 보정 실험 결과가 있으면 `deepfake_video_calibration.json`도 같은 디렉터리에 둔다. 이 파일이 없거나 검증 Gate를 통과하지 못한 경우 API는 원점수만 반환하고, 화면용 확률인 `calibrated_probability`는 `null`로 유지한다.
+
 첫 추론에서는 모델 파일을 내려받고 준비하므로 이후 요청보다 오래 걸릴 수 있다. 서버가 켜지면 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)에서 요청을 직접 시험할 수 있다.
 
 ## Docker 실행
@@ -90,7 +92,7 @@ curl http://127.0.0.1:8000/health
 ```json
 {
   "status": "ok",
-  "api_version": "0.6.0",
+  "api_version": "0.7.0",
   "model_name": "buffalo_l",
   "model_loaded": false,
   "execution_provider": null,
@@ -104,7 +106,9 @@ curl http://127.0.0.1:8000/health
   "deepfake_execution_provider": null,
   "deepfake_model_fingerprint": null,
   "deepfake_threshold_status": "research_only_single_image_unvalidated",
-  "deepfake_video_threshold_status": "research_only_unapproved"
+  "deepfake_video_threshold_status": "research_only_unapproved",
+  "deepfake_video_calibration_status": "not_available",
+  "deepfake_video_calibration_version": null
 }
 ```
 
@@ -129,7 +133,12 @@ curl -X POST http://127.0.0.1:8000/v1/faceguard/verify \
   "request_id": "58a8762f-5d64-49f4-bde7-cd12d89f9236",
   "is_same_person": true,
   "similarity": 0.71,
+  "raw_score": 0.71,
+  "calibrated_probability": null,
+  "calibration_status": "not_available",
+  "calibration_version": null,
   "threshold": 0.2823836207389832,
+  "decision_threshold": 0.2823836207389832,
   "threshold_status": "research_only_unapproved",
   "threshold_source": "Celeb-real 기준선 5프레임·등록 3개, FAR 0.001 목표의 seed별 기준값 최댓값",
   "warning": "현재 판정 기준값은 Celeb-real 연구 기준선이며 운영 확정값이 아닙니다.",
@@ -173,11 +182,17 @@ curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze \
 
 ```json
 {
-  "status": "partial_failed",
+  "status": "completed",
   "is_suspected_deepfake": true,
   "deepfake_score": 0.83,
+  "raw_score": 0.83,
+  "calibrated_probability": null,
+  "calibration_status": "not_applicable_single_image",
+  "calibration_version": null,
+  "risk_level": null,
   "raw_logit": 1.59,
   "threshold": 0.7519882693886758,
+  "decision_threshold": 0.7519882693886758,
   "threshold_status": "research_only_single_image_unvalidated",
   "inference_ms": 171.0,
   "model_name": "efficientnet_b4_celebdf_v2",
@@ -221,7 +236,13 @@ curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze-video \
   "status": "completed",
   "is_suspected_deepfake": true,
   "video_score": 0.84,
+  "raw_score": 0.84,
+  "calibrated_probability": null,
+  "calibration_status": "research_only_unapproved",
+  "calibration_version": "celebdf-video-calibration-v1",
+  "risk_level": "high",
   "threshold": 0.7519882693886758,
+  "decision_threshold": 0.7519882693886758,
   "threshold_status": "research_only_unapproved",
   "aggregation": "mean",
   "requested_frame_count": 16,
@@ -246,6 +267,9 @@ curl -X POST http://127.0.0.1:8000/v1/deepfake/analyze-video \
 - 등록 사진이 없으면 첫 프레임의 가장 큰 얼굴을 기준으로 다음 프레임을 추적한다.
 - 유효 얼굴이 4프레임 미만이면 점수를 만들지 않고 오류를 반환한다.
 - `video_score`는 유효 프레임 점수의 평균이며 보정된 확률이 아니다.
+- `raw_score`는 `video_score`와 같은 모델 원점수다. 기존 클라이언트 호환을 위해 두 이름을 함께 제공한다.
+- `calibrated_probability`는 별도 validation·공식 test Gate를 통과한 경우에만 숫자를 반환한다. `null`이면 퍼센트로 표시하지 않는다.
+- `risk_level`은 validation에서 정한 `low`·`review`·`high` 구간이다. 확률이 아니라 검토 우선순위다.
 - `suspicious_segments`는 표본 프레임 주변을 묶은 **대략적인 검토 시간대**이지 모든 원본 프레임을 정밀 판독한 구간이 아니다.
 - 요청 영상은 임시 디렉터리에서 디코딩하고 요청 종료 전에 삭제한다. 얼굴 crop과 임베딩은 영구 저장하지 않는다.
 

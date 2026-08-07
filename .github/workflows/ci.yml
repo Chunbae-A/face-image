@@ -51,3 +51,8 @@ jobs:
           git diff --exit-code -- \
             notebooks/celebdf_deepfake_preprocess_kaggle.ipynb \
             notebooks/celebdf_deepfake_train_kaggle.ipynb
+
+      - name: Verify generated score calibration Kaggle notebook
+        run: |
+          python scripts/build_score_calibration_kaggle_notebook.py
+          git diff --exit-code -- notebooks/celebdf_score_calibration_kaggle.ipynb
