@@ -27,11 +27,15 @@ Validation에서 8/16/32프레임·통합 방식·기준값 선택
 공식 Test 518개 + 열화 조건 평가
         ↓
 비식별 결과 ZIP + 비공개 ONNX 모델 ZIP
+        ↓
+3단계 Notebook: 점수 보정
+        ↓
+비식별 calibration JSON + reliability diagram
 ```
 
 ## 0. 반드시 지킬 것
 
-- Dataset과 두 Notebook을 모두 `Private`로 유지한다.
+- Dataset과 세 Notebook을 모두 `Private`로 유지한다.
 - 원본 영상, 정렬 얼굴 crop, 영상별 점수, checkpoint와 ONNX를 공개하지 않는다.
 - 비식별 집계 결과 ZIP만 GitHub Issue와 PR에 올린다.
 - Celeb-DF의 Kaggle 비공개 처리 허용 여부와 InsightFace 제공 검출 가중치의 비상업 연구 조건을 직접 확인한다.
@@ -147,3 +151,23 @@ research_gate_pass
 - 1단계가 성공하기 전에 2단계를 시작하지 않는다.
 - Gate 미통과 결과도 숨기지 않는다. AUC 0.90 미만 또는 실제 영상 FPR 1% 초과면 즉시경보 모델로 승인하지 않는다.
 - Gate 통과도 Celeb-DF 내부 연구 결과다. 실제 웹 영상과 한국인 대상 운영 성능은 별도 검증이 필요하다.
+
+## 7. 3단계 — 화면용 점수 보정
+
+사용할 파일: [`notebooks/celebdf_score_calibration_kaggle.ipynb`](notebooks/celebdf_score_calibration_kaggle.ipynb)
+
+이 단계는 학습을 다시 하지 않는다. 새 Private Notebook에 파일을 Import하고 Input으로 다음 두 저장 결과를 연결한다.
+
+1. `deepsogak-celebdf-preprocess`의 저장된 Output
+2. `deepsogak-celebdf-train`의 저장된 Output
+
+GPU를 켜고 `Run All`을 실행한다. 노트북은 clean 16프레임 점수만 다시 계산한 뒤 Temperature, Platt, Isotonic 보정을 비교한다. 개별 점수는 `/kaggle/temp`에서 삭제하고 다음 비식별 파일만 Output에 남긴다.
+
+```text
+deepfake_video_calibration.json
+deepfake_score_calibration.png
+README_score_calibration.md
+deepfake_score_calibration_sanitized.zip
+```
+
+자세한 결과 해석과 API 설치 방법은 [`SCORE_CALIBRATION_RUNBOOK.md`](SCORE_CALIBRATION_RUNBOOK.md)를 따른다.

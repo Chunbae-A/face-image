@@ -1,0 +1,100 @@
+{
+  "schema_version": "1.0",
+  "calibration_version": "celebdf-video-mean16-2026-08-08-v1",
+  "scope": "deepfake_video_mean_16_frames",
+  "model_fingerprint": "c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1",
+  "selection_split": "validation",
+  "evaluation_split": "official_test",
+  "official_test_used_for_selection": false,
+  "raw_score_definition": "16개 대표 얼굴 프레임 sigmoid 점수의 산술평균",
+  "selected_method": "isotonic",
+  "parameters": {
+    "boundaries": [
+      0.8831653720699251,
+      1.0
+    ],
+    "values": [
+      0.0,
+      1.0
+    ]
+  },
+  "calibration_status": "research_only_unapproved",
+  "display_approved": false,
+  "warning": "점수 보정 실험은 완료했지만 ECE 또는 실제영상 오경고율 Gate를 통과하지 못했습니다. 보정 확률을 화면에 표시하지 말고 원점수와 검토 필요 문구만 사용하세요.",
+  "risk_bands": {
+    "selection_split": "validation",
+    "low_max_raw_score": 0.7519882693886758,
+    "low_rule": "validation fake FNR <= 0.05를 만족하는 최대 기준값 미만",
+    "high_min_raw_score": 0.7519882693886758,
+    "high_rule": "validation real FPR <= 0.01 목표 기준값 이상",
+    "requested_low_max_raw_score": 0.7519882693886758,
+    "review_band_empty": true,
+    "review_rule": "두 목표 경계가 만나거나 교차해 별도 review 구간이 없음"
+  },
+  "artifact_profile": "public_api_summary_v1",
+  "methods_compared": [
+    "isotonic",
+    "platt",
+    "temperature"
+  ],
+  "metrics": {
+    "validation_count": 836,
+    "official_test_count": 518,
+    "before": {
+      "validation": {
+        "nll": 0.02395860723531214,
+        "brier": 0.007033936929287075,
+        "ece": 0.017397691294109695
+      },
+      "official_test": {
+        "nll": 0.04987819856353032,
+        "brier": 0.013202690038332524,
+        "ece": 0.02978365191531752
+      }
+    },
+    "selected": {
+      "validation": {
+        "nll": 1.0000000494736472e-07,
+        "brier": 9.999999990832845e-15,
+        "ece": 9.999999995416422e-08
+      },
+      "official_test": {
+        "nll": 0.06223212915530027,
+        "brier": 0.0038610030888130884,
+        "ece": 0.0038609038610040343
+      }
+    },
+    "official_test_decision": {
+      "count": 518,
+      "real_count": 178,
+      "fake_count": 340,
+      "threshold": 0.7519882693886758,
+      "roc_auc": 0.9998017184401851,
+      "average_precision": 0.9998947902983202,
+      "accuracy": 0.9942084942084942,
+      "precision": 0.9912536443148688,
+      "recall": 1.0,
+      "f1": 0.9956076134699853,
+      "fpr": 0.016853932584269662,
+      "fnr": 0.0,
+      "eer": 0.005750165234633169,
+      "true_positive": 340,
+      "true_negative": 175,
+      "false_positive": 3,
+      "false_negative": 0
+    }
+  },
+  "gate": {
+    "ece_maximum": 0.05,
+    "real_video_fpr_maximum": 0.01,
+    "validation_ece_pass": true,
+    "official_test_ece_pass": true,
+    "official_test_real_fpr_pass": false,
+    "overall_pass": false
+  },
+  "privacy": {
+    "contains_video_ids": false,
+    "contains_frame_scores": false,
+    "contains_faces_or_embeddings": false
+  }
+}

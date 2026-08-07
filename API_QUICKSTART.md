@@ -77,7 +77,7 @@ curl http://127.0.0.1:8000/health
 4. `query_image`에 확인 얼굴 1장 선택
 5. `Execute` 선택
 
-`is_same_person`은 동일인 **후보 판정**이며 운영 본인인증 확정값이 아니다.
+`is_same_person`은 동일인 **후보 판정**이며 운영 본인인증 확정값이 아니다. `raw_score`는 확률이 아니고, 현재 얼굴 보정 데이터가 없으므로 `calibrated_probability=null`, `calibration_status=not_available`로 반환한다. `decision_threshold`는 판정에 사용한 연구 기준값이다.
 
 ## 6. 딥페이크 단일 이미지 시험
 
@@ -85,9 +85,9 @@ curl http://127.0.0.1:8000/health
 
 1. `image`에 얼굴 한 명이 선명하게 나온 이미지를 넣는다.
 2. `Execute`를 누른다.
-3. `deepfake_score`, `is_suspected_deepfake`, `threshold_status`를 확인한다.
+3. `raw_score`, `calibrated_probability`, `is_suspected_deepfake`, `threshold_status`를 확인한다.
 
-`deepfake_score`는 0~1 모델 점수지만 보정된 확률이나 정확도 신뢰도가 아니다. 현재 `0.751988...` 기준은 영상 16프레임 평균에서 선택한 값이므로 단일 이미지 응답은 항상 `research_only_single_image_unvalidated`로 표시한다.
+`deepfake_score`와 `raw_score`는 같은 0~1 모델 원점수지만 보정된 확률이나 정확도 신뢰도가 아니다. 현재 `0.751988...` 기준은 영상 16프레임 평균에서 선택한 값이므로 단일 이미지 응답은 항상 `calibrated_probability=null`, `calibration_status=not_applicable_single_image`로 표시한다.
 
 ## 7. 딥페이크 영상 시험
 
@@ -96,11 +96,11 @@ curl http://127.0.0.1:8000/health
 1. `video`에 최대 50MB·120초의 MP4 또는 MOV 영상을 넣는다.
 2. 영상에 여러 사람이 나오면 `reference_images`에 분석할 사람의 등록 사진을 넣는다. 3장을 권장한다.
 3. `Execute`를 누른다.
-4. `video_score`, `analyzed_frame_count`, `suspicious_segments`를 확인한다.
+4. `raw_score`, `calibrated_probability`, `calibration_status`, `risk_level`, `analyzed_frame_count`, `suspicious_segments`를 확인한다.
 
 영상 전체에서 최대 16개 대표 프레임을 고르고, 분석 가능한 얼굴 프레임의 점수를 평균한다. `suspicious_segments`는 정밀한 원본 프레임 탐지가 아니라 표본 프레임을 기준으로 만든 **검토 권장 시간대**다. 등록 사진이 없으면 첫 대표 프레임에서 가장 큰 얼굴을 기준으로 다음 프레임을 추적한다.
 
-`video_score`도 보정된 확률이 아니다. 공식 Test에서 실제 영상 오경고율 목표를 통과하지 못했으므로 응답은 `research_only_unapproved` 상태를 유지한다.
+`video_score`와 `raw_score`도 보정된 확률이 아니다. 보정 파일이 없으면 `calibration_status=not_available`이고, 파일은 있지만 Gate를 통과하지 못하면 `research_only_unapproved`다. 두 경우 모두 `calibrated_probability=null`이므로 화면에 `85% 확률`처럼 표시하지 않는다.
 
 ## 8. 무료 공개 URL 후보 시험
 

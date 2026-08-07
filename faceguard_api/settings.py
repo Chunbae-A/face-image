@@ -29,7 +29,7 @@ def _environment_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    api_version: str = "0.6.0"
+    api_version: str = "0.7.0"
     model_name: str = "buffalo_l"
     model_root: Path = Path(".models/insightface")
     device: str = "auto"
@@ -63,6 +63,9 @@ class Settings:
     deepfake_model_name: str = "efficientnet_b4_celebdf_v2"
     deepfake_model_path: Path = Path(".models/deepfake/efficientnet_b4.onnx")
     deepfake_model_sha256: str = DEEPFAKE_MODEL_SHA256
+    deepfake_calibration_path: Path = Path(
+        ".models/deepfake/deepfake_video_calibration.json"
+    )
     deepfake_device: str = "cpu"
     deepfake_input_size: int = 380
     deepfake_aligned_face_size: int = 224
@@ -249,6 +252,12 @@ class Settings:
             )
             .strip()
             .lower(),
+            deepfake_calibration_path=Path(
+                os.environ.get(
+                    "FACEGUARD_DEEPFAKE_CALIBRATION_PATH",
+                    ".models/deepfake/deepfake_video_calibration.json",
+                )
+            ).expanduser(),
             deepfake_device=os.environ.get("FACEGUARD_DEEPFAKE_DEVICE", "cpu")
             .strip()
             .lower(),

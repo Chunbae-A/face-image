@@ -34,6 +34,8 @@ class HealthResponse(BaseModel):
     deepfake_model_fingerprint: str | None = None
     deepfake_threshold_status: str
     deepfake_video_threshold_status: str
+    deepfake_video_calibration_status: str
+    deepfake_video_calibration_version: str | None = None
 
 
 class ImageQualityResponse(BaseModel):
@@ -49,7 +51,12 @@ class VerificationResponse(BaseModel):
     request_id: str
     is_same_person: bool
     similarity: float = Field(ge=-1.0, le=1.0)
+    raw_score: float = Field(ge=-1.0, le=1.0)
+    calibrated_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    calibration_status: str
+    calibration_version: str | None = None
     threshold: float = Field(ge=-1.0, le=1.0)
+    decision_threshold: float = Field(ge=-1.0, le=1.0)
     threshold_status: str
     threshold_source: str
     warning: str
@@ -68,8 +75,14 @@ class DeepfakeAnalysisResponse(BaseModel):
     status: Literal["completed"]
     is_suspected_deepfake: bool
     deepfake_score: float = Field(ge=0.0, le=1.0)
+    raw_score: float = Field(ge=0.0, le=1.0)
+    calibrated_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    calibration_status: str
+    calibration_version: str | None = None
+    risk_level: Literal["low", "review", "high"] | None = None
     raw_logit: float
     threshold: float = Field(ge=0.0, le=1.0)
+    decision_threshold: float = Field(ge=0.0, le=1.0)
     threshold_status: str
     threshold_source: str
     warning: str
@@ -107,7 +120,13 @@ class DeepfakeVideoAnalysisResponse(BaseModel):
     status: Literal["completed", "partial_failed"]
     is_suspected_deepfake: bool
     video_score: float = Field(ge=0.0, le=1.0)
+    raw_score: float = Field(ge=0.0, le=1.0)
+    calibrated_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    calibration_status: str
+    calibration_version: str | None = None
+    risk_level: Literal["low", "review", "high"] | None = None
     threshold: float = Field(ge=0.0, le=1.0)
+    decision_threshold: float = Field(ge=0.0, le=1.0)
     threshold_status: str
     threshold_source: str
     aggregation: Literal["mean"]
@@ -195,6 +214,11 @@ class SearchCandidatesResponse(BaseModel):
 class CandidateDeepfakeDecisionResponse(BaseModel):
     status: Literal["analyzed", "not_analyzed", "failed", "unavailable"]
     deepfake_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    raw_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    calibrated_probability: float | None = Field(default=None, ge=0.0, le=1.0)
+    calibration_status: str
+    calibration_version: str | None = None
+    risk_level: Literal["low", "review", "high"] | None = None
     is_suspected_deepfake: bool | None = None
     error_code: str | None = None
     processing_ms: float = Field(ge=0.0)

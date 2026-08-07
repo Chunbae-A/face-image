@@ -7,6 +7,7 @@ import numpy as np
 from fastapi.testclient import TestClient
 
 from faceguard_api.app import create_app
+from faceguard_api.calibration import ScoreCalibration
 from faceguard_api.deepfake import DeepfakeAnalysis
 from faceguard_api.domain import EncodedFace, FaceQuality
 from faceguard_api.errors import FaceGuardError
@@ -180,6 +181,10 @@ class FaceguardHttpTests(unittest.TestCase):
             response.json()["deepfake_video_threshold_status"],
             "research_only_unapproved",
         )
+        self.assertEqual(
+            response.json()["deepfake_video_calibration_status"], "not_available"
+        )
+        self.assertIsNone(response.json()["deepfake_video_calibration_version"])
 
     def test_deepfake_image_endpoint_returns_score_without_filename(self):
         response = self.client.post(
@@ -190,6 +195,10 @@ class FaceguardHttpTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["is_suspected_deepfake"])
         self.assertEqual(body["deepfake_score"], 0.9)
+        self.assertEqual(body["raw_score"], 0.9)
+        self.assertIsNone(body["calibrated_probability"])
+        self.assertEqual(body["calibration_status"], "not_applicable_single_image")
+        self.assertEqual(body["decision_threshold"], body["threshold"])
         self.assertEqual(
             body["threshold_status"], "research_only_single_image_unvalidated"
         )
@@ -237,6 +246,11 @@ class FaceguardHttpTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["is_suspected_deepfake"])
         self.assertEqual(body["video_score"], 0.85)
+        self.assertEqual(body["raw_score"], 0.85)
+        self.assertIsNone(body["calibrated_probability"])
+        self.assertEqual(body["calibration_status"], "not_available")
+        self.assertIsNone(body["risk_level"])
+        self.assertEqual(body["decision_threshold"], body["threshold"])
         self.assertEqual(body["aggregation"], "mean")
         self.assertEqual(body["reference_count"], 1)
         self.assertEqual(body["analyzed_frame_count"], 2)
@@ -250,6 +264,42 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertNotIn("private-video", serialized)
         self.assertNotIn("private-reference", serialized)
         self.assertIn("오경고율", body["warning"])
+
+    def test_deepfake_video_exposes_probability_only_for_approved_calibration(self):
+        calibration = ScoreCalibration(
+            version="test-approved-v1",
+            scope="deepfake_video_mean_16_frames",
+            method="platt",
+            parameters={"slope": 0.5, "intercept": 0.0},
+            model_fingerprint="b" * 64,
+            low_threshold=0.2,
+            high_threshold=0.8,
+            review_band_empty=False,
+            status="validated",
+            display_approved=True,
+            warning="내부 검증 Gate 통과",
+        )
+        client = TestClient(
+            create_app(
+                test_settings(),
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+                video_deepfake_analyzer=FakeVideoDeepfakeAnalyzer(),
+                video_score_calibration=calibration,
+            )
+        )
+
+        response = client.post(
+            "/v1/deepfake/analyze-video",
+            files=[image_file("video", "candidate.mp4", b"video", "video/mp4")],
+        )
+
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertIsNotNone(body["calibrated_probability"])
+        self.assertEqual(body["calibration_status"], "validated")
+        self.assertEqual(body["calibration_version"], "test-approved-v1")
+        self.assertEqual(body["risk_level"], "high")
 
     def test_deepfake_video_rejects_unsupported_content_type(self):
         response = self.client.post(
@@ -337,6 +387,10 @@ class FaceguardHttpTests(unittest.TestCase):
         body = response.json()
         self.assertTrue(body["is_same_person"])
         self.assertAlmostEqual(body["similarity"], 1.0)
+        self.assertEqual(body["raw_score"], body["similarity"])
+        self.assertIsNone(body["calibrated_probability"])
+        self.assertEqual(body["calibration_status"], "not_available")
+        self.assertEqual(body["decision_threshold"], body["threshold"])
         self.assertEqual(body["reference_count"], 3)
         self.assertEqual(body["recommended_reference_count"], 3)
         self.assertEqual(body["execution_provider"], "FakeExecutionProvider")
@@ -626,6 +680,10 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertIn("quality_summary", body["candidates"][0])
         self.assertEqual(body["candidates"][0]["deepfake"]["deepfake_score"], 0.9)
         self.assertEqual(body["candidates"][1]["deepfake"]["status"], "not_analyzed")
+        self.assertEqual(
+            body["candidates"][1]["deepfake"]["calibration_status"],
+            "not_analyzed",
+        )
         self.assertEqual(body["config_version"], "search-arcface-deepfake-image-v1")
         serialized = json.dumps(body, ensure_ascii=False)
         self.assertNotIn("동의받은 비공개 테스트 검색어", serialized)
