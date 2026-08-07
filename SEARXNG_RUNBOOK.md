@@ -11,13 +11,16 @@
       ↓
 딥소각 API가 공개 URL만 허용하고 중복 제거
       ↓
-ArcFace·딥페이크 분석에 전달할 후보 목록
+안전한 후보 이미지만 다운로드
+      ↓
+로컬 ArcFace가 등록 얼굴과 유사도 비교
 ```
 
 - 하는 일: 검색어 기반 공개 이미지·영상 후보 URL 수집
 - 보내는 정보: `query_text`, 검색 종류, 언어, Safe Search 값
 - 보내지 않는 정보: 등록 얼굴 사진, 얼굴 임베딩, 사용자 계정 ID
-- 하지 않는 일: 얼굴 역이미지 검색, 동일인 판정, 딥페이크 판정
+- 추가 통합 경로: 후보 이미지를 등록 얼굴과 비교해 동일인 가능성 수치 반환
+- 하지 않는 일: 얼굴 역이미지 검색, 영상 얼굴 트랙, 딥페이크 판정
 
 ## 1. 실행
 
@@ -69,7 +72,13 @@ curl http://127.0.0.1:8000/health
 
 검색엔진 상황에 따라 결과가 0개이거나 일부 엔진이 실패할 수 있다. 이것은 얼굴 모델 오류가 아니라 공개 검색엔진의 응답 상태다.
 
-## 4. 종료
+## 4. 검색과 얼굴 선별을 한 번에 실행
+
+Swagger에서 `POST /v1/pipeline/search-and-filter`를 선택한다. 등록 얼굴 3장, 동의받은 검색어, `web_monitoring_consent=true`, `maximum_results=3`을 입력한다.
+
+등록 얼굴은 로컬 ArcFace에만 사용되고 외부 검색엔진에는 전달되지 않는다. 결과의 `retrieval_match`는 넓은 후보 통과, `identity_match`는 더 엄격한 연구 기준 통과를 뜻한다. 두 값 모두 딥페이크 확정값은 아니다.
+
+## 5. 종료
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.searxng.yml down
@@ -79,7 +88,7 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml down
 
 ## 데모에서 설명할 한 문장
 
-> 무료 SearXNG로 공개 웹 후보를 검색어 기반으로 모으고 안전한 URL만 남기는 단계까지 연결했습니다. 얼굴 사진 역검색은 아니므로, 다음 단계에서 ArcFace가 후보 얼굴이 본인인지 확인하고 딥페이크 모델이 조작 위험을 별도로 계산합니다.
+> 무료 SearXNG가 검색어로 공개 이미지 후보를 모으고, 안전한 이미지만 내려받아 로컬 ArcFace가 등록 얼굴과 유사도를 계산하도록 연결했습니다. 얼굴 역검색과 딥페이크 판정은 아직 별도 후속 단계입니다.
 
 ## 라이선스와 참고
 

@@ -2,22 +2,27 @@
 
 from __future__ import annotations
 
+import time
 from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Request, UploadFile
+from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
+from .candidate_filter import CandidateFilterService
 from .domain import FaceQuality
 from .engine import InsightFaceEncoder
 from .errors import FaceGuardError
+from .media import PublicImageDownloader
 from .schemas import (
+    CandidateFaceDecisionResponse,
     ErrorBody,
     ErrorResponse,
     HealthResponse,
     ImageQualityResponse,
+    SearchAndFilterResponse,
     SearchCandidateResponse,
     SearchCandidatesRequest,
     SearchCandidatesResponse,
@@ -46,6 +51,10 @@ SEARCH_WARNING = (
 SEARXNG_WARNING = (
     "SearXNG은 검색어 기반 공개 후보 수집이며 얼굴 사진 역검색이 아닙니다. "
     "후보가 본인인지와 딥페이크인지는 ArcFace·딥페이크 모델 단계에서 별도로 확인해야 합니다."
+)
+PIPELINE_WARNING = (
+    "검색 후보 이미지를 ArcFace로 비교한 연구용 결과입니다. 검색 누락과 오인식이 가능하며, "
+    "retrieval_match 또는 identity_match만으로 딥페이크나 피해 사실을 확정하지 않습니다."
 )
 
 
@@ -84,6 +93,7 @@ def create_app(
     settings: Settings | None = None,
     encoder: Any | None = None,
     search_service: Any | None = None,
+    image_downloader: Any | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     active_encoder = encoder or InsightFaceEncoder(active_settings)
@@ -110,6 +120,16 @@ def create_app(
         )
     else:
         active_search_service = search_service
+    active_image_downloader = image_downloader or PublicImageDownloader(
+        maximum_bytes=active_settings.maximum_image_bytes,
+        timeout_seconds=active_settings.candidate_download_timeout_seconds,
+        maximum_redirects=active_settings.candidate_download_maximum_redirects,
+    )
+    candidate_filter_service = CandidateFilterService(
+        active_settings,
+        active_encoder,
+        active_image_downloader,
+    )
 
     application = FastAPI(
         title="딥소각 얼굴가드 API",
@@ -135,6 +155,8 @@ def create_app(
         del error
         if request.url.path == "/v1/search/candidates":
             message = "privacy_mode와 공개 후보 URL 목록을 JSON 형식으로 보내세요."
+        elif request.url.path == "/v1/pipeline/search-and-filter":
+            message = "등록 사진과 검색어를 multipart/form-data 형식으로 보내세요."
         else:
             message = "등록 사진과 확인 사진을 multipart/form-data 형식으로 보내세요."
         body = ErrorResponse(
@@ -300,6 +322,166 @@ def create_app(
                 if any(provider.provider == "searxng" for provider in result.providers)
                 else SEARCH_WARNING
             ),
+        )
+
+    @application.post(
+        "/v1/pipeline/search-and-filter",
+        response_model=SearchAndFilterResponse,
+        responses={
+            413: {"model": ErrorResponse},
+            415: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            503: {"model": ErrorResponse},
+        },
+        tags=["통합 파이프라인"],
+        summary="SearXNG 이미지 후보를 ArcFace로 동일인 가능성 선별",
+    )
+    async def search_and_filter(
+        reference_images: Annotated[
+            list[UploadFile],
+            File(description="등록 얼굴 사진 1~5장, 3장 권장"),
+        ],
+        query_text: Annotated[
+            str,
+            Form(
+                min_length=1,
+                max_length=200,
+                description="공개 검색에 동의한 검색어",
+            ),
+        ],
+        web_monitoring_consent: Annotated[
+            bool,
+            Form(description="검색어 외부 전송에 대한 명시적 동의"),
+        ],
+        maximum_results: Annotated[
+            int,
+            Form(
+                ge=1,
+                le=10,
+                description="검색 후 얼굴 비교할 최대 후보 수",
+            ),
+        ] = 5,
+        language: Annotated[
+            str,
+            Form(
+                min_length=2,
+                max_length=6,
+                pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$",
+            ),
+        ] = "ko-KR",
+        safe_search: Annotated[int, Form(ge=1, le=2)] = 2,
+    ) -> SearchAndFilterResponse:
+        if not active_settings.accept_noncommercial_model_license:
+            raise FaceGuardError(
+                "MODEL_LICENSE_NOT_ACCEPTED",
+                "InsightFace 비상업 연구용 가중치 조건 확인이 필요합니다.",
+                503,
+            )
+        if not web_monitoring_consent:
+            raise FaceGuardError(
+                "WEB_MONITORING_CONSENT_REQUIRED",
+                "외부 웹 검색을 사용하려면 검색어 전송 동의가 필요합니다.",
+            )
+        if len(reference_images) < active_settings.minimum_reference_images:
+            raise FaceGuardError(
+                "TOO_FEW_REFERENCES",
+                f"등록 사진이 최소 {active_settings.minimum_reference_images}장 필요합니다.",
+            )
+        if len(reference_images) > active_settings.maximum_reference_images:
+            raise FaceGuardError(
+                "TOO_MANY_REFERENCES",
+                f"등록 사진은 최대 {active_settings.maximum_reference_images}장까지 사용할 수 있습니다.",
+            )
+        if maximum_results > active_settings.maximum_pipeline_candidates:
+            raise FaceGuardError(
+                "TOO_MANY_PIPELINE_CANDIDATES",
+                f"얼굴 비교 후보는 최대 {active_settings.maximum_pipeline_candidates}개까지 처리할 수 있습니다.",
+            )
+
+        started = time.perf_counter()
+        reference_payloads = [
+            await _read_upload(upload, active_settings) for upload in reference_images
+        ]
+        prepared_references = await candidate_filter_service.prepare_references(
+            reference_payloads
+        )
+        search_result = await active_search_service.search(
+            SearchQuery(
+                privacy_mode="web_monitoring",
+                web_monitoring_consent=True,
+                text_query=query_text,
+                categories=("images",),
+                language=language,
+                safe_search=safe_search,
+                maximum_results=maximum_results,
+                submitted_candidates=[],
+            )
+        )
+        filtered = await candidate_filter_service.filter_prepared(
+            prepared_references,
+            search_result.candidates,
+        )
+        status = (
+            "partial_failed"
+            if search_result.status == "partial_failed"
+            or filtered.skipped_candidate_count
+            else "completed"
+        )
+        return SearchAndFilterResponse(
+            request_id=str(uuid4()),
+            status=status,
+            search_status=search_result.status,
+            searched_candidate_count=len(search_result.candidates),
+            analyzed_candidate_count=filtered.analyzed_candidate_count,
+            skipped_candidate_count=filtered.skipped_candidate_count,
+            retrieval_match_count=filtered.retrieval_match_count,
+            identity_match_count=filtered.identity_match_count,
+            retrieval_threshold=active_settings.retrieval_similarity_threshold,
+            identity_threshold=active_settings.similarity_threshold,
+            threshold_status=active_settings.threshold_status,
+            retrieval_threshold_source=(
+                "데모 연결용 임시 후보수집 기준값이며 공개 웹 validation으로 보정되지 않음"
+            ),
+            identity_threshold_source=active_settings.threshold_source,
+            reference_count=filtered.reference_count,
+            candidates=[
+                CandidateFaceDecisionResponse(
+                    page_url=item.page_url,
+                    media_url=item.media_url,
+                    thumbnail_url=item.thumbnail_url,
+                    provider=item.provider,
+                    source_engine=item.source_engine,
+                    status=item.status,
+                    similarity_raw=item.similarity_raw,
+                    retrieval_match=item.retrieval_match,
+                    identity_match=item.identity_match,
+                    analyzed_url=item.analyzed_url,
+                    matched_frame_count=1 if item.identity_match else 0,
+                    analyzed_frame_count=0 if item.status == "skipped" else 1,
+                    error_code=item.error_code,
+                    quality_summary=(
+                        _quality_response(item.quality) if item.quality else None
+                    ),
+                    processing_ms=item.processing_ms,
+                )
+                for item in filtered.candidates
+            ],
+            providers=[
+                SearchProviderResponse(
+                    provider=provider.provider,
+                    status=provider.status,
+                    candidate_count=provider.candidate_count,
+                    processing_ms=provider.processing_ms,
+                    error_code=provider.error_code,
+                )
+                for provider in search_result.providers
+            ],
+            processing_ms=(time.perf_counter() - started) * 1000.0,
+            model_name=active_settings.model_name,
+            execution_provider=active_encoder.provider,
+            model_fingerprint=active_encoder.model_fingerprint,
+            config_version="search-arcface-image-v1",
+            warning=PIPELINE_WARNING,
         )
 
     return application

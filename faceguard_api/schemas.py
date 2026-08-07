@@ -117,3 +117,48 @@ class SearchCandidatesResponse(BaseModel):
     truncated_count: int = Field(ge=0)
     processing_ms: float = Field(ge=0.0)
     warning: str
+
+
+class CandidateFaceDecisionResponse(BaseModel):
+    page_url: str
+    media_url: str | None = None
+    thumbnail_url: str | None = None
+    provider: str
+    source_engine: str | None = None
+    status: Literal[
+        "identity_match", "retrieval_match", "not_matched", "skipped"
+    ]
+    similarity_raw: float | None = Field(default=None, ge=-1.0, le=1.0)
+    retrieval_match: bool | None = None
+    identity_match: bool | None = None
+    analyzed_url: str | None = None
+    matched_frame_count: int = Field(ge=0, le=1)
+    analyzed_frame_count: int = Field(ge=0, le=1)
+    error_code: str | None = None
+    quality_summary: ImageQualityResponse | None = None
+    processing_ms: float = Field(ge=0.0)
+
+
+class SearchAndFilterResponse(BaseModel):
+    request_id: str
+    status: Literal["completed", "partial_failed"]
+    search_status: Literal["completed", "partial_failed"]
+    searched_candidate_count: int = Field(ge=0)
+    analyzed_candidate_count: int = Field(ge=0)
+    skipped_candidate_count: int = Field(ge=0)
+    retrieval_match_count: int = Field(ge=0)
+    identity_match_count: int = Field(ge=0)
+    retrieval_threshold: float = Field(ge=-1.0, le=1.0)
+    identity_threshold: float = Field(ge=-1.0, le=1.0)
+    threshold_status: str
+    retrieval_threshold_source: str
+    identity_threshold_source: str
+    reference_count: int = Field(gt=0)
+    candidates: list[CandidateFaceDecisionResponse]
+    providers: list[SearchProviderResponse]
+    processing_ms: float = Field(ge=0.0)
+    model_name: str
+    execution_provider: str | None = None
+    model_fingerprint: str | None = None
+    config_version: str
+    warning: str

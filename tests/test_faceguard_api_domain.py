@@ -45,6 +45,11 @@ class FaceguardDomainTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Settings(similarity_threshold=2.0)
         with self.assertRaises(ValueError):
+            Settings(
+                retrieval_similarity_threshold=0.6,
+                similarity_threshold=0.5,
+            )
+        with self.assertRaises(ValueError):
             Settings(minimum_face_area_ratio=0.0)
         with self.assertRaises(ValueError):
             Settings(maximum_search_candidates=0)
@@ -60,6 +65,12 @@ class FaceguardDomainTests(unittest.TestCase):
             Settings(searxng_maximum_retries=-1)
         with self.assertRaises(ValueError):
             Settings(searxng_retry_backoff_seconds=-0.1)
+        with self.assertRaises(ValueError):
+            Settings(maximum_pipeline_candidates=0)
+        with self.assertRaises(ValueError):
+            Settings(candidate_download_timeout_seconds=0.0)
+        with self.assertRaises(ValueError):
+            Settings(candidate_download_maximum_redirects=-1)
 
 
 if __name__ == "__main__":
