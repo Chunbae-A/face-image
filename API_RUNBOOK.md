@@ -271,7 +271,7 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 - `retrieval_threshold=0.20`: 실제 본인 후보를 넓게 남기기 위한 **미보정 임시값**
 - `identity_threshold=0.2823836207389832`: Celeb-real 연구 기준값이며 운영 미승인
 
-`retrieval_match=true` 후보만 다음 딥페이크 분석 대상으로 넘기는 구조다. `identity_match=true`도 피해·딥페이크 확정이 아니며 화면에는 얼굴 유사도 근거로만 표시한다. 등록 사진·후보 이미지·임베딩은 응답이나 GitHub에 저장하지 않는다.
+현재 이 엔드포인트는 ArcFace 후보 선별 결과까지만 반환한다. 향후에는 `retrieval_match=true` 후보를 딥페이크 분석 단계로 넘길 계획이지만 아직 연결되지 않았으며, **현재 응답에는 딥페이크 판정값이 없다.** `identity_match=true`도 피해 사실 확정이 아니며 화면에는 얼굴 유사도 근거로만 표시한다. 등록 사진·후보 이미지·임베딩은 응답이나 GitHub에 저장하지 않는다.
 
 ## 딥소각 백엔드 연결 규칙
 
@@ -321,6 +321,8 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 | `CANDIDATE_DOWNLOAD_TIMEOUT` | 후보 이미지 다운로드 제한시간 초과 | 나중에 재시도 |
 | `CANDIDATE_IMAGE_TOO_LARGE` | 후보 이미지가 8MB 초과 | 더 작은 공개 이미지 사용 |
 | `UNSUPPORTED_CANDIDATE_CONTENT_TYPE` | 후보가 JPEG·PNG·WEBP가 아님 | 이미지 직접 URL 확인 |
+
+위 네 개 후보 다운로드 코드는 최상위 HTTP 오류가 아니라 `status="partial_failed"` 응답의 `candidates[].error_code`에 들어간다. 따라서 한 후보가 실패해도 다른 정상 후보와 그 유사도 결과는 함께 반환될 수 있다.
 
 오류 응답은 항상 같은 형태다.
 

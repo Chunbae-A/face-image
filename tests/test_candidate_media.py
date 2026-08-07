@@ -11,6 +11,13 @@ async def public_resolver(hostname: str, port: int):
     return ("8.8.8.8",)
 
 
+class SlowByteStream(httpx.AsyncByteStream):
+    async def __aiter__(self):
+        yield b"1"
+        await asyncio.sleep(0.05)
+        yield b"2"
+
+
 class PublicImageDownloaderTests(unittest.TestCase):
     def run_download(self, downloader: PublicImageDownloader, url: str):
         return asyncio.run(downloader.download(url))
@@ -18,6 +25,9 @@ class PublicImageDownloaderTests(unittest.TestCase):
     def test_downloads_supported_public_image(self):
         def handler(request: httpx.Request) -> httpx.Response:
             self.assertEqual(request.headers["accept"], "image/jpeg,image/png,image/webp")
+            self.assertEqual(str(request.url), "https://8.8.8.8/person.jpg")
+            self.assertEqual(request.headers["host"], "cdn.example.com")
+            self.assertEqual(request.extensions["sni_hostname"], "cdn.example.com")
             return httpx.Response(
                 200,
                 headers={"content-type": "image/jpeg"},
@@ -101,7 +111,7 @@ class PublicImageDownloaderTests(unittest.TestCase):
         with self.assertRaises(CandidateDownloadError) as raised:
             self.run_download(downloader, "https://public.example.com/image.jpg")
         self.assertEqual(raised.exception.code, "PRIVATE_NETWORK_URL_BLOCKED")
-        self.assertEqual(calls, ["https://public.example.com/image.jpg"])
+        self.assertEqual(calls, ["https://8.8.8.8/image.jpg"])
 
     def test_rejects_non_image_content_type(self):
         downloader = PublicImageDownloader(
@@ -139,6 +149,23 @@ class PublicImageDownloaderTests(unittest.TestCase):
         with self.assertRaises(CandidateDownloadError) as raised:
             self.run_download(downloader, "https://cdn.example.com/large.png")
         self.assertEqual(raised.exception.code, "CANDIDATE_IMAGE_TOO_LARGE")
+
+    def test_absolute_deadline_includes_delayed_stream_chunks(self):
+        downloader = PublicImageDownloader(
+            maximum_bytes=1024,
+            timeout_seconds=0.01,
+            resolver=public_resolver,
+            transport=httpx.MockTransport(
+                lambda request: httpx.Response(
+                    200,
+                    headers={"content-type": "image/jpeg"},
+                    stream=SlowByteStream(),
+                )
+            ),
+        )
+        with self.assertRaises(CandidateDownloadError) as raised:
+            self.run_download(downloader, "https://cdn.example.com/slow.jpg")
+        self.assertEqual(raised.exception.code, "CANDIDATE_DOWNLOAD_TIMEOUT")
 
 
 if __name__ == "__main__":
