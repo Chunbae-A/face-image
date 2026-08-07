@@ -1,0 +1,9 @@
+{
+  "status": "passed",
+  "provider": "CPUExecutionProvider",
+  "input_size": 380,
+  "output_is_finite": true,
+  "processing_ms": 171.03601199960394,
+  "model_sha256": "c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1",
+  "sample_identity_in_report": false
+}

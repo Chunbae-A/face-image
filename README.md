@@ -29,8 +29,8 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 | 기능 | 하는 일 | 현재 상태 |
 |---|---|---|
 | 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | 설계 완료·구현 예정 ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
-| 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **모델 검증·로컬 API 완료** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
-| 딥페이크 판별 | 후보 영상의 얼굴 프레임이 실제인지 조작인지 분석 | **학습·공식 Test 완료, 모델 포장 재실행 중** ([#15](https://github.com/Chunbae-A/face-image/issues/15)) |
+| 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **독립 모델·로컬 API 완료, 검색 연결 대기** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
+| 딥페이크 판별 | 후보 영상의 얼굴 프레임이 실제인지 조작인지 분석 | **연구 기준선·ONNX 완료, 운영 Gate 미통과** ([#15](https://github.com/Chunbae-A/face-image/issues/15)) |
 | 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | 구현 예정 ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | 구현 예정 ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
 
@@ -84,7 +84,7 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 
 프레임을 뽑기 전에 영상을 Train/Validation/Test로 나눴다. 같은 영상 장면이 학습과 평가 양쪽에 섞이는 것을 막기 위해서다. 전체 전처리에서는 6,529개 영상 중 6,528개를 처리해 얼굴 crop 208,893개를 만들었고, 1개 영상은 유효 얼굴 프레임 부족으로 제외했다.
 
-Kaggle 3차 실행에서 학습과 공식 Test 평가는 완료됐고, ONNX 변환 단계에서만 선택 의존성 문제로 종료됐다. 아래 값은 그 실행에서 저장된 **연구 중간 결과**다.
+Kaggle 4차 실행에서 학습·공식 Test·ONNX 변환·CPU 추론 시험을 모두 완료했다. 아래 값은 공식 비식별 결과 파일에서 확인한 **최종 연구 기준선**이다.
 
 | 공식 Test 지표 | 결과 | 판단 |
 |---|---:|---|
@@ -96,13 +96,15 @@ Kaggle 3차 실행에서 학습과 공식 Test 평가는 완료됐고, ONNX 변�
 | FPR | **0.016854** | 실제 영상을 가짜로 잘못 경고한 비율 약 1.69% |
 | 얼굴 처리 coverage | 1.000000 | 공식 Test 평가 대상 처리 완료 |
 
-초기 연구 Gate는 `ROC-AUC ≥ 0.90`, `FPR ≤ 0.01`이다. AUC는 통과했지만 FPR이 목표 1%보다 높아 **즉시 경보·자동 차단용 모델로 승인하지 않는다.** 현재 Kaggle 4차 실행은 ONNX 변환을 수정하고 체크포인트가 중간 실패에도 보존되도록 검증하는 단계다. 상세 이력은 [Issue #15](https://github.com/Chunbae-A/face-image/issues/15)에 기록한다.
+초기 연구 Gate는 `ROC-AUC ≥ 0.90`, `FPR ≤ 0.01`이다. AUC는 통과했지만 FPR이 목표 1%보다 높아 **즉시 경보·자동 차단용 모델로 승인하지 않는다.** ONNX는 정상 생성됐고 CPU 추론 smoke도 약 `171ms`로 통과했지만, 이는 연결 시험일 뿐 API 응답시간 SLA가 아니다.
+
+열화 평가에서는 해상도 25% 축소와 흐림에서 FPR이 각각 약 `12.92%`, `11.80%`로 증가했고 저조도에서는 Recall이 약 `78.24%`로 감소했다. 따라서 실제 웹에서 재압축·축소된 영상에 바로 적용하면 안 된다. 상세 수치·무결성 hash·그래프는 [최종 결과 보고서](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
 
 재현 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md), 데이터 분할과 사전검사·현재 결과는 [`reports/celebdf_deepfake_baseline/2026-08-07`](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
 
 ## 얼굴가드 API 실행
 
-현재 HTTP API는 **얼굴 동일인 후보 선별 기능**을 제공한다. 딥페이크 ONNX 모델을 연결한 통합 API는 아직 구현 전이다.
+현재 HTTP API는 **얼굴 동일인 후보 선별 기능**을 제공한다. 딥페이크 ONNX 모델 파일은 준비됐지만 통합 API 연결은 아직 구현 전이다.
 
 ### Docker 권장 실행
 
@@ -190,13 +192,11 @@ python scripts/check_repository_hygiene.py
 
 ## 다음 작업 순서
 
-1. Kaggle 4차 완료 후 checkpoint·ONNX·CPU 추론 결과 보존
-2. FPR 1.69%를 낮추기 위한 기준값 보정과 열화 조건별 분석
-3. 공개 후보 검색 어댑터 구현 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
-4. ArcFace 후보 선별 API 연결 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
-5. 화면용 신뢰도 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
-6. 검색·선별·판별 통합 비동기 API 구현 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
-7. 전체 데모 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
+1. FPR 1.69%와 축소·흐림 오경고를 낮추기 위한 기준값·품질 Gate 보정 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
+2. 공개 후보 검색 어댑터 구현 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
+3. ArcFace 후보 선별 API 연결 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
+4. 연구용 딥페이크 ONNX 추론을 통합 API에 연결 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
+5. 검색·선별·판별 전체 데모 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
 
 ## 발표용 한 문장
 

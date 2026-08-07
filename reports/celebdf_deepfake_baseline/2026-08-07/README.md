@@ -1,22 +1,31 @@
-# Celeb-DF 전체 딥페이크 판별 기준선
+# Celeb-DF 전체 딥페이크 판별 기준선 최종 결과
 
 ## 결론
 
-Celeb-DF-v2 전체 6,529개 영상의 데이터 검사와 얼굴 전처리를 마쳤고, EfficientNet-B4 학습과 공식 Test 평가도 완료했다. 공식 Test ROC-AUC는 `0.999802`로 높았지만 실제 영상을 딥페이크로 잘못 경고한 FPR이 `0.016854`, 약 1.69%여서 목표 1% 이하를 통과하지 못했다.
+Celeb-DF-v2 전체 6,529개 영상으로 EfficientNet-B4 학습, 공식 Test 518개 평가, 촬영 열화 평가, ONNX 변환과 CPU 추론 시험을 완료했다.
 
-따라서 이 모델은 **연구 기준선**이며 즉시 경보·자동 차단·운영 API 모델로 승인하지 않는다. Kaggle 4차 실행에서는 학습 모델을 보존하면서 ONNX 변환과 CPU 추론 시험을 다시 검증하고 있다.
+- 공식 Test Video ROC-AUC: `0.999802`
+- 딥페이크 Recall: `100%`
+- 실제 영상 FPR: `1.685%`
+- 연구 Gate: **미통과**
+- ONNX Runtime CPU smoke: **통과**
 
-## 단계별 현황
+AUC와 Recall은 높지만 실제 영상 178개 중 3개를 딥페이크로 잘못 경고했다. 목표 FPR 1% 이하를 넘었고 축소·흐림 영상에서는 오경고가 더 크게 증가하므로, 이 모델은 **연구 기준선**이며 즉시 경보·자동 차단·운영 API 모델로 승인하지 않는다.
+
+![공식 Test와 열화 조건 결과](deepfake_baseline_summary.png)
+
+## 단계별 완료 상태
 
 | 단계 | 결과 | 상태 |
 |---|---|---|
 | 데이터 목록·라벨 검사 | 6,529개와 공식 Test 518개 확인 | 완료 |
 | 영상 단위 분할·누수 검사 | 내부 Train/Validation 동일 영상·원본 대상 그룹 교집합 0 | 완료 |
-| 전체 얼굴 전처리 | 6,528/6,529영상, 얼굴 crop 208,893개 | 완료 |
-| EfficientNet-B4 학습 | T4 x2, ImageNet 사전학습 기반 | 완료 |
-| 공식 Test·열화 평가 | 공식 Test 지표 산출 | 완료 |
-| ONNX 변환 | 3차에서 선택 의존성 문제로 종료 | 수정 후 4차 재실행 중 |
-| CPU API 연결 시험 | ONNX 생성 후 실행 | 대기 |
+| 전체 얼굴 전처리 | 6,528/6,529영상, 평가 manifest crop 208,893개 | 완료 |
+| EfficientNet-B4 학습 | T4 x2, 요청 8 epoch 중 조기 종료 6 epoch | 완료 |
+| 공식 Test·열화 평가 | 공식 Test 518개 전체 처리 | 완료 |
+| ONNX 변환 | opset 17, 380×380 동적 batch | 완료 |
+| CPU 추론 smoke | CPUExecutionProvider, 유한한 출력 확인 | 통과 |
+| 연구 Gate | ROC-AUC 통과, FPR 실패 | 운영 미승인 |
 
 ## 데이터 구성
 
@@ -27,46 +36,131 @@ Celeb-DF-v2 전체 6,529개 영상의 데이터 검사와 얼굴 전처리를 �
 | 공식 Test | 518 | 178 | 340 | 선택 완료 후 최종 성능 확인 |
 | 전체 | 6,529 | 890 | 5,639 |  |
 
-원본 ZIP 크기는 `9,952,957,051 bytes`이고 공식 Test 목록 SHA-256은 `07063d46206e011aef9d1ad8d1854f5b87ae519ba6e452b897cc528c3dcfcdc0`이다. 개인정보 보호를 위해 로컬 경로, 영상 파일명과 인물 ID는 보고서에 기록하지 않았다.
+프레임을 추출하기 전에 영상을 먼저 나눴다. 공식 Test는 학습·모델 선택·판정 기준 선택에 사용하지 않았다.
+
+원본 ZIP 크기는 `9,952,957,051 bytes`이고 공식 Test 목록 SHA-256은 `07063d46206e011aef9d1ad8d1854f5b87ae519ba6e452b897cc528c3dcfcdc0`이다.
 
 ## 얼굴 전처리 결과
 
 - 처리 성공: 6,528개 영상
 - 제외: 1개 영상
-- 제외 이유: 평가에 필요한 유효 얼굴 프레임 부족
-- 생성된 정렬 얼굴 crop: 208,893개
+- 제외 이유: `insufficient_valid_faces`
+- 평가 manifest 얼굴 crop: 208,893개
+- 전처리 시간: 약 1시간 26분
+- 영상당 전처리 p50/p95: 약 `0.750초` / `0.827초`
 - 전처리 Output: 약 3.017GB 비공개 TAR
 - 비공개 TAR SHA-256: `37de3d9a84743b943c2e1b905c1e1e3862a0afa0738b5a94d87c78ce5295306e`
 
 얼굴 crop, 파일명별 manifest와 원본 영상은 개인 식별 가능성이 있어 Kaggle Private Output으로만 유지하고 GitHub에 포함하지 않았다.
 
-## 학습·공식 Test 결과
+## 학습 설정
 
-다음 값은 Kaggle 3차 실행에서 학습과 평가가 끝난 뒤 출력된 집계값이다. 마지막 ONNX 포장 전에 실행이 종료됐으므로 모델 배포 완료 결과가 아니라 **성능 중간 결과**로 기록한다.
+| 항목 | 값 |
+|---|---|
+| 모델 | torchvision EfficientNet-B4 |
+| 시작 가중치 | ImageNet 사전학습 |
+| 입력 크기 | 380×380 |
+| 손실 | Binary cross entropy with logits |
+| 클래스 균형 | 역빈도 WeightedRandomSampler |
+| seed | 20260807 |
+| batch / gradient accumulation | 8 / 2 |
+| 요청/완료 epoch | 8 / 6 |
+| 최고 Validation Video AUC | 1.0 |
+| GPU | Tesla T4 |
+| PyTorch / CUDA | 2.10.0 / 12.8 |
+
+Validation에서 영상당 프레임 수, 프레임 점수 통합 방식과 판정 기준값을 정한 뒤 공식 Test에 고정 적용했다.
+
+- 선택 프레임 수: 16
+- 점수 통합: 평균
+- 판정 기준값: `0.7519882694`
+
+## 공식 Test 최종 결과
+
+| 지표 | 결과 |
+|---|---:|
+| 평가 영상 | 518 |
+| ROC-AUC | 0.9998017184 |
+| Average Precision | 0.9998947903 |
+| Accuracy | 0.9942084942 |
+| Precision | 0.9912536443 |
+| Recall | 1.0000000000 |
+| F1 | 0.9956076135 |
+| FPR | 0.0168539326 |
+| FNR | 0.0000000000 |
+| EER | 0.0057501652 |
+| p50 / p95 프레임 추론 | 약 159.7ms / 161.2ms |
+
+### 혼동행렬
+
+| 실제\예측 | 실제 | 딥페이크 |
+|---|---:|---:|
+| 실제 영상 178개 | 175 | **3** |
+| 딥페이크 340개 | 0 | **340** |
+
+딥페이크 340개는 모두 찾았지만 실제 영상 3개를 잘못 경고했다. 실제 영상 10,000개로 환산하면 약 169개 오경고 수준이다.
+
+초기 연구 Gate는 `ROC-AUC ≥ 0.90`, `FPR ≤ 0.01`이다. AUC Gate는 통과했지만 FPR Gate는 실패했다.
+
+## 촬영 열화 결과
+
+공식 Test와 같은 판정 기준값을 고정하고 입력만 열화했다.
+
+| 조건 | ROC-AUC | Recall | FPR | FP | FN |
+|---|---:|---:|---:|---:|---:|
+| 원본 | 0.999802 | 100.00% | 1.69% | 3 | 0 |
+| 해상도 25% 축소 | 0.995159 | 100.00% | **12.92%** | 23 | 0 |
+| 가우시안 흐림 σ=2 | 0.996927 | 100.00% | **11.80%** | 21 | 0 |
+| JPEG 품질 30 | 0.996910 | 94.41% | 0.56% | 1 | 19 |
+| 저조도 gamma=2 | 0.995373 | **78.24%** | 0.56% | 1 | 74 |
+
+- 축소·흐림은 실제 영상을 딥페이크라고 잘못 경고하는 문제가 커졌다.
+- JPEG·저조도는 오경고는 줄었지만 딥페이크를 놓치는 비율이 증가했다.
+- AUC만 보면 모두 높지만 고정 기준값에서의 실제 오류는 크게 달라진다.
+
+따라서 실제 웹 후보에는 입력 품질 Gate, 열화 보정과 외부 데이터 검증 없이 사용하지 않는다.
+
+## ONNX와 CPU 연결 시험
 
 | 항목 | 결과 |
-|---|---:|
-| 선택 프레임 수 | 16 |
-| 프레임 점수 통합 | 평균 |
-| 딥페이크 판정 기준값 | 0.7519882694 |
-| 공식 Test Video ROC-AUC | 0.9998017184 |
-| 공식 Test Recall | 1.0000000000 |
-| 공식 Test FPR | 0.0168539326 |
-| 공식 Test coverage | 1.0000000000 |
-| 연구 Gate | **미통과** |
+|---|---|
+| ONNX 변환 | 완료 |
+| opset | 17 |
+| 입력 | `batch × 3 × 380 × 380` |
+| 출력 | sigmoid 적용 전 `fake_logit` |
+| ONNX Runtime provider | CPUExecutionProvider |
+| 출력 유한값 검사 | 통과 |
+| 단일 smoke 처리시간 | 약 171.0ms |
+| 샘플 식별정보 보고서 포함 | 없음 |
 
-### 결과를 쉽게 읽으면
+`171ms`는 단일 연결 시험이며 API 응답시간 SLA가 아니다. 영상 API는 얼굴 검출, 프레임 추출, 여러 프레임 추론과 통합 시간을 별도로 측정해야 한다.
 
-- `ROC-AUC 0.9998`: 실제와 딥페이크 영상의 점수 순서를 전반적으로 매우 잘 구분했다.
-- `Recall 1.0`: 공식 Test의 딥페이크를 놓치지 않았다.
-- `FPR 0.01685`: 실제 영상 10,000개를 검사하면 약 169개를 딥페이크라고 잘못 경고할 수 있는 수준이다.
-- 목표는 FPR 1% 이하였으므로 현재 약 1.69%는 운영 Gate 실패다.
+## 무결성 hash와 보관 정책
 
-Recall만 높이려면 더 많은 영상을 위험하다고 경고할 수 있다. 딥소각 화면에서 사용자에게 즉시 경보를 제공하려면 딥페이크를 잘 찾는 것과 실제 영상을 억울하게 경고하지 않는 것을 함께 만족해야 한다.
+| 산출물 | SHA-256 | 공개 여부 |
+|---|---|---|
+| checkpoint | `adf8605655d56b02ec56cf75cc2d92d6da4eb93e7c27c1ed4dda5d1792d03dae` | 비공개 |
+| ONNX | `c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1` | 비공개 |
+| 비공개 모델 ZIP | `0f7be1668a864f31318b155588257992305672d2ca1733034ec36142530ba8d5` | 비공개 |
+| 비식별 결과 ZIP | `4a7aa5dabdfbacde44492b207ec4e4fcdc13b7e6955029506dce457f0a171e2f` | 집계 파일만 공개 가능 |
+| crop manifest | `2299f479a1e34fd3afe6f1827cff47bc1dec3ea1b09bf9aff6dade756c3a6702` | 비공개 |
 
-## 데이터 누수 검사
+두 ZIP은 다운로드 후 SHA-256 일치와 압축 무결성을 확인했다. 비공개 모델 ZIP은 Git 저장소 밖의 접근 제한 폴더에 보관하고 GitHub에는 올리지 않는다.
 
-프레임을 추출하기 전에 영상을 먼저 나눴다. 같은 영상의 거의 동일한 장면이 학습과 평가 양쪽에 들어가 성능이 부풀려지는 것을 막기 위해서다.
+## 공개한 비식별 결과 파일
+
+- [`inventory_aggregate.json`](inventory_aggregate.json): 데이터 수와 누수 집계
+- [`preprocess_aggregate.json`](preprocess_aggregate.json): 전처리 성공·실패와 환경 집계
+- [`train_aggregate.json`](train_aggregate.json): 학습 설정과 epoch별 집계
+- [`aggregate_metrics.json`](aggregate_metrics.json): 공식 Test·열화 지표와 곡선
+- [`onnx_export.json`](onnx_export.json): ONNX 규격과 hash
+- [`onnx_cpu_smoke.json`](onnx_cpu_smoke.json): CPU 연결 시험
+- [`MODEL_CARD.md`](MODEL_CARD.md): 연구용 모델 카드
+- [`deepfake_baseline_summary.png`](deepfake_baseline_summary.png): 결과 그래프
+
+이 파일들에는 원본 영상, 얼굴 crop, 파일명, 인물 ID, 개인별 점수와 로컬 경로가 없는 것을 검사했다.
+
+## 데이터 누수 검사와 한계
 
 | 검사 | 결과 |
 |---|---:|
@@ -88,18 +182,15 @@ Recall만 높이려면 더 많은 영상을 위험하다고 경고할 수 있다
 | 1차 | Kaggle torchvision과 Pillow 12 충돌 | Pillow 11.3으로 고정 |
 | 2차 | P100용 CUDA 커널 미지원 | GPU T4 x2로 변경하고 사전검사 추가 |
 | 3차 | 학습·평가 완료, ONNX 변환에서 `onnxscript` 누락 | 기존 ONNX 변환기로 고정 |
-| 4차 | T4 x2 재실행 | 체크포인트를 결과 영역에 먼저 저장하도록 개선 |
+| 4차 | 학습·평가·ONNX·CPU smoke·결과 포장 | **전체 성공** |
 
-4차에서는 마지막 단계가 다시 실패해도 `/kaggle/working/private_model`에 체크포인트가 남아 약 4시간의 학습을 다시 하지 않아도 된다.
+## 다음 단계
 
-## 완료 판정 전에 남은 일
+Issue #15의 목표인 재현 가능한 전체 딥페이크 기준선은 완료했다. 성능 Gate 미통과도 기준선 결과로 인정하고 숨기지 않는다.
 
-1. Kaggle 4차 실행 완료 확인
-2. 비공개 checkpoint와 ONNX ZIP 보존
-3. ONNX Runtime CPU 추론 smoke 통과
-4. 비식별 결과 ZIP의 SHA-256과 최종 그래프 기록
-5. FPR 1% 초과 원인과 기준값 보정 실험 계획 확정
-6. 운영이 아닌 연구 모델로 API 후보 연결
+1. [Issue #16](https://github.com/Chunbae-A/face-image/issues/16)에서 품질 조건별 기준값·점수 보정과 화면용 신뢰도를 실험한다.
+2. [Issue #17](https://github.com/Chunbae-A/face-image/issues/17)에서 ONNX를 연구용 비동기 분석 API에 연결한다.
+3. 한국인·최신 생성 방식·실제 웹 재압축 영상으로 외부 검증한다.
 
 실행 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](../../../DEEPFAKE_KAGGLE_RUNBOOK.md), 전체 진행 기록은 [Issue #15](https://github.com/Chunbae-A/face-image/issues/15)에 있다.
 
