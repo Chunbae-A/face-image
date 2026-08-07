@@ -28,6 +28,11 @@ class HealthResponse(BaseModel):
     threshold_status: str
     search_providers: list[str]
     web_search_enabled: bool
+    deepfake_model_name: str
+    deepfake_model_loaded: bool
+    deepfake_execution_provider: str | None = None
+    deepfake_model_fingerprint: str | None = None
+    deepfake_threshold_status: str
 
 
 class ImageQualityResponse(BaseModel):
@@ -55,6 +60,25 @@ class VerificationResponse(BaseModel):
     model_name: str
     execution_provider: str | None = None
     model_fingerprint: str | None = None
+
+
+class DeepfakeAnalysisResponse(BaseModel):
+    request_id: str
+    status: Literal["completed"]
+    is_suspected_deepfake: bool
+    deepfake_score: float = Field(ge=0.0, le=1.0)
+    raw_logit: float
+    threshold: float = Field(ge=0.0, le=1.0)
+    threshold_status: str
+    threshold_source: str
+    warning: str
+    quality_summary: ImageQualityResponse
+    processing_ms: float = Field(ge=0.0)
+    inference_ms: float = Field(ge=0.0)
+    model_name: str
+    execution_provider: str
+    model_fingerprint: str
+    config_version: str
 
 
 class SubmittedSearchCandidate(BaseModel):
@@ -119,6 +143,17 @@ class SearchCandidatesResponse(BaseModel):
     warning: str
 
 
+class CandidateDeepfakeDecisionResponse(BaseModel):
+    status: Literal["analyzed", "not_analyzed", "failed", "unavailable"]
+    deepfake_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    is_suspected_deepfake: bool | None = None
+    error_code: str | None = None
+    processing_ms: float = Field(ge=0.0)
+    inference_ms: float | None = Field(default=None, ge=0.0)
+    execution_provider: str | None = None
+    model_fingerprint: str | None = None
+
+
 class CandidateFaceDecisionResponse(BaseModel):
     page_url: str
     media_url: str | None = None
@@ -136,6 +171,7 @@ class CandidateFaceDecisionResponse(BaseModel):
     analyzed_frame_count: int = Field(ge=0, le=1)
     error_code: str | None = None
     quality_summary: ImageQualityResponse | None = None
+    deepfake: CandidateDeepfakeDecisionResponse
     processing_ms: float = Field(ge=0.0)
 
 
@@ -148,11 +184,17 @@ class SearchAndFilterResponse(BaseModel):
     skipped_candidate_count: int = Field(ge=0)
     retrieval_match_count: int = Field(ge=0)
     identity_match_count: int = Field(ge=0)
+    deepfake_analyzed_candidate_count: int = Field(ge=0)
+    deepfake_suspected_candidate_count: int = Field(ge=0)
+    deepfake_failed_candidate_count: int = Field(ge=0)
     retrieval_threshold: float = Field(ge=-1.0, le=1.0)
     identity_threshold: float = Field(ge=-1.0, le=1.0)
     threshold_status: str
     retrieval_threshold_source: str
     identity_threshold_source: str
+    deepfake_threshold: float = Field(ge=0.0, le=1.0)
+    deepfake_threshold_status: str
+    deepfake_threshold_source: str
     reference_count: int = Field(gt=0)
     candidates: list[CandidateFaceDecisionResponse]
     providers: list[SearchProviderResponse]
@@ -160,5 +202,8 @@ class SearchAndFilterResponse(BaseModel):
     model_name: str
     execution_provider: str | None = None
     model_fingerprint: str | None = None
+    deepfake_model_name: str
+    deepfake_execution_provider: str | None = None
+    deepfake_model_fingerprint: str | None = None
     config_version: str
     warning: str

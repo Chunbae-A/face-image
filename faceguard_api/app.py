@@ -12,12 +12,15 @@ from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
 
 from .candidate_filter import CandidateFilterService
+from .deepfake import DeepfakeOnnxAnalyzer
 from .domain import FaceQuality
 from .engine import InsightFaceEncoder
 from .errors import FaceGuardError
 from .media import PublicImageDownloader
 from .schemas import (
+    CandidateDeepfakeDecisionResponse,
     CandidateFaceDecisionResponse,
+    DeepfakeAnalysisResponse,
     ErrorBody,
     ErrorResponse,
     HealthResponse,
@@ -53,8 +56,14 @@ SEARXNG_WARNING = (
     "후보가 본인인지와 딥페이크인지는 ArcFace·딥페이크 모델 단계에서 별도로 확인해야 합니다."
 )
 PIPELINE_WARNING = (
-    "검색 후보 이미지를 ArcFace로 비교한 연구용 결과입니다. 검색 누락과 오인식이 가능하며, "
-    "retrieval_match 또는 identity_match만으로 딥페이크나 피해 사실을 확정하지 않습니다."
+    "검색 후보를 ArcFace로 선별하고 넓은 후보 기준을 통과한 단일 얼굴 이미지만 ONNX로 "
+    "분석한 연구용 결과입니다. deepfake_score는 보정된 확률이나 확정 신뢰도가 아니며, "
+    "사람 검토 없이 피해 사실을 확정하거나 자동 신고·삭제하지 않습니다."
+)
+DEEPFAKE_WARNING = (
+    "deepfake_score는 Celeb-DF-v2로 학습한 모델의 단일 얼굴 이미지 점수입니다. "
+    "현재 기준값은 영상 16프레임 평균에서 선택됐으므로 단일 이미지 정확도와 운영 신뢰도를 "
+    "보장하지 않습니다."
 )
 
 
@@ -94,6 +103,7 @@ def create_app(
     encoder: Any | None = None,
     search_service: Any | None = None,
     image_downloader: Any | None = None,
+    deepfake_analyzer: Any | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     active_encoder = encoder or InsightFaceEncoder(active_settings)
@@ -125,16 +135,22 @@ def create_app(
         timeout_seconds=active_settings.candidate_download_timeout_seconds,
         maximum_redirects=active_settings.candidate_download_maximum_redirects,
     )
+    active_deepfake_analyzer = deepfake_analyzer or DeepfakeOnnxAnalyzer(
+        active_settings,
+        active_encoder,
+    )
     candidate_filter_service = CandidateFilterService(
         active_settings,
         active_encoder,
         active_image_downloader,
+        active_deepfake_analyzer,
     )
 
     application = FastAPI(
         title="딥소각 얼굴가드 API",
         description=(
-            "등록 얼굴 사진과 확인 사진을 비교하고 공개 웹 후보를 수집·정규화하는 연구용 API입니다. "
+            "등록 얼굴 비교, 공개 웹 후보 수집·선별과 단일 얼굴 딥페이크 ONNX 분석을 제공하는 "
+            "연구용 API입니다. "
             "원본과 임베딩은 애플리케이션에 영구 저장하지 않습니다."
         ),
         version=active_settings.api_version,
@@ -157,6 +173,8 @@ def create_app(
             message = "privacy_mode와 공개 후보 URL 목록을 JSON 형식으로 보내세요."
         elif request.url.path == "/v1/pipeline/search-and-filter":
             message = "등록 사진과 검색어를 multipart/form-data 형식으로 보내세요."
+        elif request.url.path == "/v1/deepfake/analyze":
+            message = "분석할 얼굴 이미지를 multipart/form-data 형식으로 보내세요."
         else:
             message = "등록 사진과 확인 사진을 multipart/form-data 형식으로 보내세요."
         body = ErrorResponse(
@@ -184,6 +202,13 @@ def create_app(
             web_search_enabled=any(
                 provider.accesses_external_network for provider in providers
             ),
+            deepfake_model_name=active_settings.deepfake_model_name,
+            deepfake_model_loaded=bool(active_deepfake_analyzer.loaded),
+            deepfake_execution_provider=active_deepfake_analyzer.provider,
+            deepfake_model_fingerprint=(
+                active_deepfake_analyzer.model_fingerprint
+            ),
+            deepfake_threshold_status=active_settings.deepfake_threshold_status,
         )
 
     @application.post(
@@ -250,6 +275,51 @@ def create_app(
             model_name=active_settings.model_name,
             execution_provider=active_encoder.provider,
             model_fingerprint=active_encoder.model_fingerprint,
+        )
+
+    @application.post(
+        "/v1/deepfake/analyze",
+        response_model=DeepfakeAnalysisResponse,
+        responses={
+            413: {"model": ErrorResponse},
+            415: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            503: {"model": ErrorResponse},
+        },
+        tags=["딥페이크 분석"],
+        summary="얼굴 이미지 한 장을 Celeb-DF 연구용 ONNX로 분석",
+    )
+    async def analyze_deepfake(
+        image: Annotated[
+            UploadFile,
+            File(description="얼굴 한 명이 선명하게 나온 JPEG, PNG 또는 WEBP"),
+        ],
+    ) -> DeepfakeAnalysisResponse:
+        if not active_settings.accept_noncommercial_model_license:
+            raise FaceGuardError(
+                "MODEL_LICENSE_NOT_ACCEPTED",
+                "InsightFace 비상업 연구용 얼굴 검출 가중치 조건 확인이 필요합니다.",
+                503,
+            )
+        payload = await _read_upload(image, active_settings)
+        result = await run_in_threadpool(active_deepfake_analyzer.analyze, payload)
+        return DeepfakeAnalysisResponse(
+            request_id=str(uuid4()),
+            status="completed",
+            is_suspected_deepfake=result.is_suspected_deepfake,
+            deepfake_score=result.deepfake_score,
+            raw_logit=result.raw_logit,
+            threshold=result.threshold,
+            threshold_status=active_settings.deepfake_threshold_status,
+            threshold_source=active_settings.deepfake_threshold_source,
+            warning=DEEPFAKE_WARNING,
+            quality_summary=_quality_response(result.quality),
+            processing_ms=result.processing_ms,
+            inference_ms=result.inference_ms,
+            model_name=result.model_name,
+            execution_provider=result.execution_provider,
+            model_fingerprint=result.model_fingerprint,
+            config_version="deepfake-single-image-v1",
         )
 
     @application.post(
@@ -334,7 +404,7 @@ def create_app(
             503: {"model": ErrorResponse},
         },
         tags=["통합 파이프라인"],
-        summary="SearXNG 이미지 후보를 ArcFace로 동일인 가능성 선별",
+        summary="SearXNG 후보를 ArcFace로 선별하고 ONNX 딥페이크 분석",
     )
     async def search_and_filter(
         reference_images: Annotated[
@@ -425,6 +495,7 @@ def create_app(
             "partial_failed"
             if search_result.status == "partial_failed"
             or filtered.skipped_candidate_count
+            or filtered.deepfake_failed_candidate_count
             else "completed"
         )
         return SearchAndFilterResponse(
@@ -436,6 +507,13 @@ def create_app(
             skipped_candidate_count=filtered.skipped_candidate_count,
             retrieval_match_count=filtered.retrieval_match_count,
             identity_match_count=filtered.identity_match_count,
+            deepfake_analyzed_candidate_count=(
+                filtered.deepfake_analyzed_candidate_count
+            ),
+            deepfake_suspected_candidate_count=(
+                filtered.deepfake_suspected_candidate_count
+            ),
+            deepfake_failed_candidate_count=filtered.deepfake_failed_candidate_count,
             retrieval_threshold=active_settings.retrieval_similarity_threshold,
             identity_threshold=active_settings.similarity_threshold,
             threshold_status=active_settings.threshold_status,
@@ -443,6 +521,9 @@ def create_app(
                 "데모 연결용 임시 후보수집 기준값이며 공개 웹 validation으로 보정되지 않음"
             ),
             identity_threshold_source=active_settings.threshold_source,
+            deepfake_threshold=active_settings.deepfake_threshold,
+            deepfake_threshold_status=active_settings.deepfake_threshold_status,
+            deepfake_threshold_source=active_settings.deepfake_threshold_source,
             reference_count=filtered.reference_count,
             candidates=[
                 CandidateFaceDecisionResponse(
@@ -462,6 +543,18 @@ def create_app(
                     quality_summary=(
                         _quality_response(item.quality) if item.quality else None
                     ),
+                    deepfake=CandidateDeepfakeDecisionResponse(
+                        status=item.deepfake.status,
+                        deepfake_score=item.deepfake.deepfake_score,
+                        is_suspected_deepfake=(
+                            item.deepfake.is_suspected_deepfake
+                        ),
+                        error_code=item.deepfake.error_code,
+                        processing_ms=item.deepfake.processing_ms,
+                        inference_ms=item.deepfake.inference_ms,
+                        execution_provider=item.deepfake.execution_provider,
+                        model_fingerprint=item.deepfake.model_fingerprint,
+                    ),
                     processing_ms=item.processing_ms,
                 )
                 for item in filtered.candidates
@@ -480,7 +573,10 @@ def create_app(
             model_name=active_settings.model_name,
             execution_provider=active_encoder.provider,
             model_fingerprint=active_encoder.model_fingerprint,
-            config_version="search-arcface-image-v1",
+            deepfake_model_name=active_settings.deepfake_model_name,
+            deepfake_execution_provider=active_deepfake_analyzer.provider,
+            deepfake_model_fingerprint=active_deepfake_analyzer.model_fingerprint,
+            config_version="search-arcface-deepfake-image-v1",
             warning=PIPELINE_WARNING,
         )
 

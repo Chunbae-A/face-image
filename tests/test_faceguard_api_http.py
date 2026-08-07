@@ -1,11 +1,13 @@
 import json
 import unittest
+from pathlib import Path
 
 import httpx
 import numpy as np
 from fastapi.testclient import TestClient
 
 from faceguard_api.app import create_app
+from faceguard_api.deepfake import DeepfakeAnalysis
 from faceguard_api.domain import EncodedFace, FaceQuality
 from faceguard_api.errors import FaceGuardError
 from faceguard_api.media import DownloadedImage
@@ -47,6 +49,27 @@ class FakeImageDownloader:
         return DownloadedImage(payload, url, "image/jpeg")
 
 
+class FakeDeepfakeAnalyzer:
+    loaded = True
+    provider = "FakeDeepfakeExecutionProvider"
+    model_fingerprint = "b" * 64
+
+    def analyze(self, payload: bytes) -> DeepfakeAnalysis:
+        score = 0.9 if payload != b"real" else 0.1
+        return DeepfakeAnalysis(
+            is_suspected_deepfake=score >= 0.75,
+            deepfake_score=score,
+            raw_logit=2.1972246 if score >= 0.75 else -2.1972246,
+            threshold=0.75,
+            quality=QUALITY,
+            processing_ms=12.0,
+            inference_ms=4.0,
+            model_name="fake_deepfake_model",
+            execution_provider=self.provider,
+            model_fingerprint=self.model_fingerprint,
+        )
+
+
 def test_settings(*, license_accepted: bool = True) -> Settings:
     return Settings(
         accept_noncommercial_model_license=license_accepted,
@@ -61,7 +84,13 @@ def image_file(field: str, name: str, payload: bytes, content_type: str = "image
 
 class FaceguardHttpTests(unittest.TestCase):
     def setUp(self):
-        self.client = TestClient(create_app(test_settings(), FakeEncoder()))
+        self.client = TestClient(
+            create_app(
+                test_settings(),
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+            )
+        )
 
     def test_health_explains_model_and_threshold_state(self):
         response = self.client.get("/health")
@@ -73,6 +102,55 @@ class FaceguardHttpTests(unittest.TestCase):
         )
         self.assertEqual(response.json()["search_providers"], ["user_url"])
         self.assertFalse(response.json()["web_search_enabled"])
+        self.assertTrue(response.json()["deepfake_model_loaded"])
+        self.assertEqual(
+            response.json()["deepfake_execution_provider"],
+            "FakeDeepfakeExecutionProvider",
+        )
+
+    def test_deepfake_image_endpoint_returns_score_without_filename(self):
+        response = self.client.post(
+            "/v1/deepfake/analyze",
+            files=[image_file("image", "private-candidate.jpg", b"candidate")],
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertTrue(body["is_suspected_deepfake"])
+        self.assertEqual(body["deepfake_score"], 0.9)
+        self.assertEqual(body["threshold_status"], "research_only_single_image_unvalidated")
+        self.assertEqual(body["config_version"], "deepfake-single-image-v1")
+        self.assertNotIn("private-candidate", json.dumps(body))
+        self.assertIn("단일 얼굴 이미지 점수", body["warning"])
+
+    def test_deepfake_endpoint_reports_missing_private_model(self):
+        settings = Settings(
+            accept_noncommercial_model_license=True,
+            deepfake_model_path=Path("/definitely/missing/model.onnx"),
+        )
+        client = TestClient(create_app(settings, FakeEncoder()))
+        response = client.post(
+            "/v1/deepfake/analyze",
+            files=[image_file("image", "candidate.jpg", b"candidate")],
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["error"]["code"], "MODEL_UNAVAILABLE")
+
+    def test_deepfake_endpoint_checks_model_license_first(self):
+        client = TestClient(
+            create_app(
+                test_settings(license_accepted=False),
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+            )
+        )
+        response = client.post(
+            "/v1/deepfake/analyze",
+            files=[image_file("image", "candidate.jpg", b"candidate")],
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json()["error"]["code"], "MODEL_LICENSE_NOT_ACCEPTED"
+        )
 
     def test_health_reports_configured_searxng_provider(self):
         settings = Settings(
@@ -357,6 +435,7 @@ class FaceguardHttpTests(unittest.TestCase):
                 FakeEncoder(),
                 search_service=search_service,
                 image_downloader=FakeImageDownloader(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
             )
         )
         response = client.post(
@@ -380,6 +459,9 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertEqual(body["skipped_candidate_count"], 0)
         self.assertEqual(body["retrieval_match_count"], 1)
         self.assertEqual(body["identity_match_count"], 1)
+        self.assertEqual(body["deepfake_analyzed_candidate_count"], 1)
+        self.assertEqual(body["deepfake_suspected_candidate_count"], 1)
+        self.assertEqual(body["deepfake_failed_candidate_count"], 0)
         self.assertEqual(
             [item["status"] for item in body["candidates"]],
             ["identity_match", "not_matched"],
@@ -387,7 +469,15 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertEqual(body["candidates"][0]["matched_frame_count"], 1)
         self.assertEqual(body["candidates"][0]["analyzed_frame_count"], 1)
         self.assertIn("quality_summary", body["candidates"][0])
-        self.assertEqual(body["config_version"], "search-arcface-image-v1")
+        self.assertEqual(
+            body["candidates"][0]["deepfake"]["deepfake_score"], 0.9
+        )
+        self.assertEqual(
+            body["candidates"][1]["deepfake"]["status"], "not_analyzed"
+        )
+        self.assertEqual(
+            body["config_version"], "search-arcface-deepfake-image-v1"
+        )
         serialized = json.dumps(body, ensure_ascii=False)
         self.assertNotIn("동의받은 비공개 테스트 검색어", serialized)
         self.assertNotIn("private-ref", serialized)

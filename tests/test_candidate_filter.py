@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import numpy as np
 
 from faceguard_api.candidate_filter import CandidateFilterService
+from faceguard_api.deepfake import DeepfakeAnalysis
 from faceguard_api.domain import EncodedFace, FaceQuality
 from faceguard_api.errors import FaceGuardError
 from faceguard_api.media import CandidateDownloadError, DownloadedImage
@@ -49,6 +50,29 @@ class FakeDownloader:
         return DownloadedImage(payload, url, "image/jpeg")
 
 
+class FakeDeepfakeAnalyzer:
+    def analyze(self, payload: bytes) -> DeepfakeAnalysis:
+        score = 0.9 if payload == b"same" else 0.4
+        return DeepfakeAnalysis(
+            is_suspected_deepfake=score >= 0.75,
+            deepfake_score=score,
+            raw_logit=2.0 if score >= 0.75 else -0.4,
+            threshold=0.75,
+            quality=QUALITY,
+            processing_ms=10.0,
+            inference_ms=4.0,
+            model_name="fake",
+            execution_provider="FakeDeepfakeProvider",
+            model_fingerprint="b" * 64,
+        )
+
+
+class UnavailableDeepfakeAnalyzer:
+    def analyze(self, payload: bytes) -> DeepfakeAnalysis:
+        del payload
+        raise FaceGuardError("MODEL_UNAVAILABLE", "모델 없음", 503)
+
+
 def candidate(name: str, rank: int) -> SearchCandidate:
     return SearchCandidate(
         page_url=f"https://example.com/{name}",
@@ -70,7 +94,10 @@ class CandidateFilterServiceTests(unittest.TestCase):
             similarity_threshold=0.5,
         )
         self.service = CandidateFilterService(
-            self.settings, FakeEncoder(), FakeDownloader()
+            self.settings,
+            FakeEncoder(),
+            FakeDownloader(),
+            FakeDeepfakeAnalyzer(),
         )
 
     def test_batch_reports_identity_retrieval_rejection_and_partial_failure(self):
@@ -91,6 +118,11 @@ class CandidateFilterServiceTests(unittest.TestCase):
         self.assertEqual(result.skipped_candidate_count, 2)
         self.assertEqual(result.retrieval_match_count, 2)
         self.assertEqual(result.identity_match_count, 1)
+        self.assertEqual(result.deepfake_analyzed_candidate_count, 2)
+        self.assertEqual(result.deepfake_suspected_candidate_count, 1)
+        self.assertEqual(result.deepfake_failed_candidate_count, 0)
+        self.assertEqual(result.candidates[0].deepfake.deepfake_score, 0.9)
+        self.assertEqual(result.candidates[2].deepfake.status, "not_analyzed")
         self.assertEqual(
             [item.status for item in result.candidates],
             [
@@ -134,6 +166,19 @@ class CandidateFilterServiceTests(unittest.TestCase):
                 )
             )
         self.assertEqual(raised.exception.code, "TOO_MANY_PIPELINE_CANDIDATES")
+
+    def test_deepfake_failure_keeps_arcface_result_without_fake_score(self):
+        service = CandidateFilterService(
+            self.settings,
+            FakeEncoder(),
+            FakeDownloader(),
+            UnavailableDeepfakeAnalyzer(),
+        )
+        result = asyncio.run(service.filter([b"ref"], [candidate("same", 1)]))
+        self.assertEqual(result.candidates[0].status, "identity_match")
+        self.assertEqual(result.candidates[0].deepfake.status, "unavailable")
+        self.assertIsNone(result.candidates[0].deepfake.deepfake_score)
+        self.assertEqual(result.deepfake_failed_candidate_count, 1)
 
 
 if __name__ == "__main__":

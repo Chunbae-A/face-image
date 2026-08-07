@@ -15,7 +15,8 @@ FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    FACEGUARD_MODEL_ROOT=/models/insightface
+    FACEGUARD_MODEL_ROOT=/models/insightface \
+    FACEGUARD_DEEPFAKE_MODEL_PATH=/models/deepfake/efficientnet_b4.onnx
 
 WORKDIR /app
 
@@ -30,7 +31,7 @@ RUN python -m pip install --no-cache-dir --no-index --find-links=/wheels -r requ
 
 COPY faceguard_api ./faceguard_api
 
-RUN mkdir -p /models/insightface \
+RUN mkdir -p /models/insightface /models/deepfake \
     && useradd --create-home --uid 10001 faceguard \
     && chown -R faceguard:faceguard /app /models
 

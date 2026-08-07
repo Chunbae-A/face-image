@@ -71,6 +71,14 @@ class FaceguardDomainTests(unittest.TestCase):
             Settings(candidate_download_timeout_seconds=0.0)
         with self.assertRaises(ValueError):
             Settings(candidate_download_maximum_redirects=-1)
+        with self.assertRaises(ValueError):
+            Settings(deepfake_device="metal")
+        with self.assertRaises(ValueError):
+            Settings(deepfake_input_size=0)
+        with self.assertRaises(ValueError):
+            Settings(deepfake_threshold=1.1)
+        with self.assertRaises(ValueError):
+            Settings(deepfake_model_sha256="not-a-sha")
 
 
 if __name__ == "__main__":
