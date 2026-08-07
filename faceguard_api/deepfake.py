@@ -175,7 +175,11 @@ class DeepfakeOnnxAnalyzer:
                 if len(inputs) != 1 or len(outputs) != 1:
                     raise ValueError("expected one input and one output")
                 input_shape = list(inputs[0].shape)
-                expected = [3, self.settings.deepfake_input_size, self.settings.deepfake_input_size]
+                expected = [
+                    3,
+                    self.settings.deepfake_input_size,
+                    self.settings.deepfake_input_size,
+                ]
                 if len(input_shape) != 4 or input_shape[-3:] != expected:
                     raise ValueError(f"unexpected input shape: {input_shape}")
                 session_providers = list(session.get_providers())
@@ -234,6 +238,25 @@ class DeepfakeOnnxAnalyzer:
             payload,
             aligned_face_size=self.settings.deepfake_aligned_face_size,
         )
+        result = self.analyze_aligned(aligned)
+        return DeepfakeAnalysis(
+            is_suspected_deepfake=result.is_suspected_deepfake,
+            deepfake_score=result.deepfake_score,
+            raw_logit=result.raw_logit,
+            threshold=result.threshold,
+            quality=result.quality,
+            processing_ms=(time.perf_counter() - started) * 1000.0,
+            inference_ms=result.inference_ms,
+            model_name=result.model_name,
+            execution_provider=result.execution_provider,
+            model_fingerprint=result.model_fingerprint,
+        )
+
+    def analyze_aligned(self, aligned: AlignedEncodedFace) -> DeepfakeAnalysis:
+        """이미 검출·정렬된 얼굴을 영상 프레임 추론에 재사용한다."""
+
+        started = time.perf_counter()
+        self._initialize()
         tensor = preprocess_aligned_face(
             aligned.aligned_bgr,
             self.settings.deepfake_input_size,

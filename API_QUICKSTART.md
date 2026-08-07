@@ -89,7 +89,20 @@ curl http://127.0.0.1:8000/health
 
 `deepfake_score`는 0~1 모델 점수지만 보정된 확률이나 정확도 신뢰도가 아니다. 현재 `0.751988...` 기준은 영상 16프레임 평균에서 선택한 값이므로 단일 이미지 응답은 항상 `research_only_single_image_unvalidated`로 표시한다.
 
-## 7. 무료 공개 URL 후보 시험
+## 7. 딥페이크 영상 시험
+
+같은 Swagger 화면에서 `POST /v1/deepfake/analyze-video`를 선택한다.
+
+1. `video`에 최대 50MB·120초의 MP4 또는 MOV 영상을 넣는다.
+2. 영상에 여러 사람이 나오면 `reference_images`에 분석할 사람의 등록 사진을 넣는다. 3장을 권장한다.
+3. `Execute`를 누른다.
+4. `video_score`, `analyzed_frame_count`, `suspicious_segments`를 확인한다.
+
+영상 전체에서 최대 16개 대표 프레임을 고르고, 분석 가능한 얼굴 프레임의 점수를 평균한다. `suspicious_segments`는 정밀한 원본 프레임 탐지가 아니라 표본 프레임을 기준으로 만든 **검토 권장 시간대**다. 등록 사진이 없으면 첫 대표 프레임에서 가장 큰 얼굴을 기준으로 다음 프레임을 추적한다.
+
+`video_score`도 보정된 확률이 아니다. 공식 Test에서 실제 영상 오경고율 목표를 통과하지 못했으므로 응답은 `research_only_unapproved` 상태를 유지한다.
+
+## 8. 무료 공개 URL 후보 시험
 
 같은 Swagger 화면에서 `POST /v1/search/candidates`를 선택하고 다음 JSON을 넣는다.
 
@@ -108,7 +121,7 @@ curl http://127.0.0.1:8000/health
 
 이 기능은 공개 URL을 안전하게 정리하고 중복을 제거한다. 인터넷에서 새 후보를 자동으로 찾는 역이미지 검색 기능은 아직 연결되지 않았다.
 
-## 8. 무료 키워드 검색 시험
+## 9. 무료 키워드 검색 시험
 
 실행 중인 기본 API를 먼저 종료하고 SearXNG 결합 구성을 켠다.
 
@@ -134,7 +147,7 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --
 
 응답의 `provider`가 `searxng`이면 정상이다. 이 기능은 검색어로 후보 URL을 모으는 단계이며 얼굴 사진 역검색이나 동일인 판정은 하지 않는다.
 
-## 9. 검색부터 얼굴 선별·딥페이크 분석까지 한 번에 시험
+## 10. 검색부터 얼굴 선별·딥페이크 분석까지 한 번에 시험
 
 같은 Swagger 화면에서 `POST /v1/pipeline/search-and-filter`를 선택한다.
 
@@ -157,7 +170,7 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --
 
 현재 `retrieval_threshold=0.20`은 기능 연결용 임시값이며 정확도 검증을 마친 운영값이 아니다. ArcFace가 후보가 아니라고 판단한 이미지는 불필요한 ONNX 경고를 피하려고 `deepfake.status=not_analyzed`로 남긴다. 여러 얼굴이 있는 이미지와 영상 후보는 아직 이 경로에서 처리하지 않는다.
 
-## 10. 종료
+## 11. 종료
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.searxng.yml down

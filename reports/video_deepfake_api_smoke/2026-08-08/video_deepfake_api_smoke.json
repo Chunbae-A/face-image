@@ -1,0 +1,39 @@
+{
+  "status": "completed",
+  "scope": "local_video_pipeline_smoke_only",
+  "input": {
+    "duration_seconds": 4.0,
+    "source": "consented_image_repeated_in_runtime",
+    "temporary_video_deleted": true,
+    "private_media_committed": false
+  },
+  "result": {
+    "is_suspected_deepfake": false,
+    "video_score": 0.0001615129315320418,
+    "threshold": 0.7519882693886758,
+    "requested_frame_count": 16,
+    "analyzed_frame_count": 16,
+    "skipped_frame_count": 0,
+    "suspicious_segment_count": 0,
+    "processing_ms": 5293.544167000164,
+    "inference_ms": 1235.425376999956
+  },
+  "runtime": {
+    "execution_provider": "CPUExecutionProvider",
+    "model_fingerprint": "c32a8532e2e1bd275b833b16460946eb307207098e0c07e2247851b71c23a6f1"
+  },
+  "docker_http_smoke": {
+    "http_status": 200,
+    "api_version": "0.6.0",
+    "container_health": "healthy",
+    "openapi_video_endpoint": true,
+    "status": "completed",
+    "video_score": 0.000162790147338878,
+    "requested_frame_count": 16,
+    "analyzed_frame_count": 16,
+    "skipped_frame_count": 0,
+    "config_version": "deepfake-video-16-frame-mean-v1",
+    "temporary_video_deleted": true
+  },
+  "interpretation": "functionality_smoke_not_accuracy_or_sla_evidence"
+}
