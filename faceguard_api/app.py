@@ -18,7 +18,17 @@ from .schemas import (
     ErrorResponse,
     HealthResponse,
     ImageQualityResponse,
+    SearchCandidateResponse,
+    SearchCandidatesRequest,
+    SearchCandidatesResponse,
+    SearchProviderResponse,
     VerificationResponse,
+)
+from .search import (
+    SearchQuery,
+    SearchService,
+    SubmittedCandidate,
+    UserSubmittedUrlProvider,
 )
 from .service import FaceGuardService
 from .settings import Settings
@@ -27,6 +37,10 @@ ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
 RESEARCH_WARNING = (
     "현재 판정 기준값은 Celeb-real 연구 기준선이며 운영 확정값이 아닙니다. "
     "Kaggle 열화 실험과 외부 한국인·실제 촬영 데이터 검증이 필요합니다."
+)
+SEARCH_WARNING = (
+    "현재 무료 모드는 사용자가 직접 넣은 공개 URL의 안전성 검사·정규화·중복 제거만 "
+    "수행합니다. 인터넷 자동 검색이나 후보 발견을 완료했다는 뜻이 아닙니다."
 )
 
 
@@ -64,15 +78,21 @@ async def _read_upload(upload: UploadFile, settings: Settings) -> bytes:
 def create_app(
     settings: Settings | None = None,
     encoder: Any | None = None,
+    search_service: Any | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     active_encoder = encoder or InsightFaceEncoder(active_settings)
     service = FaceGuardService(active_settings, active_encoder)
+    active_search_service = search_service or SearchService(
+        [UserSubmittedUrlProvider()],
+        maximum_candidates=active_settings.maximum_search_candidates,
+        provider_timeout_seconds=active_settings.search_provider_timeout_seconds,
+    )
 
     application = FastAPI(
         title="딥소각 얼굴가드 API",
         description=(
-            "등록 얼굴 사진과 확인 사진을 비교하는 연구용 동일인 확인 API입니다. "
+            "등록 얼굴 사진과 확인 사진을 비교하고 공개 후보 URL을 정규화하는 연구용 API입니다. "
             "원본과 임베딩은 애플리케이션에 영구 저장하지 않습니다."
         ),
         version=active_settings.api_version,
@@ -90,11 +110,15 @@ def create_app(
     async def request_validation_error_handler(
         request: Request, error: RequestValidationError
     ) -> JSONResponse:
-        del request, error
+        del error
+        if request.url.path == "/v1/search/candidates":
+            message = "privacy_mode와 공개 후보 URL 목록을 JSON 형식으로 보내세요."
+        else:
+            message = "등록 사진과 확인 사진을 multipart/form-data 형식으로 보내세요."
         body = ErrorResponse(
             error=ErrorBody(
                 code="INVALID_REQUEST",
-                message="등록 사진과 확인 사진을 multipart/form-data 형식으로 보내세요.",
+                message=message,
             )
         )
         return JSONResponse(status_code=422, content=body.model_dump())
@@ -177,6 +201,68 @@ def create_app(
             model_name=active_settings.model_name,
             execution_provider=active_encoder.provider,
             model_fingerprint=active_encoder.model_fingerprint,
+        )
+
+    @application.post(
+        "/v1/search/candidates",
+        response_model=SearchCandidatesResponse,
+        responses={
+            422: {"model": ErrorResponse},
+            503: {"model": ErrorResponse},
+        },
+        tags=["공개 후보 검색"],
+        summary="사용자가 제보한 공개 URL 후보 정규화·중복 제거",
+    )
+    async def search_candidates(
+        payload: SearchCandidatesRequest,
+    ) -> SearchCandidatesResponse:
+        query = SearchQuery(
+            privacy_mode=payload.privacy_mode,
+            web_monitoring_consent=payload.web_monitoring_consent,
+            submitted_candidates=[
+                SubmittedCandidate(
+                    page_url=candidate.page_url,
+                    media_url=candidate.media_url,
+                    thumbnail_url=candidate.thumbnail_url,
+                    content_sha256=candidate.content_sha256,
+                    perceptual_hash=candidate.perceptual_hash,
+                )
+                for candidate in payload.candidates
+            ],
+        )
+        result = await active_search_service.search(query)
+        return SearchCandidatesResponse(
+            request_id=str(uuid4()),
+            status=result.status,
+            privacy_mode=result.privacy_mode,
+            candidates=[
+                SearchCandidateResponse(
+                    page_url=candidate.page_url,
+                    media_url=candidate.media_url,
+                    thumbnail_url=candidate.thumbnail_url,
+                    provider=candidate.provider,
+                    providers=list(candidate.providers),
+                    rank=candidate.rank,
+                    retrieved_at=candidate.retrieved_at,
+                )
+                for candidate in result.candidates
+            ],
+            providers=[
+                SearchProviderResponse(
+                    provider=provider.provider,
+                    status=provider.status,
+                    candidate_count=provider.candidate_count,
+                    processing_ms=provider.processing_ms,
+                    error_code=provider.error_code,
+                )
+                for provider in result.providers
+            ],
+            raw_candidate_count=result.raw_candidate_count,
+            candidate_count=len(result.candidates),
+            duplicate_count=result.duplicate_count,
+            truncated_count=result.truncated_count,
+            processing_ms=result.processing_ms,
+            warning=SEARCH_WARNING,
         )
 
     return application

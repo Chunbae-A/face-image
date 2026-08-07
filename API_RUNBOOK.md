@@ -129,6 +129,78 @@ curl -X POST http://127.0.0.1:8000/v1/faceguard/verify \
 
 실제 응답의 `reference_quality`에는 등록 사진 수만큼 품질 정보가 들어간다. 위 예시는 읽기 쉽게 한 장만 표시했다.
 
+## 3. 무료 공개 URL 후보 정규화
+
+외부 검색 API 키 없이 사용자가 알고 있는 공개 페이지·미디어 URL을 공통 후보 형식으로 바꿀 수 있다. 이 경로는 얼굴 모델 가중치를 실행하지 않으므로 InsightFace 이용 조건 확인값과 무관하게 사용할 수 있다.
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/search/candidates \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "privacy_mode": "privacy_strict",
+    "web_monitoring_consent": false,
+    "candidates": [
+      {
+        "page_url": "https://example.com/public-post?utm_source=demo",
+        "media_url": "https://cdn.example.com/public-video.mp4"
+      },
+      {
+        "page_url": "https://example.com/reposted-content",
+        "media_url": "https://cdn.example.com/public-video.mp4"
+      }
+    ]
+  }'
+```
+
+응답 예시:
+
+```json
+{
+  "request_id": "요청마다 생성되는 UUID",
+  "status": "completed",
+  "privacy_mode": "privacy_strict",
+  "candidates": [
+    {
+      "page_url": "https://example.com/public-post",
+      "media_url": "https://cdn.example.com/public-video.mp4",
+      "thumbnail_url": null,
+      "provider": "user_url",
+      "providers": ["user_url"],
+      "rank": 1,
+      "retrieved_at": "2026-08-07T12:00:00Z"
+    }
+  ],
+  "providers": [
+    {
+      "provider": "user_url",
+      "status": "completed",
+      "candidate_count": 2,
+      "processing_ms": 0.2,
+      "error_code": null
+    }
+  ],
+  "raw_candidate_count": 2,
+  "candidate_count": 1,
+  "duplicate_count": 1,
+  "truncated_count": 0,
+  "processing_ms": 0.3,
+  "warning": "현재 무료 모드는 인터넷 자동 검색이나 후보 발견을 완료했다는 뜻이 아닙니다."
+}
+```
+
+안전 규칙은 다음과 같다.
+
+- `http`, `https` 공개 주소만 허용한다.
+- `localhost`, 사설·예약 IP, 내부 도메인, 기본값이 아닌 포트를 차단한다.
+- URL에 아이디·비밀번호 또는 `token`, `api_key`, `signature` 같은 비밀 쿼리가 있으면 거절한다.
+- `utm_*`, `fbclid`, `gclid` 같은 추적 쿼리와 URL fragment를 제거한다.
+- 같은 미디어 URL을 SHA-256으로 비교하고, 제공된 콘텐츠 SHA-256 또는 64-bit pHash가 같으면 한 후보로 합친다.
+- 콘텐츠 hash는 중복 제거에만 쓰며 공개 API 응답에 다시 내보내지 않는다.
+
+`privacy_strict`에서는 검색용 얼굴 이미지를 외부 제공자에 보내지 않는다. `web_monitoring`은 사용자의 명시적 동의와 별도 외부 검색 제공자 설정이 모두 있을 때만 사용할 수 있다. 현재 기본 설정에는 외부 검색 제공자가 없으므로 `web_monitoring` 요청은 `SEARCH_PROVIDER_UNAVAILABLE`로 거절한다.
+
+즉, 이번 무료 기능은 **제보 URL을 안전한 후보 목록으로 준비하는 단계**다. 새로운 URL을 역이미지 검색으로 자동 발견하는 기능과 실제 URL 다운로드·얼굴 선별은 Issue #13·#14의 후속 구현 범위다.
+
 ## 딥소각 백엔드 연결 규칙
 
 - 브라우저 앱에서 모델 API를 직접 공개하지 말고 딥소각 백엔드가 서버 간 호출한다.
@@ -169,6 +241,10 @@ curl -X POST http://127.0.0.1:8000/v1/faceguard/verify \
 | `FACE_TOO_SMALL` | 얼굴 면적이 너무 작음 | 카메라에 더 가까이 촬영 |
 | `LOW_DETECTION_SCORE` | 얼굴이 불분명함 | 흔들림·가림을 없애고 재촬영 |
 | `MODEL_UNAVAILABLE` | 모델 또는 실행 환경 문제 | 서버 로그와 모델 설치 확인 |
+| `PRIVATE_NETWORK_URL_BLOCKED` | 내부망·로컬 URL 입력 | 접근 가능한 공개 URL 사용 |
+| `URL_SECRET_PARAMETER_NOT_ALLOWED` | URL에 토큰·키로 보이는 쿼리 포함 | 비밀 쿼리를 제거한 공개 URL 사용 |
+| `WEB_MONITORING_CONSENT_REQUIRED` | 외부 이미지 검색 동의 없음 | 개인정보 엄격 모드 사용 또는 별도 동의 |
+| `SEARCH_PROVIDER_UNAVAILABLE` | 외부 검색 제공자 미설정 | 무료 URL 제보 모드 사용 |
 
 오류 응답은 항상 같은 형태다.
 
