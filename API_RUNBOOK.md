@@ -1,6 +1,6 @@
 # 딥소각 얼굴가드 API 사용 가이드
 
-이 API는 **등록 얼굴 사진 1~5장과 확인 사진 1장을 받아 같은 사람 후보인지 비교**한다. 실제 사용에서는 등록 사진 3장을 권장한다.
+이 API는 **등록 얼굴 사진 1~5장과 확인 사진 1장을 받아 같은 사람 후보인지 비교**하고, 공개 URL 제보 또는 검색어로 웹 후보를 정리한다. 실제 얼굴 비교에서는 등록 사진 3장을 권장한다.
 
 현재 버전은 연구·해커톤 검증용이다. Celeb-real 기준선의 관측 오인식률이 목표보다 높았으므로 응답의 `threshold_status`는 항상 `research_only_unapproved`로 표시한다. 한국인 얼굴·실제 휴대전화 데이터 검증과 모델 가중치의 상용 사용권 해결 전에는 운영 본인인증 수단으로 사용하지 않는다.
 
@@ -52,6 +52,14 @@ cp .env.example .env
 docker compose up --build
 ```
 
+무료 SearXNG 키워드 검색도 함께 사용할 때는 다음 결합 구성을 실행한다.
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build
+```
+
+SearXNG는 Docker 내부망에서만 열리고 호스트 포트를 공개하지 않는다. 검색어만 외부 검색엔진으로 전달하며 등록 얼굴 사진은 보내지 않는다.
+
 기본 Docker 이미지는 CPU용이다. Linux CUDA 서버에서는 `requirements-api-gpu.txt`의 `onnxruntime-gpu`를 사용하고 NVIDIA Container Runtime을 별도로 설정한다.
 
 ## 1. 서버 상태 확인
@@ -65,17 +73,19 @@ curl http://127.0.0.1:8000/health
 ```json
 {
   "status": "ok",
-  "api_version": "0.1.0",
+  "api_version": "0.3.0",
   "model_name": "buffalo_l",
   "model_loaded": false,
   "execution_provider": null,
   "model_fingerprint": null,
   "license_accepted": true,
-  "threshold_status": "research_only_unapproved"
+  "threshold_status": "research_only_unapproved",
+  "search_providers": ["user_url", "searxng"],
+  "web_search_enabled": true
 }
 ```
 
-`model_loaded`가 `false`인 것은 아직 첫 추론을 하지 않아 모델을 지연 로딩하는 상태다.
+`model_loaded`가 `false`인 것은 아직 첫 추론을 하지 않아 모델을 지연 로딩하는 상태다. 기본 Compose에서는 `search_providers`가 `["user_url"]`, SearXNG 결합 구성에서는 `["user_url", "searxng"]`이다.
 
 ## 2. 동일인 확인 요청
 
@@ -197,9 +207,36 @@ curl -X POST http://127.0.0.1:8000/v1/search/candidates \
 - 같은 미디어 URL을 SHA-256으로 비교하고, 제공된 콘텐츠 SHA-256 또는 64-bit pHash가 같으면 한 후보로 합친다.
 - 콘텐츠 hash는 중복 제거에만 쓰며 공개 API 응답에 다시 내보내지 않는다.
 
-`privacy_strict`에서는 검색용 얼굴 이미지를 외부 제공자에 보내지 않는다. `web_monitoring`은 사용자의 명시적 동의와 별도 외부 검색 제공자 설정이 모두 있을 때만 사용할 수 있다. 현재 기본 설정에는 외부 검색 제공자가 없으므로 `web_monitoring` 요청은 `SEARCH_PROVIDER_UNAVAILABLE`로 거절한다.
+`privacy_strict`에서는 외부 검색을 호출하지 않는다. `web_monitoring`은 사용자의 명시적 동의와 별도 외부 검색 제공자 설정이 모두 있을 때만 사용할 수 있다. 기본 Compose에는 외부 검색 제공자가 없으므로 `web_monitoring` 요청은 `SEARCH_PROVIDER_UNAVAILABLE`로 거절한다.
 
-즉, 이번 무료 기능은 **제보 URL을 안전한 후보 목록으로 준비하는 단계**다. 새로운 URL을 역이미지 검색으로 자동 발견하는 기능과 실제 URL 다운로드·얼굴 선별은 Issue #13·#14의 후속 구현 범위다.
+## 4. SearXNG 무료 키워드 검색
+
+SearXNG 결합 Compose를 켠 뒤 다음처럼 호출한다.
+
+```bash
+curl -X POST http://127.0.0.1:8000/v1/search/candidates \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "privacy_mode": "web_monitoring",
+    "web_monitoring_consent": true,
+    "query_text": "동의받은 검색어",
+    "categories": ["images", "videos"],
+    "language": "ko-KR",
+    "safe_search": 2,
+    "maximum_results": 20,
+    "candidates": []
+  }'
+```
+
+- `query_text`: 외부 공개 검색에 동의한 검색어, 최대 200자
+- `categories`: `images`, `videos` 중 하나 이상
+- `safe_search`: 보통 `2` 권장
+- `maximum_results`: 요청할 후보 수, 최대 50개
+- `source_engine`: SearXNG가 결과를 받은 실제 검색 엔진 이름
+
+API는 SearXNG의 결과 URL도 내부망·로컬 주소인지 다시 검사하고, 제공자 오류가 일부 발생하면 `partial_failed` 상태로 정상 후보만 반환한다. 입력 검색어는 API 응답에 되돌려 주지 않는다.
+
+중요한 한계가 있다. SearXNG는 **검색어 기반 후보 수집기**이므로 얼굴 사진 자체로 같은 얼굴을 찾아주는 역이미지 검색이 아니다. 실제 URL 다운로드·ArcFace 얼굴 선별은 Issue #14, 얼굴 역검색 제공자 비교는 Issue #13의 후속 범위다.
 
 ## 딥소각 백엔드 연결 규칙
 

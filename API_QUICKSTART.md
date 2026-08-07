@@ -87,10 +87,36 @@ curl http://127.0.0.1:8000/health
 
 이 기능은 공개 URL을 안전하게 정리하고 중복을 제거한다. 인터넷에서 새 후보를 자동으로 찾는 역이미지 검색 기능은 아직 연결되지 않았다.
 
-## 7. 종료
+## 7. 무료 키워드 검색 시험
+
+실행 중인 기본 API를 먼저 종료하고 SearXNG 결합 구성을 켠다.
 
 ```bash
 docker compose down
+docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --detach
+```
+
+`POST /v1/search/candidates`에 다음 JSON을 넣는다. 검색어에는 공개 검색에 동의한 표현만 사용한다.
+
+```json
+{
+  "privacy_mode": "web_monitoring",
+  "web_monitoring_consent": true,
+  "query_text": "동의받은 검색어",
+  "categories": ["images"],
+  "language": "ko-KR",
+  "safe_search": 2,
+  "maximum_results": 10,
+  "candidates": []
+}
+```
+
+응답의 `provider`가 `searxng`이면 정상이다. 이 기능은 검색어로 후보 URL을 모으는 단계이며 얼굴 사진 역검색이나 동일인 판정은 하지 않는다.
+
+## 8. 종료
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.searxng.yml down
 ```
 
 ## 주의사항

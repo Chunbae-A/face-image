@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class ErrorBody(BaseModel):
@@ -26,6 +26,8 @@ class HealthResponse(BaseModel):
     model_fingerprint: str | None = None
     license_accepted: bool
     threshold_status: str
+    search_providers: list[str]
+    web_search_enabled: bool
 
 
 class ImageQualityResponse(BaseModel):
@@ -66,7 +68,22 @@ class SubmittedSearchCandidate(BaseModel):
 class SearchCandidatesRequest(BaseModel):
     privacy_mode: Literal["privacy_strict", "web_monitoring"] = "privacy_strict"
     web_monitoring_consent: bool = False
-    candidates: list[SubmittedSearchCandidate] = Field(min_length=1)
+    query_text: str | None = Field(default=None, min_length=1, max_length=200)
+    categories: list[Literal["images", "videos"]] = Field(
+        default_factory=lambda: ["images"], min_length=1, max_length=2
+    )
+    language: str = Field(default="ko-KR", pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$")
+    safe_search: Literal[1, 2] = 2
+    maximum_results: int = Field(default=20, ge=1, le=50)
+    candidates: list[SubmittedSearchCandidate] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_search_source(self) -> SearchCandidatesRequest:
+        if self.privacy_mode == "privacy_strict" and not self.candidates:
+            raise ValueError("privacy_strict 모드에는 사용자 제보 URL이 필요합니다.")
+        if self.privacy_mode == "web_monitoring" and not self.query_text:
+            raise ValueError("web_monitoring 모드에는 검색어가 필요합니다.")
+        return self
 
 
 class SearchCandidateResponse(BaseModel):
@@ -77,6 +94,7 @@ class SearchCandidateResponse(BaseModel):
     providers: list[str]
     rank: int = Field(gt=0)
     retrieved_at: datetime
+    source_engine: str | None = None
 
 
 class SearchProviderResponse(BaseModel):

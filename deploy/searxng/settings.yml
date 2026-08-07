@@ -1,0 +1,23 @@
+# 딥소각 로컬 데모용 SearXNG 최소 설정
+use_default_settings: true
+
+general:
+  debug: false
+  instance_name: "DeepSogak SearXNG"
+
+search:
+  safe_search: 2
+  autocomplete: ""
+  formats:
+    - html
+    - json
+
+server:
+  # Docker 환경변수 SEARXNG_SECRET이 이 값을 덮어쓴다.
+  secret_key: "local-placeholder-overridden-by-environment"
+  limiter: false
+  image_proxy: false
+
+plugins:
+  searx.plugins.tracker_url_remover.SXNGPlugin:
+    active: true
