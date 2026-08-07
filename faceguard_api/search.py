@@ -1,0 +1,405 @@
+"""공개 웹 후보를 안전한 공통 형식으로 정규화하는 검색 어댑터."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import ipaddress
+import time
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
+from typing import Literal, Protocol
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+from .errors import FaceGuardError
+
+PrivacyMode = Literal["privacy_strict", "web_monitoring"]
+
+TRACKING_QUERY_KEYS = {
+    "dclid",
+    "fbclid",
+    "gclid",
+    "igshid",
+    "mc_cid",
+    "mc_eid",
+    "msclkid",
+}
+SENSITIVE_QUERY_KEYS = {
+    "access_token",
+    "api_key",
+    "apikey",
+    "auth",
+    "authorization",
+    "key",
+    "password",
+    "secret",
+    "session",
+    "sig",
+    "signature",
+    "token",
+}
+BLOCKED_HOST_SUFFIXES = (".internal", ".local", ".localhost", ".home.arpa")
+
+
+@dataclass(frozen=True)
+class SubmittedCandidate:
+    """사용자가 직접 제보한 공개 페이지와 선택적 미디어 URL."""
+
+    page_url: str
+    media_url: str | None = None
+    thumbnail_url: str | None = None
+    content_sha256: str | None = None
+    perceptual_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class SearchQuery:
+    privacy_mode: PrivacyMode
+    web_monitoring_consent: bool
+    submitted_candidates: Sequence[SubmittedCandidate]
+
+
+@dataclass(frozen=True)
+class SearchCandidate:
+    page_url: str
+    media_url: str | None
+    thumbnail_url: str | None
+    provider: str
+    providers: tuple[str, ...]
+    rank: int
+    retrieved_at: datetime
+    content_sha256: str | None = None
+    perceptual_hash: str | None = None
+
+
+@dataclass(frozen=True)
+class ProviderResult:
+    provider: str
+    status: Literal["completed", "failed"]
+    candidate_count: int
+    processing_ms: float
+    error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class SearchResult:
+    status: Literal["completed", "partial_failed"]
+    privacy_mode: PrivacyMode
+    candidates: tuple[SearchCandidate, ...]
+    providers: tuple[ProviderResult, ...]
+    raw_candidate_count: int
+    duplicate_count: int
+    truncated_count: int
+    processing_ms: float
+
+
+class SearchProvider(Protocol):
+    """외부 검색 제공자와 사용자 URL 제공자가 지켜야 할 공통 계약."""
+
+    name: str
+    transmits_query_image: bool
+
+    async def search(self, query: SearchQuery) -> Sequence[SearchCandidate]: ...
+
+
+def _normalized_hash(value: str | None, *, name: str, length: int) -> str | None:
+    if value is None:
+        return None
+    normalized = value.strip().lower()
+    if len(normalized) != length or any(
+        character not in "0123456789abcdef" for character in normalized
+    ):
+        raise FaceGuardError(
+            "INVALID_CANDIDATE_HASH",
+            f"{name} 값은 {length}자리 16진수여야 합니다.",
+        )
+    return normalized
+
+
+def normalize_public_url(value: str) -> str:
+    """공개 HTTP(S) URL만 허용하고 추적·비밀 쿼리를 제거하거나 거절한다."""
+
+    raw = value.strip()
+    if not raw or len(raw) > 2048:
+        raise FaceGuardError(
+            "INVALID_PUBLIC_URL", "공개 URL은 1~2,048자여야 합니다."
+        )
+    try:
+        parsed = urlsplit(raw)
+        port = parsed.port
+    except ValueError as error:
+        raise FaceGuardError(
+            "INVALID_PUBLIC_URL", "공개 URL 형식이 올바르지 않습니다."
+        ) from error
+
+    scheme = parsed.scheme.lower()
+    if scheme not in {"http", "https"}:
+        raise FaceGuardError(
+            "UNSAFE_PUBLIC_URL", "공개 URL은 http 또는 https만 사용할 수 있습니다."
+        )
+    if parsed.username is not None or parsed.password is not None:
+        raise FaceGuardError(
+            "URL_CREDENTIALS_NOT_ALLOWED",
+            "아이디·비밀번호가 포함된 URL은 사용할 수 없습니다.",
+        )
+    if parsed.hostname is None:
+        raise FaceGuardError(
+            "INVALID_PUBLIC_URL", "공개 URL에는 호스트 이름이 필요합니다."
+        )
+
+    try:
+        hostname = parsed.hostname.rstrip(".").encode("idna").decode("ascii").lower()
+    except UnicodeError as error:
+        raise FaceGuardError(
+            "INVALID_PUBLIC_URL", "공개 URL의 호스트 이름이 올바르지 않습니다."
+        ) from error
+    try:
+        address = ipaddress.ip_address(hostname)
+    except ValueError:
+        address = None
+    if address is None and (
+        hostname == "localhost"
+        or hostname.endswith(BLOCKED_HOST_SUFFIXES)
+        or "." not in hostname
+    ):
+        raise FaceGuardError(
+            "PRIVATE_NETWORK_URL_BLOCKED",
+            "내부망·로컬 주소는 공개 후보로 사용할 수 없습니다.",
+        )
+    if address is not None and not address.is_global:
+        raise FaceGuardError(
+            "PRIVATE_NETWORK_URL_BLOCKED",
+            "내부망·로컬 주소는 공개 후보로 사용할 수 없습니다.",
+        )
+    if port is not None and port not in {80, 443}:
+        raise FaceGuardError(
+            "UNSAFE_PUBLIC_URL_PORT",
+            "공개 URL은 기본 HTTP·HTTPS 포트만 사용할 수 있습니다.",
+        )
+
+    query_items: list[tuple[str, str]] = []
+    for key, item_value in parse_qsl(parsed.query, keep_blank_values=True):
+        normalized_key = key.lower()
+        if normalized_key in SENSITIVE_QUERY_KEYS:
+            raise FaceGuardError(
+                "URL_SECRET_PARAMETER_NOT_ALLOWED",
+                "비밀값으로 보이는 쿼리 파라미터가 포함된 URL은 사용할 수 없습니다.",
+            )
+        if normalized_key.startswith("utm_") or normalized_key in TRACKING_QUERY_KEYS:
+            continue
+        query_items.append((key, item_value))
+    query_items.sort(key=lambda item: (item[0], item[1]))
+
+    default_port = (scheme == "http" and port in {None, 80}) or (
+        scheme == "https" and port in {None, 443}
+    )
+    if ":" in hostname:
+        rendered_host = f"[{hostname}]"
+    else:
+        rendered_host = hostname
+    netloc = rendered_host if default_port else f"{rendered_host}:{port}"
+    path = parsed.path or "/"
+    return urlunsplit((scheme, netloc, path, urlencode(query_items, doseq=True), ""))
+
+
+class UserSubmittedUrlProvider:
+    """외부 이미지 전송 없이 사용자가 제보한 공개 URL만 후보로 만든다."""
+
+    name = "user_url"
+    transmits_query_image = False
+
+    def __init__(
+        self,
+        clock: Callable[[], datetime] | None = None,
+    ) -> None:
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+
+    async def search(self, query: SearchQuery) -> Sequence[SearchCandidate]:
+        retrieved_at = self._clock()
+        candidates: list[SearchCandidate] = []
+        for rank, submitted in enumerate(query.submitted_candidates, start=1):
+            candidates.append(
+                SearchCandidate(
+                    page_url=normalize_public_url(submitted.page_url),
+                    media_url=(
+                        normalize_public_url(submitted.media_url)
+                        if submitted.media_url
+                        else None
+                    ),
+                    thumbnail_url=(
+                        normalize_public_url(submitted.thumbnail_url)
+                        if submitted.thumbnail_url
+                        else None
+                    ),
+                    provider=self.name,
+                    providers=(self.name,),
+                    rank=rank,
+                    retrieved_at=retrieved_at,
+                    content_sha256=_normalized_hash(
+                        submitted.content_sha256,
+                        name="content_sha256",
+                        length=64,
+                    ),
+                    perceptual_hash=_normalized_hash(
+                        submitted.perceptual_hash,
+                        name="perceptual_hash",
+                        length=16,
+                    ),
+                )
+            )
+        return candidates
+
+
+def _candidate_key(candidate: SearchCandidate) -> str:
+    if candidate.content_sha256:
+        return f"sha256:{candidate.content_sha256}"
+    if candidate.perceptual_hash:
+        return f"phash:{candidate.perceptual_hash}"
+    primary_url = candidate.media_url or candidate.page_url
+    digest = hashlib.sha256(primary_url.encode("utf-8")).hexdigest()
+    return f"url_sha256:{digest}"
+
+
+def _deduplicate(
+    candidates: Sequence[SearchCandidate],
+) -> tuple[list[SearchCandidate], int]:
+    unique: dict[str, SearchCandidate] = {}
+    duplicates = 0
+    for candidate in candidates:
+        key = _candidate_key(candidate)
+        existing = unique.get(key)
+        if existing is None:
+            unique[key] = candidate
+            continue
+        duplicates += 1
+        providers = tuple(dict.fromkeys((*existing.providers, *candidate.providers)))
+        if (candidate.rank, candidate.provider) < (existing.rank, existing.provider):
+            unique[key] = replace(candidate, providers=providers)
+        else:
+            unique[key] = replace(existing, providers=providers)
+    ordered = sorted(
+        unique.values(), key=lambda item: (item.rank, item.provider, item.page_url)
+    )
+    return ordered, duplicates
+
+
+class SearchService:
+    """검색 제공자를 실행하고 부분 실패와 중복 제거를 일관되게 처리한다."""
+
+    def __init__(
+        self,
+        providers: Sequence[SearchProvider],
+        *,
+        maximum_candidates: int = 100,
+        provider_timeout_seconds: float = 5.0,
+    ) -> None:
+        if not providers:
+            raise ValueError("검색 제공자가 하나 이상 필요합니다.")
+        if maximum_candidates <= 0 or provider_timeout_seconds <= 0:
+            raise ValueError("검색 제한값은 양수여야 합니다.")
+        names = [provider.name for provider in providers]
+        if len(names) != len(set(names)):
+            raise ValueError("검색 제공자 이름은 중복될 수 없습니다.")
+        self.providers = tuple(providers)
+        self.maximum_candidates = maximum_candidates
+        self.provider_timeout_seconds = provider_timeout_seconds
+
+    async def _invoke(
+        self, provider: SearchProvider, query: SearchQuery
+    ) -> tuple[Sequence[SearchCandidate] | None, ProviderResult]:
+        started = time.perf_counter()
+        try:
+            candidates = await asyncio.wait_for(
+                provider.search(query), timeout=self.provider_timeout_seconds
+            )
+        except FaceGuardError:
+            raise
+        except TimeoutError:
+            return None, ProviderResult(
+                provider=provider.name,
+                status="failed",
+                candidate_count=0,
+                processing_ms=(time.perf_counter() - started) * 1000.0,
+                error_code="SEARCH_PROVIDER_TIMEOUT",
+            )
+        except Exception:  # 외부 제공자의 비밀값·응답 본문을 노출하지 않는다.
+            return None, ProviderResult(
+                provider=provider.name,
+                status="failed",
+                candidate_count=0,
+                processing_ms=(time.perf_counter() - started) * 1000.0,
+                error_code="SEARCH_PROVIDER_FAILED",
+            )
+        return candidates, ProviderResult(
+            provider=provider.name,
+            status="completed",
+            candidate_count=len(candidates),
+            processing_ms=(time.perf_counter() - started) * 1000.0,
+        )
+
+    async def search(self, query: SearchQuery) -> SearchResult:
+        if len(query.submitted_candidates) > self.maximum_candidates:
+            raise FaceGuardError(
+                "TOO_MANY_SEARCH_CANDIDATES",
+                f"공개 후보는 한 번에 최대 {self.maximum_candidates}개까지 처리할 수 있습니다.",
+            )
+        if query.privacy_mode == "web_monitoring" and not query.web_monitoring_consent:
+            raise FaceGuardError(
+                "WEB_MONITORING_CONSENT_REQUIRED",
+                "외부 이미지 검색을 사용하려면 검색용 이미지 전송 동의가 필요합니다.",
+            )
+        if query.privacy_mode == "web_monitoring" and not any(
+            provider.transmits_query_image for provider in self.providers
+        ):
+            raise FaceGuardError(
+                "SEARCH_PROVIDER_UNAVAILABLE",
+                "외부 이미지 검색 제공자가 설정되지 않았습니다. 무료 개인정보 엄격 모드를 사용하세요.",
+                503,
+            )
+
+        eligible = [
+            provider
+            for provider in self.providers
+            if query.privacy_mode == "web_monitoring"
+            or not provider.transmits_query_image
+        ]
+        if not eligible:
+            raise FaceGuardError(
+                "SEARCH_PROVIDER_UNAVAILABLE",
+                "선택한 개인정보 모드에서 사용할 수 있는 검색 제공자가 없습니다.",
+                503,
+            )
+
+        started = time.perf_counter()
+        outcomes = await asyncio.gather(
+            *(self._invoke(provider, query) for provider in eligible)
+        )
+        raw_candidates = [
+            candidate
+            for candidates, _ in outcomes
+            if candidates is not None
+            for candidate in candidates
+        ]
+        provider_results = tuple(result for _, result in outcomes)
+        failed_count = sum(result.status == "failed" for result in provider_results)
+        if failed_count == len(provider_results):
+            raise FaceGuardError(
+                "ALL_SEARCH_PROVIDERS_FAILED",
+                "모든 검색 제공자 호출에 실패했습니다. 잠시 후 다시 시도하세요.",
+                503,
+            )
+
+        unique, duplicate_count = _deduplicate(raw_candidates)
+        limited = tuple(unique[: self.maximum_candidates])
+        truncated_count = max(0, len(unique) - len(limited))
+        return SearchResult(
+            status="partial_failed" if failed_count else "completed",
+            privacy_mode=query.privacy_mode,
+            candidates=limited,
+            providers=provider_results,
+            raw_candidate_count=len(raw_candidates),
+            duplicate_count=duplicate_count,
+            truncated_count=truncated_count,
+            processing_ms=(time.perf_counter() - started) * 1000.0,
+        )

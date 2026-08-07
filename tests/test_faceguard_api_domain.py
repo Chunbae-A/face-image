@@ -46,6 +46,10 @@ class FaceguardDomainTests(unittest.TestCase):
             Settings(similarity_threshold=2.0)
         with self.assertRaises(ValueError):
             Settings(minimum_face_area_ratio=0.0)
+        with self.assertRaises(ValueError):
+            Settings(maximum_search_candidates=0)
+        with self.assertRaises(ValueError):
+            Settings(search_provider_timeout_seconds=0.0)
 
 
 if __name__ == "__main__":

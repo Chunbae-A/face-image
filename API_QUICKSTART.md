@@ -68,7 +68,26 @@ curl http://127.0.0.1:8000/health
 
 `is_same_person`은 동일인 **후보 판정**이며 운영 본인인증 확정값이 아니다.
 
-## 6. 종료
+## 6. 무료 공개 URL 후보 시험
+
+같은 Swagger 화면에서 `POST /v1/search/candidates`를 선택하고 다음 JSON을 넣는다.
+
+```json
+{
+  "privacy_mode": "privacy_strict",
+  "web_monitoring_consent": false,
+  "candidates": [
+    {
+      "page_url": "https://example.com/public-post",
+      "media_url": "https://cdn.example.com/public-video.mp4"
+    }
+  ]
+}
+```
+
+이 기능은 공개 URL을 안전하게 정리하고 중복을 제거한다. 인터넷에서 새 후보를 자동으로 찾는 역이미지 검색 기능은 아직 연결되지 않았다.
+
+## 7. 종료
 
 ```bash
 docker compose down

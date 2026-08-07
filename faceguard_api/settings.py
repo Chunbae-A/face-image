@@ -23,7 +23,7 @@ def _environment_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    api_version: str = "0.1.0"
+    api_version: str = "0.2.0"
     model_name: str = "buffalo_l"
     model_root: Path = Path(".models/insightface")
     device: str = "auto"
@@ -41,6 +41,8 @@ class Settings:
     maximum_image_pixels: int = 20_000_000
     minimum_detection_score: float = 0.60
     minimum_face_area_ratio: float = 0.01
+    maximum_search_candidates: int = 100
+    search_provider_timeout_seconds: float = 5.0
 
     def __post_init__(self) -> None:
         if self.device not in {"auto", "cpu", "cuda"}:
@@ -62,6 +64,10 @@ class Settings:
             raise ValueError("minimum_detection_score는 0과 1 사이여야 합니다.")
         if not 0.0 < self.minimum_face_area_ratio <= 1.0:
             raise ValueError("minimum_face_area_ratio는 0보다 크고 1 이하여야 합니다.")
+        if self.maximum_search_candidates <= 0:
+            raise ValueError("maximum_search_candidates는 양수여야 합니다.")
+        if self.search_provider_timeout_seconds <= 0:
+            raise ValueError("search_provider_timeout_seconds는 양수여야 합니다.")
 
     @classmethod
     def from_environment(cls) -> Settings:
@@ -92,5 +98,11 @@ class Settings:
             ),
             minimum_face_area_ratio=float(
                 os.environ.get("FACEGUARD_MIN_FACE_AREA_RATIO", "0.01")
+            ),
+            maximum_search_candidates=int(
+                os.environ.get("FACEGUARD_MAX_SEARCH_CANDIDATES", "100")
+            ),
+            search_provider_timeout_seconds=float(
+                os.environ.get("FACEGUARD_SEARCH_PROVIDER_TIMEOUT_SECONDS", "5.0")
             ),
         )

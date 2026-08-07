@@ -150,6 +150,99 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"]["code"], "INVALID_REQUEST")
 
+    def test_free_search_mode_normalizes_and_deduplicates_user_urls(self):
+        response = self.client.post(
+            "/v1/search/candidates",
+            json={
+                "privacy_mode": "privacy_strict",
+                "web_monitoring_consent": False,
+                "candidates": [
+                    {
+                        "page_url": "https://Example.com/post?utm_source=demo",
+                        "media_url": "https://cdn.example.com/photo.jpg",
+                        "content_sha256": "a" * 64,
+                    },
+                    {
+                        "page_url": "https://mirror.example.com/post",
+                        "media_url": "https://cdn.example.com/photo-copy.jpg",
+                        "content_sha256": "a" * 64,
+                    },
+                ],
+            },
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["status"], "completed")
+        self.assertEqual(body["privacy_mode"], "privacy_strict")
+        self.assertEqual(body["raw_candidate_count"], 2)
+        self.assertEqual(body["candidate_count"], 1)
+        self.assertEqual(body["duplicate_count"], 1)
+        self.assertEqual(body["truncated_count"], 0)
+        self.assertEqual(body["candidates"][0]["provider"], "user_url")
+        self.assertEqual(body["candidates"][0]["providers"], ["user_url"])
+        self.assertNotIn("content_sha256", body["candidates"][0])
+        self.assertIn("인터넷 자동 검색", body["warning"])
+
+    def test_search_blocks_private_network_url(self):
+        response = self.client.post(
+            "/v1/search/candidates",
+            json={
+                "candidates": [{"page_url": "http://127.0.0.1/private"}]
+            },
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["error"]["code"], "PRIVATE_NETWORK_URL_BLOCKED"
+        )
+
+    def test_search_request_validation_has_search_specific_message(self):
+        response = self.client.post(
+            "/v1/search/candidates",
+            json={"privacy_mode": "privacy_strict", "candidates": []},
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "INVALID_REQUEST")
+        self.assertIn("공개 후보 URL", response.json()["error"]["message"])
+
+    def test_web_monitoring_mode_requires_consent(self):
+        response = self.client.post(
+            "/v1/search/candidates",
+            json={
+                "privacy_mode": "web_monitoring",
+                "web_monitoring_consent": False,
+                "candidates": [{"page_url": "https://example.com/post"}],
+            },
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(
+            response.json()["error"]["code"], "WEB_MONITORING_CONSENT_REQUIRED"
+        )
+
+    def test_web_monitoring_mode_requires_configured_external_provider(self):
+        response = self.client.post(
+            "/v1/search/candidates",
+            json={
+                "privacy_mode": "web_monitoring",
+                "web_monitoring_consent": True,
+                "candidates": [{"page_url": "https://example.com/post"}],
+            },
+        )
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(
+            response.json()["error"]["code"], "SEARCH_PROVIDER_UNAVAILABLE"
+        )
+
+    def test_search_does_not_require_face_model_license(self):
+        client = TestClient(
+            create_app(test_settings(license_accepted=False), FakeEncoder())
+        )
+        response = client.post(
+            "/v1/search/candidates",
+            json={"candidates": [{"page_url": "https://example.com/post"}]},
+        )
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()["candidate_count"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
