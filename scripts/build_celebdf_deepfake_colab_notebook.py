@@ -403,7 +403,7 @@ subprocess.run([
     sys.executable, "scripts/run_celebdf_deepfake.py", "smoke-onnx",
     "--model", str(ONNX_MODEL), "--crop-manifest", str(CROP_MANIFEST),
     "--crop-root", str(CROP_ROOT), "--report", str(ONNX_SMOKE_REPORT),
-    "--input-size", "380",
+    "--export-report", str(ONNX_EXPORT_REPORT),
 ], check=True)
 smoke = json.loads(ONNX_SMOKE_REPORT.read_text(encoding="utf-8"))
 print({

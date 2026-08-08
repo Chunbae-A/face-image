@@ -139,6 +139,7 @@ python scripts/run_celebdf_deepfake.py export-onnx \
 
 python scripts/run_celebdf_deepfake.py smoke-onnx \
   --model /private/efficientnet_b4.onnx \
+  --export-report /private/onnx_export.json \
   --crop-manifest /private/crops.csv \
   --crop-root /private/crops \
   --report /private/onnx_cpu_smoke.json

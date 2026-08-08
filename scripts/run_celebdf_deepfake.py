@@ -49,6 +49,15 @@ DEFAULT_INPUT_SIZE = 380
 DEFAULT_ALIGNED_CROP_SIZE = 224
 SUPPORTED_ARCHITECTURES = ("efficientnet_b4", "xception")
 SUPPORTED_NORMALIZATIONS = ("architecture_default", "half")
+TRAIN_AUGMENTATIONS = (
+    "horizontal_flip",
+    "resize_degradation",
+    "jpeg_compression",
+    "gaussian_blur",
+    "low_light",
+    "color_jitter",
+    "gaussian_noise",
+)
 MODEL_SPECS: dict[str, dict[str, object]] = {
     "efficientnet_b4": {
         "display_name": "EfficientNet-B4",
@@ -758,13 +767,14 @@ def _make_loader(
         if np.any(counts == 0):
             raise ValueError(f"training requires both labels, found counts={counts.tolist()}")
         weights = torch.as_tensor([1.0 / counts[label] for label in labels], dtype=torch.double)
-        generator = torch.Generator().manual_seed(seed)
+        sampler_generator = torch.Generator().manual_seed(seed)
         sampler = WeightedRandomSampler(
             weights,
             num_samples=len(weights),
             replacement=True,
-            generator=generator,
+            generator=sampler_generator,
         )
+    loader_generator = torch.Generator().manual_seed(seed)
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -773,6 +783,7 @@ def _make_loader(
         num_workers=workers,
         pin_memory=torch.cuda.is_available(),
         persistent_workers=workers > 0,
+        generator=loader_generator,
     )
 
 
@@ -891,6 +902,18 @@ def train(args: argparse.Namespace) -> dict[str, object]:
     best_auc = -math.inf
     epochs_without_improvement = 0
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    training_protocol = {
+        "optimizer": "AdamW",
+        "learning_rate": args.learning_rate,
+        "weight_decay": args.weight_decay,
+        "epochs": args.epochs,
+        "early_stopping_patience": args.early_stopping_patience,
+        "batch_size": args.batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "augmentation": list(TRAIN_AUGMENTATIONS),
+        "dataloader_seed": args.seed,
+        "sampler_seed": args.seed,
+    }
 
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -947,6 +970,7 @@ def train(args: argparse.Namespace) -> dict[str, object]:
                     "best_validation_video_auc": best_auc,
                     "crop_manifest_sha256": _sha256(args.crop_manifest),
                     "model_inventory": model_inventory,
+                    "training_protocol": training_protocol,
                 },
                 temporary,
             )
@@ -995,15 +1019,8 @@ def train(args: argparse.Namespace) -> dict[str, object]:
             "weight_decay": args.weight_decay,
             "amp": use_amp,
         },
-        "augmentation": [
-            "horizontal_flip",
-            "resize_degradation",
-            "jpeg_compression",
-            "gaussian_blur",
-            "low_light",
-            "color_jitter",
-            "gaussian_noise",
-        ],
+        "training_protocol": training_protocol,
+        "augmentation": list(TRAIN_AUGMENTATIONS),
         **model_inventory,
         **_environment_inventory(device),
     }
@@ -1258,6 +1275,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, object]:
                 "input_size": args.input_size,
                 "normalization": normalization,
                 "train_frames_per_video": checkpoint["train_frames_per_video"],
+                "training_protocol": checkpoint.get("training_protocol"),
                 "seed": checkpoint["seed"],
                 "environment": _environment_inventory(device),
                 "private_artifacts_committed": False,
@@ -1317,6 +1335,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, object]:
     final_metrics["input_size"] = args.input_size
     final_metrics["normalization"] = normalization
     final_metrics["train_frames_per_video"] = checkpoint["train_frames_per_video"]
+    final_metrics["training_protocol"] = checkpoint.get("training_protocol")
     final_metrics["seed"] = checkpoint["seed"]
     final_metrics["environment"] = _environment_inventory(device)
     final_metrics["private_artifacts_committed"] = False
@@ -1365,8 +1384,31 @@ def export_onnx(args: argparse.Namespace) -> dict[str, object]:
 
 
 def smoke_onnx(args: argparse.Namespace) -> dict[str, object]:
+    """Verify an ONNX artifact and run one CPU inference with export metadata."""
+
     import onnxruntime as ort  # type: ignore
 
+    export_report = json.loads(args.export_report.read_text(encoding="utf-8"))
+    if export_report.get("status") != "completed":
+        raise ValueError("ONNX export report is not completed")
+    model_sha256 = _sha256(args.model)
+    if export_report.get("onnx_sha256") != model_sha256:
+        raise ValueError("ONNX model SHA-256 does not match the export report")
+    architecture = str(export_report.get("architecture_id", ""))
+    normalization = str(export_report.get("normalization", ""))
+    model_spec(architecture)
+    normalization_spec(architecture, normalization)
+    input_shape = export_report.get("input_shape")
+    if (
+        not isinstance(input_shape, list)
+        or len(input_shape) != 4
+        or input_shape[1] != 3
+        or input_shape[2] != input_shape[3]
+        or not isinstance(input_shape[2], int)
+        or input_shape[2] <= 0
+    ):
+        raise ValueError("ONNX export report has an invalid input shape")
+    input_size = int(input_shape[2])
     rows = read_crop_manifest(args.crop_manifest)
     if not rows:
         raise ValueError("a crop is required for ONNX smoke inference")
@@ -1376,9 +1418,9 @@ def smoke_onnx(args: argparse.Namespace) -> dict[str, object]:
     )
     transform = build_transform(
         train_mode=False,
-        input_size=args.input_size,
-        architecture=args.architecture,
-        normalization=args.normalization,
+        input_size=input_size,
+        architecture=architecture,
+        normalization=normalization,
     )
     with Image.open(args.crop_root / rows[0].relative_crop_path) as image:
         tensor = transform(image.convert("RGB")).unsqueeze(0).numpy()
@@ -1389,12 +1431,13 @@ def smoke_onnx(args: argparse.Namespace) -> dict[str, object]:
     result = {
         "status": "passed",
         "provider": session.get_providers()[0],
-        "architecture_id": args.architecture,
-        "normalization": args.normalization,
-        "input_size": args.input_size,
+        "architecture_id": architecture,
+        "normalization": normalization,
+        "input_size": input_size,
         "output_is_finite": math.isfinite(logit),
         "processing_ms": elapsed_ms,
-        "model_sha256": _sha256(args.model),
+        "model_sha256": model_sha256,
+        "export_report_sha256": _sha256(args.export_report),
         "sample_identity_in_report": False,
     }
     if not result["output_is_finite"]:
@@ -1504,17 +1547,7 @@ def build_parser() -> argparse.ArgumentParser:
     smoke_parser.add_argument("--crop-manifest", type=Path, required=True)
     smoke_parser.add_argument("--crop-root", type=Path, required=True)
     smoke_parser.add_argument("--report", type=Path, required=True)
-    smoke_parser.add_argument("--input-size", type=int, default=DEFAULT_INPUT_SIZE)
-    smoke_parser.add_argument(
-        "--architecture",
-        choices=SUPPORTED_ARCHITECTURES,
-        default="efficientnet_b4",
-    )
-    smoke_parser.add_argument(
-        "--normalization",
-        choices=SUPPORTED_NORMALIZATIONS,
-        default="architecture_default",
-    )
+    smoke_parser.add_argument("--export-report", type=Path, required=True)
     return parser
 
 

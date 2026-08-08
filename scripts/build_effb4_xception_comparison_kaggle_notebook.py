@@ -320,6 +320,8 @@ for candidate in CONFIG["candidates"]:
 compare_command = [
     sys.executable,
     "scripts/compare_deepfake_model_candidates.py",
+    "--config",
+    str(CONFIG_PATH),
 ]
 for candidate in CONFIG["candidates"]:
     candidate_id = candidate["id"]
@@ -398,9 +400,7 @@ if RUN_FINAL_OFFICIAL_TEST_FOR_FROZEN_WINNER:
         "--crop-manifest", str(CROP_MANIFEST),
         "--crop-root", str(CROP_ROOT),
         "--report", str(ONNX_SMOKE_REPORT),
-        "--input-size", str(CONFIG["input_size"]),
-        "--architecture", FROZEN_CANDIDATE,
-        "--normalization", CONFIG["normalization"],
+        "--export-report", str(ONNX_EXPORT_REPORT),
     ], check=True)
     onnx_smoke = json.loads(ONNX_SMOKE_REPORT.read_text(encoding="utf-8"))
     print({

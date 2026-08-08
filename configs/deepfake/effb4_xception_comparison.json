@@ -14,6 +14,16 @@
   "effective_batch_size": 16,
   "learning_rate": 0.0001,
   "weight_decay": 0.0001,
+  "optimizer": "AdamW",
+  "augmentation": [
+    "horizontal_flip",
+    "resize_degradation",
+    "jpeg_compression",
+    "gaussian_blur",
+    "low_light",
+    "color_jitter",
+    "gaussian_noise"
+  ],
   "target_validation_fpr": 0.01,
   "selection_target_recall": 0.95,
   "normalization": "half",

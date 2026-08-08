@@ -328,6 +328,34 @@ class RunnerUtilityTests(unittest.TestCase):
         self.assertTrue(evaluate_args.validation_only)
         self.assertEqual(evaluate_args.aggregation_methods, ["mean"])
 
+    def test_onnx_smoke_requires_export_metadata_instead_of_cli_preprocessing(self):
+        parser = runner.build_parser()
+        smoke_args = parser.parse_args(
+            [
+                "smoke-onnx",
+                "--model", "model.onnx",
+                "--crop-manifest", "manifest.csv",
+                "--crop-root", "crops",
+                "--report", "smoke.json",
+                "--export-report", "export.json",
+            ]
+        )
+        self.assertEqual(smoke_args.export_report, Path("export.json"))
+        self.assertFalse(hasattr(smoke_args, "input_size"))
+        self.assertFalse(hasattr(smoke_args, "architecture"))
+        self.assertFalse(hasattr(smoke_args, "normalization"))
+
+        source = (ROOT / "scripts" / "run_celebdf_deepfake.py").read_text(
+            encoding="utf-8"
+        )
+        smoke_call = source.split("def smoke_onnx", 1)[1].split(
+            "def build_parser", 1
+        )[0]
+        self.assertIn("_sha256(args.model)", smoke_call)
+        self.assertIn('export_report.get("onnx_sha256")', smoke_call)
+        self.assertIn('export_report.get("architecture_id"', smoke_call)
+        self.assertIn('export_report.get("normalization"', smoke_call)
+
 
 if __name__ == "__main__":
     unittest.main()

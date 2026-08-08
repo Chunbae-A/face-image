@@ -670,7 +670,7 @@ def operating_point_at_recall(
     """Return the lowest-FPR operating point that reaches the requested recall."""
     if not 0 < target_recall <= 1:
         raise ValueError("target_recall must be in (0, 1]")
-    fpr, recall, thresholds = roc_curve(labels, scores)
+    _fpr, recall, thresholds = roc_curve(labels, scores)
     eligible = np.flatnonzero(recall >= target_recall)
     if not len(eligible):  # pragma: no cover - a valid binary ROC reaches recall 1
         raise ValueError("target recall cannot be reached")
