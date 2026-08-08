@@ -31,6 +31,7 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 | 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | **무료 URL 제보 + SearXNG 키워드 검색 구현, 얼굴 역검색 미연결** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
 | 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
 | 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 이미지·영상 16프레임 평균 API 구현, 운영 Gate 미통과** ([#25](https://github.com/Chunbae-A/face-image/issues/25)) |
+| 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **공정 비교 계획·누수 방지 검사 완료, Xception·SBI·Hard Negative·FTCN 실행 전** ([계획](DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md)) |
 | 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | **딥페이크 보정 실험·API 완료, FPR Gate 미통과로 확률 표시 보류; 얼굴 보정 데이터 미확보** ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | **임시 등록·`scan_id`·진행 조회·이미지 후보 결과 완료, 영상 URL·영구 큐는 미연결** ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
 
@@ -216,6 +217,7 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 | [`reports`](reports) | 개인정보를 제외한 집계 결과와 그래프 |
 | [`tests`](tests) | 누수·지표·API·노트북 재현 테스트 |
 | [`DEEPFAKE_BASELINE_RUNBOOK.md`](DEEPFAKE_BASELINE_RUNBOOK.md) | 딥페이크 모델 명령 구조 설명 |
+| [`DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md`](DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md) | EfficientNet-B4 → Xception → SBI → Hard Negative → FTCN 고도화 순서와 합격 기준 |
 | [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md) | Kaggle 무료 GPU 실행 순서 |
 | [`SCORE_CALIBRATION_RUNBOOK.md`](SCORE_CALIBRATION_RUNBOOK.md) | 딥페이크 원점수 보정 실험과 API 설치 순서 |
 | [`SEARXNG_RUNBOOK.md`](SEARXNG_RUNBOOK.md) | 무료 키워드 검색 실행·시험·한계 |
@@ -243,12 +245,18 @@ python scripts/check_repository_hygiene.py
 
 ## 다음 작업 순서
 
-1. 검색 이미지의 다중 얼굴 처리와 영상 얼굴 트랙 비교 구현 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
-2. 넓은 후보 기준값을 공개 웹 validation 데이터로 보정 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
-3. 얼굴 역이미지 검색 제공자 후보와 Recall·비용을 별도 검증 ([#13](https://github.com/Chunbae-A/face-image/issues/13))
-4. 외부 동일인·타인 pair 데이터를 확보해 ArcFace 화면 점수 보정 마무리 ([#16](https://github.com/Chunbae-A/face-image/issues/16))
-5. 비동기 스캔에 검색 후보 영상 URL 다운로드와 재시작 복구용 영구 큐 연결 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
-6. 검색·선별·이미지·영상 ONNX 연결 결과를 실제 동의 데이터로 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
+모델링은 아래 순서로 진행한다. 새 모델의 성능 수치는 아직 실행 전이며, 각 단계는 같은 분할과 같은 지표로 비교한다.
+
+1. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
+2. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
+3. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
+4. 결승 후보에 FTCN 시간 정보와 앙상블 추가 효과 검증 ([#32](https://github.com/Chunbae-A/face-image/issues/32))
+
+제품 파이프라인은 모델링과 병행해 다음 순서로 이어간다.
+
+1. 검색 이미지 다중 얼굴 처리와 영상 얼굴 트랙 비교 구현 ([#14](https://github.com/Chunbae-A/face-image/issues/14))
+2. 비동기 스캔에 후보 영상 URL 다운로드와 재시작 복구용 영구 큐 연결 ([#17](https://github.com/Chunbae-A/face-image/issues/17))
+3. 검색·선별·이미지·영상 ONNX 연결 결과를 실제 동의 데이터로 수치 검증 ([#18](https://github.com/Chunbae-A/face-image/issues/18))
 
 ## 발표용 한 문장
 
