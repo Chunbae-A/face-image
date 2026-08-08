@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "issue": 35,
+  "experiment_id": "celebdf_jpeg_conditional_ensemble_v1",
+  "selection_split": "validation",
+  "official_test_used_for_selection": false,
+  "primary_model": "efficientnet_b4",
+  "specialist_model": "xception",
+  "conditions": [
+    "clean",
+    "jpeg_q30",
+    "gaussian_blur_sigma2",
+    "low_light_gamma2",
+    "downscale_0_25"
+  ],
+  "specialist_conditions": [
+    "jpeg_q30"
+  ],
+  "aggregation": "mean",
+  "fusion_space": "logit",
+  "primary_weight_grid": [
+    0.0,
+    0.25,
+    0.5,
+    0.75,
+    1.0
+  ],
+  "selection_target_recall": 0.95,
+  "maximum_clean_fpr_regression": 0.0,
+  "maximum_non_specialist_auc_regression": 0.0001,
+  "minimum_specialist_auc_improvement": 0.0001,
+  "minimum_specialist_fpr_improvement": 0.001,
+  "policies": [
+    "primary_only",
+    "static_logit_fusion",
+    "condition_aware_logit_fusion"
+  ],
+  "privacy": {
+    "raw_media_in_git": false,
+    "face_crops_in_git": false,
+    "frame_scores_in_git": false,
+    "video_ids_in_public_report": false,
+    "checkpoints_in_git": false,
+    "onnx_models_in_git": false
+  },
+  "status": "code_ready_results_pending"
+}
