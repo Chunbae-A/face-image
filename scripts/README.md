@@ -63,6 +63,16 @@ python3 scripts/validate_deepfake_model_improvement_plan.py
 
 검사 대상은 [`configs/deepfake/model_improvement_plan.json`](../configs/deepfake/model_improvement_plan.json)이다. 공식 Test를 학습·기준값 선택에 사용하거나 Test 오류를 hard negative로 되돌리는 설정, 단계 의존성 오류와 비공개 산출물 공개 설정을 발견하면 실패한다. 전체 실행 순서는 [`DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md`](../DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md)에 있다.
 
+## EfficientNet-B4와 Xception 공정 비교
+
+아래 생성기는 두 모델을 같은 `256×256`, 정규화 `0.5`, seed·프레임·학습 예산으로 실행하는 비공개 Kaggle 노트북을 만든다.
+
+```bash
+python3 scripts/build_effb4_xception_comparison_kaggle_notebook.py
+```
+
+노트북은 모든 후보를 Validation-only로 먼저 평가한 뒤 [`compare_deepfake_model_candidates.py`](compare_deepfake_model_candidates.py)가 후보 하나를 고정한다. 그 후보에만 공식 Test와 ONNX 변환을 실행한다. 클릭 순서는 [`XCEPTION_KAGGLE_RUNBOOK.md`](../XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
+
 ## 노트북 재생성
 
 ```bash
@@ -72,6 +82,7 @@ python3 scripts/build_celebdf_robustness_colab_notebook.py
 python3 scripts/build_celebdf_robustness_kaggle_notebook.py
 python3 scripts/build_celebdf_deepfake_colab_notebook.py
 python3 scripts/build_celebdf_deepfake_kaggle_notebooks.py
+python3 scripts/build_effb4_xception_comparison_kaggle_notebook.py
 ```
 
 노트북은 실행 스크립트를 내장하므로 생성 후 ArcFace와 딥페이크 관련 원본 스크립트의 변경이 정확히 포함됐는지 테스트로 검증한다.

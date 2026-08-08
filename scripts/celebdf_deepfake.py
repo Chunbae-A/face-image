@@ -662,6 +662,28 @@ def threshold_at_fpr(labels: np.ndarray, scores: np.ndarray, target_fpr: float) 
     return float(np.nextafter(real_scores[allowed_false_positives], np.inf))
 
 
+def operating_point_at_recall(
+    labels: np.ndarray,
+    scores: np.ndarray,
+    target_recall: float,
+) -> dict[str, float | int]:
+    """Return the lowest-FPR operating point that reaches the requested recall."""
+    if not 0 < target_recall <= 1:
+        raise ValueError("target_recall must be in (0, 1]")
+    _fpr, recall, thresholds = roc_curve(labels, scores)
+    eligible = np.flatnonzero(recall >= target_recall)
+    if not len(eligible):  # pragma: no cover - a valid binary ROC reaches recall 1
+        raise ValueError("target recall cannot be reached")
+    # ROC points are ordered from strict to permissive. The first qualifying
+    # point therefore has the smallest FPR, with deterministic tie handling.
+    index = int(eligible[0])
+    metrics = classification_metrics(labels, scores, threshold=float(thresholds[index]))
+    return {
+        "target_recall": float(target_recall),
+        **metrics,
+    }
+
+
 def classification_metrics(
     labels: np.ndarray,
     scores: np.ndarray,
@@ -835,6 +857,11 @@ def evaluate_score_records(
         "selected_threshold": threshold,
         "validation_video": classification_metrics(
             val_labels, val_scores, threshold=threshold
+        ),
+        "validation_operating_point_at_recall_0_95": operating_point_at_recall(
+            val_labels,
+            val_scores,
+            0.95,
         ),
         "test_frame": classification_metrics(
             frame_labels, frame_scores, threshold=threshold

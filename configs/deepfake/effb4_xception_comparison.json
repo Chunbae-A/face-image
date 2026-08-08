@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "issue": 29,
+  "experiment_id": "celebdf_effb4_xception_fair_comparison_v1",
+  "environment": "Kaggle T4 GPU private notebook",
+  "seed": 20260808,
+  "epochs": 8,
+  "early_stopping_patience": 3,
+  "train_frames_per_video": 16,
+  "evaluation_frame_counts": [16],
+  "aggregation_methods": ["mean"],
+  "batch_size": 8,
+  "gradient_accumulation_steps": 2,
+  "effective_batch_size": 16,
+  "learning_rate": 0.0001,
+  "weight_decay": 0.0001,
+  "optimizer": "AdamW",
+  "augmentation": [
+    "horizontal_flip",
+    "resize_degradation",
+    "jpeg_compression",
+    "gaussian_blur",
+    "low_light",
+    "color_jitter",
+    "gaussian_noise"
+  ],
+  "target_validation_fpr": 0.01,
+  "selection_target_recall": 0.95,
+  "normalization": "half",
+  "input_size": 256,
+  "conditions": [
+    "clean",
+    "jpeg_q30",
+    "gaussian_blur_sigma2",
+    "low_light_gamma2",
+    "downscale_0_25"
+  ],
+  "candidates": [
+    {
+      "id": "efficientnet_b4",
+      "display_name": "EfficientNet-B4",
+      "pretrained_source": "torchvision EfficientNet_B4_Weights.DEFAULT"
+    },
+    {
+      "id": "xception",
+      "display_name": "Xception",
+      "pretrained_source": "timm legacy_xception.tf_in1k"
+    }
+  ],
+  "fairness_controls": [
+    "same_crop_manifest_sha256",
+    "same_train_validation_split",
+    "same_seed",
+    "same_input_size",
+    "same_normalization",
+    "same_frame_budget",
+    "same_augmentation",
+    "same_optimizer_and_learning_rate",
+    "same_epoch_and_early_stopping_budget",
+    "same_validation_metrics"
+  ],
+  "selection": {
+    "split": "validation",
+    "primary": "minimum_fpr_at_recall_0_95",
+    "tie_breakers": [
+      "maximum_robustness_macro_auc",
+      "minimum_validation_latency_p95_ms",
+      "candidate_id"
+    ],
+    "official_test_used_for_selection": false,
+    "official_test_candidates_evaluated": 1
+  },
+  "status": "code_ready_results_pending"
+}

@@ -35,6 +35,8 @@ from celebdf_deepfake import (
     aggregate_video_scores,
     classification_metrics,
     evaluate_score_records,
+    latency_summary,
+    operating_point_at_recall,
     read_manifest,
     roc_auc,
     select_smoke_rows,
@@ -45,6 +47,33 @@ from celebdf_deepfake import (
 
 DEFAULT_INPUT_SIZE = 380
 DEFAULT_ALIGNED_CROP_SIZE = 224
+SUPPORTED_ARCHITECTURES = ("efficientnet_b4", "xception")
+SUPPORTED_NORMALIZATIONS = ("architecture_default", "half")
+TRAIN_AUGMENTATIONS = (
+    "horizontal_flip",
+    "resize_degradation",
+    "jpeg_compression",
+    "gaussian_blur",
+    "low_light",
+    "color_jitter",
+    "gaussian_noise",
+)
+MODEL_SPECS: dict[str, dict[str, object]] = {
+    "efficientnet_b4": {
+        "display_name": "EfficientNet-B4",
+        "implementation": "torchvision/efficientnet_b4",
+        "default_input_size": 380,
+        "default_mean": (0.485, 0.456, 0.406),
+        "default_std": (0.229, 0.224, 0.225),
+    },
+    "xception": {
+        "display_name": "Xception",
+        "implementation": "timm/legacy_xception.tf_in1k",
+        "default_input_size": 299,
+        "default_mean": (0.5, 0.5, 0.5),
+        "default_std": (0.5, 0.5, 0.5),
+    },
+}
 EVALUATION_FRAME_COUNTS = (8, 16, 32)
 EVALUATION_CONDITIONS = (
     "clean",
@@ -53,6 +82,25 @@ EVALUATION_CONDITIONS = (
     "low_light_gamma2",
     "downscale_0_25",
 )
+
+
+def model_spec(architecture: str) -> dict[str, object]:
+    try:
+        return MODEL_SPECS[architecture]
+    except KeyError as error:
+        raise ValueError(f"unsupported architecture: {architecture}") from error
+
+
+def normalization_spec(
+    architecture: str,
+    normalization: str,
+) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    spec = model_spec(architecture)
+    if normalization == "architecture_default":
+        return tuple(spec["default_mean"]), tuple(spec["default_std"])  # type: ignore[arg-type]
+    if normalization == "half":
+        return (0.5, 0.5, 0.5), (0.5, 0.5, 0.5)
+    raise ValueError(f"unsupported normalization: {normalization}")
 
 
 @dataclass(frozen=True)
@@ -532,13 +580,16 @@ class AddGaussianNoise:
         return torch.clamp(tensor + torch.randn_like(tensor) * self.sigma, 0.0, 1.0)
 
 
-def build_transform(*, train_mode: bool, input_size: int):
+def build_transform(
+    *,
+    train_mode: bool,
+    input_size: int,
+    architecture: str = "efficientnet_b4",
+    normalization: str = "architecture_default",
+):
     from torchvision import transforms  # type: ignore
-    from torchvision.models import EfficientNet_B4_Weights  # type: ignore
 
-    normalization = EfficientNet_B4_Weights.DEFAULT.transforms()
-    mean = normalization.mean
-    std = normalization.std
+    mean, std = normalization_spec(architecture, normalization)
     if train_mode:
         return transforms.Compose(
             [
@@ -593,18 +644,56 @@ class CropDataset:
         return transformed, row.label, index
 
 
-def build_model(*, pretrained: bool):
-    from torch import nn  # type: ignore
-    from torchvision.models import EfficientNet_B4_Weights, efficientnet_b4  # type: ignore
+def build_model(*, architecture: str = "efficientnet_b4", pretrained: bool):
+    spec = model_spec(architecture)
+    if architecture == "efficientnet_b4":
+        from torch import nn  # type: ignore
+        from torchvision.models import EfficientNet_B4_Weights, efficientnet_b4  # type: ignore
 
-    weights = EfficientNet_B4_Weights.DEFAULT if pretrained else None
-    model = efficientnet_b4(weights=weights)
-    in_features = model.classifier[1].in_features
-    model.classifier[1] = nn.Linear(in_features, 1)
+        weights = EfficientNet_B4_Weights.DEFAULT if pretrained else None
+        model = efficientnet_b4(weights=weights)
+        in_features = model.classifier[1].in_features
+        model.classifier[1] = nn.Linear(in_features, 1)
+        inventory = {
+            "pretrained_weights": (
+                "EfficientNet_B4_Weights.DEFAULT" if pretrained else None
+            ),
+            "pretrained_weights_url": (
+                EfficientNet_B4_Weights.DEFAULT.url if pretrained else None
+            ),
+            "pretrained_weights_license": "torchvision model weight terms",
+        }
+    elif architecture == "xception":
+        try:
+            import timm  # type: ignore
+        except ImportError as error:
+            raise RuntimeError(
+                "Xception requires timm. Install the pinned deepfake requirements."
+            ) from error
+        model = timm.create_model(
+            "legacy_xception.tf_in1k",
+            pretrained=pretrained,
+            num_classes=1,
+            exportable=True,
+        )
+        pretrained_cfg = dict(getattr(model, "pretrained_cfg", {}) or {})
+        inventory = {
+            "pretrained_weights": "legacy_xception.tf_in1k" if pretrained else None,
+            "pretrained_weights_url": (
+                (pretrained_cfg.get("url") or pretrained_cfg.get("hf_hub_id"))
+                if pretrained
+                else None
+            ),
+            "pretrained_weights_license": pretrained_cfg.get("license", "apache-2.0"),
+            "timm_version": getattr(timm, "__version__", "unknown"),
+        }
+    else:  # pragma: no cover - guarded by model_spec
+        raise ValueError(f"unsupported architecture: {architecture}")
     return model, {
-        "architecture": "torchvision/efficientnet_b4",
-        "pretrained_weights": "EfficientNet_B4_Weights.DEFAULT" if pretrained else None,
-        "pretrained_weights_url": EfficientNet_B4_Weights.DEFAULT.url if pretrained else None,
+        "architecture_id": architecture,
+        "architecture": spec["implementation"],
+        "display_name": spec["display_name"],
+        **inventory,
     }
 
 
@@ -624,7 +713,7 @@ def _environment_inventory(device: Any) -> dict[str, object]:
     import torch  # type: ignore
     import torchvision  # type: ignore
 
-    return {
+    inventory: dict[str, object] = {
         "python": platform.python_version(),
         "platform": platform.platform(),
         "torch": torch.__version__,
@@ -634,6 +723,13 @@ def _environment_inventory(device: Any) -> dict[str, object]:
         "cuda_version": torch.version.cuda,
         "gpu_name": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
     }
+    try:
+        import timm  # type: ignore
+
+        inventory["timm"] = timm.__version__
+    except ImportError:
+        inventory["timm"] = None
+    return inventory
 
 
 def _make_loader(
@@ -646,6 +742,8 @@ def _make_loader(
     train_mode: bool,
     seed: int,
     condition: str = "clean",
+    architecture: str = "efficientnet_b4",
+    normalization: str = "architecture_default",
 ):
     import torch  # type: ignore
     from torch.utils.data import DataLoader, WeightedRandomSampler  # type: ignore
@@ -653,7 +751,12 @@ def _make_loader(
     dataset = CropDataset(
         rows,
         crop_root,
-        build_transform(train_mode=train_mode, input_size=input_size),
+        build_transform(
+            train_mode=train_mode,
+            input_size=input_size,
+            architecture=architecture,
+            normalization=normalization,
+        ),
         condition=condition,
     )
     sampler = None
@@ -664,13 +767,14 @@ def _make_loader(
         if np.any(counts == 0):
             raise ValueError(f"training requires both labels, found counts={counts.tolist()}")
         weights = torch.as_tensor([1.0 / counts[label] for label in labels], dtype=torch.double)
-        generator = torch.Generator().manual_seed(seed)
+        sampler_generator = torch.Generator().manual_seed(seed)
         sampler = WeightedRandomSampler(
             weights,
             num_samples=len(weights),
             replacement=True,
-            generator=generator,
+            generator=sampler_generator,
         )
+    loader_generator = torch.Generator().manual_seed(seed)
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -679,6 +783,7 @@ def _make_loader(
         num_workers=workers,
         pin_memory=torch.cuda.is_available(),
         persistent_workers=workers > 0,
+        generator=loader_generator,
     )
 
 
@@ -751,8 +856,13 @@ def train(args: argparse.Namespace) -> dict[str, object]:
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if args.require_cuda and device.type != "cuda":
-        raise RuntimeError("CUDA is required for the full EfficientNet-B4 training run")
-    model, model_inventory = build_model(pretrained=True)
+        raise RuntimeError(
+            f"CUDA is required for the full {model_spec(args.architecture)['display_name']} training run"
+        )
+    model, model_inventory = build_model(
+        architecture=args.architecture,
+        pretrained=True,
+    )
     model.to(device)
     train_loader = _make_loader(
         train_rows,
@@ -762,6 +872,8 @@ def train(args: argparse.Namespace) -> dict[str, object]:
         workers=args.workers,
         train_mode=True,
         seed=args.seed,
+        architecture=args.architecture,
+        normalization=args.normalization,
     )
     validation_loader = _make_loader(
         validation_rows,
@@ -771,6 +883,8 @@ def train(args: argparse.Namespace) -> dict[str, object]:
         workers=args.workers,
         train_mode=False,
         seed=args.seed,
+        architecture=args.architecture,
+        normalization=args.normalization,
     )
     optimizer = torch.optim.AdamW(
         model.parameters(),
@@ -788,6 +902,18 @@ def train(args: argparse.Namespace) -> dict[str, object]:
     best_auc = -math.inf
     epochs_without_improvement = 0
     args.checkpoint.parent.mkdir(parents=True, exist_ok=True)
+    training_protocol = {
+        "optimizer": "AdamW",
+        "learning_rate": args.learning_rate,
+        "weight_decay": args.weight_decay,
+        "epochs": args.epochs,
+        "early_stopping_patience": args.early_stopping_patience,
+        "batch_size": args.batch_size,
+        "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "augmentation": list(TRAIN_AUGMENTATIONS),
+        "dataloader_seed": args.seed,
+        "sampler_seed": args.seed,
+    }
 
     for epoch in range(1, args.epochs + 1):
         model.train()
@@ -835,7 +961,8 @@ def train(args: argparse.Namespace) -> dict[str, object]:
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
-                    "architecture": "efficientnet_b4",
+                    "architecture": args.architecture,
+                    "normalization": args.normalization,
                     "input_size": args.input_size,
                     "train_frames_per_video": args.train_frames_per_video,
                     "seed": args.seed,
@@ -843,6 +970,7 @@ def train(args: argparse.Namespace) -> dict[str, object]:
                     "best_validation_video_auc": best_auc,
                     "crop_manifest_sha256": _sha256(args.crop_manifest),
                     "model_inventory": model_inventory,
+                    "training_protocol": training_protocol,
                 },
                 temporary,
             )
@@ -856,12 +984,22 @@ def train(args: argparse.Namespace) -> dict[str, object]:
         raise RuntimeError("training did not produce a checkpoint")
     report: dict[str, object] = {
         "status": "completed",
-        "architecture": "EfficientNet-B4",
+        "architecture_id": args.architecture,
+        "architecture": model_inventory["display_name"],
         "objective": "binary cross entropy with logits",
         "label_convention": {"real": 0, "fake": 1},
         "balanced_sampling": "inverse class-frequency WeightedRandomSampler",
         "official_test_used_for_training": False,
         "input_size": args.input_size,
+        "normalization": args.normalization,
+        "normalization_mean": normalization_spec(
+            args.architecture,
+            args.normalization,
+        )[0],
+        "normalization_std": normalization_spec(
+            args.architecture,
+            args.normalization,
+        )[1],
         "train_frames_per_video": args.train_frames_per_video,
         "seed": args.seed,
         "epochs_requested": args.epochs,
@@ -881,15 +1019,8 @@ def train(args: argparse.Namespace) -> dict[str, object]:
             "weight_decay": args.weight_decay,
             "amp": use_amp,
         },
-        "augmentation": [
-            "horizontal_flip",
-            "resize_degradation",
-            "jpeg_compression",
-            "gaussian_blur",
-            "low_light",
-            "color_jitter",
-            "gaussian_noise",
-        ],
+        "training_protocol": training_protocol,
+        "augmentation": list(TRAIN_AUGMENTATIONS),
         **model_inventory,
         **_environment_inventory(device),
     }
@@ -901,9 +1032,9 @@ def _load_checkpoint_model(checkpoint_path: Path, device: Any):
     import torch  # type: ignore
 
     checkpoint = torch.load(checkpoint_path, map_location=device, weights_only=False)
-    if checkpoint.get("architecture") != "efficientnet_b4":
-        raise ValueError(f"unsupported checkpoint architecture: {checkpoint.get('architecture')}")
-    model, _ = build_model(pretrained=False)
+    architecture = str(checkpoint.get("architecture", ""))
+    model_spec(architecture)
+    model, _ = build_model(architecture=architecture, pretrained=False)
     model.load_state_dict(checkpoint["model_state_dict"])
     model.to(device)
     model.eval()
@@ -916,6 +1047,9 @@ def _infer_crop_rows(
     args: argparse.Namespace,
     device: Any,
     condition: str,
+    *,
+    architecture: str,
+    normalization: str,
 ) -> list[ScoreRecord]:
     loader = _make_loader(
         rows,
@@ -926,6 +1060,8 @@ def _infer_crop_rows(
         train_mode=False,
         seed=args.seed,
         condition=condition,
+        architecture=architecture,
+        normalization=normalization,
     )
     return infer_loader(model, loader, rows, device, condition=condition)
 
@@ -934,10 +1070,11 @@ def _validation_selection_report(
     records: Sequence[ScoreRecord],
     *,
     target_fpr: float,
+    aggregation_methods: Sequence[str] = ("mean", "median", "top_k"),
 ) -> dict[str, object]:
     methods: dict[str, dict[str, object]] = {}
     ranked: list[tuple[float, float, float, int, str]] = []
-    for method_index, method in enumerate(("mean", "median", "top_k")):
+    for method_index, method in enumerate(aggregation_methods):
         videos = aggregate_video_scores(records, method=method)
         labels = np.asarray([row.label for row in videos], dtype=np.int8)
         scores = np.asarray([row.score for row in videos], dtype=np.float64)
@@ -962,12 +1099,70 @@ def _validation_selection_report(
     }
 
 
+def _validation_only_report(
+    records: Sequence[ScoreRecord],
+    *,
+    selected_aggregation: str,
+    selected_threshold: float,
+    target_fpr: float,
+) -> dict[str, object]:
+    clean_frames = [row for row in records if row.condition == "clean"]
+    if not clean_frames:
+        raise ValueError("clean validation scores are required")
+    clean_videos = aggregate_video_scores(
+        clean_frames,
+        method=selected_aggregation,
+    )
+    labels = np.asarray([row.label for row in clean_videos], dtype=np.int8)
+    scores = np.asarray([row.score for row in clean_videos], dtype=np.float64)
+    condition_reports: dict[str, dict[str, object]] = {}
+    for condition in sorted({row.condition for row in records}):
+        condition_frames = [row for row in records if row.condition == condition]
+        videos = aggregate_video_scores(
+            condition_frames,
+            method=selected_aggregation,
+        )
+        condition_labels = np.asarray([row.label for row in videos], dtype=np.int8)
+        condition_scores = np.asarray([row.score for row in videos], dtype=np.float64)
+        condition_reports[condition] = {
+            "video": classification_metrics(
+                condition_labels,
+                condition_scores,
+                threshold=selected_threshold,
+            ),
+            "latency": latency_summary(videos),
+        }
+    return {
+        "evaluation_scope": "validation_only",
+        "selection_split": "validation",
+        "official_test_used_for_selection": False,
+        "official_test_inference_performed": False,
+        "target_fpr": target_fpr,
+        "selected_aggregation": selected_aggregation,
+        "selected_threshold": selected_threshold,
+        "validation_video": classification_metrics(
+            labels,
+            scores,
+            threshold=selected_threshold,
+        ),
+        "validation_operating_point_at_recall_0_95": operating_point_at_recall(
+            labels,
+            scores,
+            0.95,
+        ),
+        "validation_video_latency": latency_summary(clean_videos),
+        "condition_validation": condition_reports,
+    }
+
+
 def evaluate(args: argparse.Namespace) -> dict[str, object]:
     import torch  # type: ignore
 
     _seed_everything(args.seed)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model, checkpoint = _load_checkpoint_model(args.checkpoint, device)
+    architecture = str(checkpoint["architecture"])
+    normalization = str(checkpoint.get("normalization", "architecture_default"))
     if int(checkpoint["input_size"]) != args.input_size:
         raise ValueError("evaluation input size does not match the checkpoint")
     all_rows = read_crop_manifest(args.crop_manifest)
@@ -985,6 +1180,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, object]:
         args,
         device,
         "clean",
+        architecture=architecture,
+        normalization=normalization,
     )
     validation_by_key = {
         (row.video_id, row.frame_index): row for row in validation_all_scores
@@ -998,7 +1195,11 @@ def evaluate(args: argparse.Namespace) -> dict[str, object]:
             if row.split == "validation"
         ]
         scores = [validation_by_key[(row.video_id, row.frame_index)] for row in crop_subset]
-        report = _validation_selection_report(scores, target_fpr=args.target_fpr)
+        report = _validation_selection_report(
+            scores,
+            target_fpr=args.target_fpr,
+            aggregation_methods=args.aggregation_methods,
+        )
         frame_count_reports[str(frame_count)] = report
         metrics = report["selected_metrics"]
         ranked_counts.append(
@@ -1020,6 +1221,68 @@ def evaluate(args: argparse.Namespace) -> dict[str, object]:
         validation_by_key[(row.video_id, row.frame_index)]
         for row in selected_validation_crops
     ]
+    selected_frame_report = frame_count_reports[str(selected_frame_count)]
+    selected_aggregation = str(selected_frame_report["selected_aggregation"])
+    selected_threshold = float(selected_frame_report["selected_threshold"])
+
+    if args.validation_only:
+        validation_scores = list(selected_validation_scores)
+        for condition in args.conditions:
+            if condition == "clean":
+                continue
+            validation_scores.extend(
+                _infer_crop_rows(
+                    model,
+                    selected_validation_crops,
+                    args,
+                    device,
+                    condition,
+                    architecture=architecture,
+                    normalization=normalization,
+                )
+            )
+        write_score_records(validation_scores, args.private_scores)
+        validation_metrics = _validation_only_report(
+            validation_scores,
+            selected_aggregation=selected_aggregation,
+            selected_threshold=selected_threshold,
+            target_fpr=args.target_fpr,
+        )
+        expected_validation_videos = len(
+            {row.video_id for row in all_rows if row.split == "validation"}
+        )
+        scored_validation_videos = len(
+            {row.video_id for row in selected_validation_crops}
+        )
+        validation_metrics.update(
+            {
+                "frame_count_validation_comparison": frame_count_reports,
+                "selected_frames_per_video": selected_frame_count,
+                "aggregation_candidates": list(args.aggregation_methods),
+                "coverage": {
+                    "validation_video_count_scored": scored_validation_videos,
+                    "validation_video_count_expected": expected_validation_videos,
+                    "validation_coverage": (
+                        scored_validation_videos / expected_validation_videos
+                        if expected_validation_videos
+                        else 0.0
+                    ),
+                },
+                "checkpoint_sha256": _sha256(args.checkpoint),
+                "crop_manifest_sha256": _sha256(args.crop_manifest),
+                "architecture_id": architecture,
+                "model": model_spec(architecture)["display_name"],
+                "input_size": args.input_size,
+                "normalization": normalization,
+                "train_frames_per_video": checkpoint["train_frames_per_video"],
+                "training_protocol": checkpoint.get("training_protocol"),
+                "seed": checkpoint["seed"],
+                "environment": _environment_inventory(device),
+                "private_artifacts_committed": False,
+            }
+        )
+        _write_json_atomic(validation_metrics, args.metrics)
+        return validation_metrics
 
     # Only after frame count, aggregation, and threshold are fixed on validation
     # do we run the official test split.
@@ -1037,18 +1300,24 @@ def evaluate(args: argparse.Namespace) -> dict[str, object]:
                 args,
                 device,
                 condition,
+                architecture=architecture,
+                normalization=normalization,
             )
         )
     write_score_records(all_scores, args.private_scores)
     final_metrics = evaluate_score_records(
         all_scores,
         target_fpr=args.target_fpr,
+        aggregation_methods=args.aggregation_methods,
     )
     final_metrics["frame_count_validation_comparison"] = frame_count_reports
     final_metrics["selected_frames_per_video"] = selected_frame_count
+    final_metrics["aggregation_candidates"] = list(args.aggregation_methods)
     final_metrics["official_test_policy"] = (
         "frame count, aggregation, and threshold selected on validation before test inference"
     )
+    final_metrics["evaluation_scope"] = "official_test_after_validation_freeze"
+    final_metrics["official_test_inference_performed"] = True
     final_metrics["coverage"] = {
         "validation_video_count": len(
             {row.video_id for row in selected_validation_crops}
@@ -1061,8 +1330,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, object]:
     }
     final_metrics["checkpoint_sha256"] = _sha256(args.checkpoint)
     final_metrics["crop_manifest_sha256"] = _sha256(args.crop_manifest)
-    final_metrics["model"] = "EfficientNet-B4"
+    final_metrics["architecture_id"] = architecture
+    final_metrics["model"] = model_spec(architecture)["display_name"]
     final_metrics["input_size"] = args.input_size
+    final_metrics["normalization"] = normalization
+    final_metrics["train_frames_per_video"] = checkpoint["train_frames_per_video"]
+    final_metrics["training_protocol"] = checkpoint.get("training_protocol")
+    final_metrics["seed"] = checkpoint["seed"]
     final_metrics["environment"] = _environment_inventory(device)
     final_metrics["private_artifacts_committed"] = False
     _write_json_atomic(final_metrics, args.metrics)
@@ -1095,7 +1369,9 @@ def export_onnx(args: argparse.Namespace) -> dict[str, object]:
     os.replace(temporary, args.output)
     report = {
         "status": "completed",
-        "architecture": "EfficientNet-B4",
+        "architecture_id": checkpoint["architecture"],
+        "architecture": model_spec(str(checkpoint["architecture"]))["display_name"],
+        "normalization": checkpoint.get("normalization", "architecture_default"),
         "input_shape": ["batch", 3, input_size, input_size],
         "output": "fake_logit; sigmoid(logit) is the fake probability-like score",
         "opset": 17,
@@ -1108,8 +1384,31 @@ def export_onnx(args: argparse.Namespace) -> dict[str, object]:
 
 
 def smoke_onnx(args: argparse.Namespace) -> dict[str, object]:
+    """Verify an ONNX artifact and run one CPU inference with export metadata."""
+
     import onnxruntime as ort  # type: ignore
 
+    export_report = json.loads(args.export_report.read_text(encoding="utf-8"))
+    if export_report.get("status") != "completed":
+        raise ValueError("ONNX export report is not completed")
+    model_sha256 = _sha256(args.model)
+    if export_report.get("onnx_sha256") != model_sha256:
+        raise ValueError("ONNX model SHA-256 does not match the export report")
+    architecture = str(export_report.get("architecture_id", ""))
+    normalization = str(export_report.get("normalization", ""))
+    model_spec(architecture)
+    normalization_spec(architecture, normalization)
+    input_shape = export_report.get("input_shape")
+    if (
+        not isinstance(input_shape, list)
+        or len(input_shape) != 4
+        or input_shape[1] != 3
+        or input_shape[2] != input_shape[3]
+        or not isinstance(input_shape[2], int)
+        or input_shape[2] <= 0
+    ):
+        raise ValueError("ONNX export report has an invalid input shape")
+    input_size = int(input_shape[2])
     rows = read_crop_manifest(args.crop_manifest)
     if not rows:
         raise ValueError("a crop is required for ONNX smoke inference")
@@ -1117,7 +1416,12 @@ def smoke_onnx(args: argparse.Namespace) -> dict[str, object]:
         str(args.model),
         providers=["CPUExecutionProvider"],
     )
-    transform = build_transform(train_mode=False, input_size=args.input_size)
+    transform = build_transform(
+        train_mode=False,
+        input_size=input_size,
+        architecture=architecture,
+        normalization=normalization,
+    )
     with Image.open(args.crop_root / rows[0].relative_crop_path) as image:
         tensor = transform(image.convert("RGB")).unsqueeze(0).numpy()
     started = time.perf_counter()
@@ -1127,10 +1431,13 @@ def smoke_onnx(args: argparse.Namespace) -> dict[str, object]:
     result = {
         "status": "passed",
         "provider": session.get_providers()[0],
-        "input_size": args.input_size,
+        "architecture_id": architecture,
+        "normalization": normalization,
+        "input_size": input_size,
         "output_is_finite": math.isfinite(logit),
         "processing_ms": elapsed_ms,
-        "model_sha256": _sha256(args.model),
+        "model_sha256": model_sha256,
+        "export_report_sha256": _sha256(args.export_report),
         "sample_identity_in_report": False,
     }
     if not result["output_is_finite"]:
@@ -1171,6 +1478,16 @@ def build_parser() -> argparse.ArgumentParser:
     train_parser.add_argument("--crop-root", type=Path, required=True)
     train_parser.add_argument("--checkpoint", type=Path, required=True)
     train_parser.add_argument("--train-report", type=Path, required=True)
+    train_parser.add_argument(
+        "--architecture",
+        choices=SUPPORTED_ARCHITECTURES,
+        default="efficientnet_b4",
+    )
+    train_parser.add_argument(
+        "--normalization",
+        choices=SUPPORTED_NORMALIZATIONS,
+        default="architecture_default",
+    )
     train_parser.add_argument("--input-size", type=int, default=DEFAULT_INPUT_SIZE)
     train_parser.add_argument("--train-frames-per-video", type=int, default=16)
     train_parser.add_argument("--batch-size", type=int, default=8)
@@ -1197,10 +1514,21 @@ def build_parser() -> argparse.ArgumentParser:
     evaluate_parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
     evaluate_parser.add_argument("--target-fpr", type=float, default=0.01)
     evaluate_parser.add_argument(
+        "--validation-only",
+        action="store_true",
+        help="score validation conditions without running official test inference",
+    )
+    evaluate_parser.add_argument(
         "--frame-counts",
         type=int,
         nargs="+",
         default=list(EVALUATION_FRAME_COUNTS),
+    )
+    evaluate_parser.add_argument(
+        "--aggregation-methods",
+        nargs="+",
+        choices=("mean", "median", "top_k"),
+        default=["mean", "median", "top_k"],
     )
     evaluate_parser.add_argument(
         "--conditions",
@@ -1219,7 +1547,7 @@ def build_parser() -> argparse.ArgumentParser:
     smoke_parser.add_argument("--crop-manifest", type=Path, required=True)
     smoke_parser.add_argument("--crop-root", type=Path, required=True)
     smoke_parser.add_argument("--report", type=Path, required=True)
-    smoke_parser.add_argument("--input-size", type=int, default=DEFAULT_INPUT_SIZE)
+    smoke_parser.add_argument("--export-report", type=Path, required=True)
     return parser
 
 
