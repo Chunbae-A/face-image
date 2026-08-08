@@ -170,7 +170,13 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --
 
 현재 `retrieval_threshold=0.20`은 기능 연결용 임시값이며 정확도 검증을 마친 운영값이 아니다. ArcFace가 후보가 아니라고 판단한 이미지는 불필요한 ONNX 경고를 피하려고 `deepfake.status=not_analyzed`로 남긴다. 여러 얼굴이 있는 이미지와 영상 후보는 아직 이 경로에서 처리하지 않는다.
 
-## 11. 종료
+## 11. `scan_id` 비동기 데모
+
+화면이 검색 처리를 기다리며 멈추지 않게 하려면 `POST /v1/faceguard/enrollments`로 얼굴을 임시 등록한 뒤 `POST /v1/exposure-scans`로 작업을 시작한다. 서버가 즉시 반환한 `scan_id`를 `GET /v1/exposure-scans/{scan_id}`에 넣어 진행 상태를 확인한다.
+
+초보자용 네 단계 Swagger 순서와 복사할 JSON은 [`ASYNC_EXPOSURE_SCAN_QUICKSTART.md`](ASYNC_EXPOSURE_SCAN_QUICKSTART.md)에 있다. 현재 비동기 경로는 공개 이미지 후보만 지원하고, 서버를 재시작하면 메모리의 등록·작업·결과가 사라진다.
+
+## 12. 종료
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.searxng.yml down
