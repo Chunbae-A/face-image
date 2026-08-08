@@ -18,7 +18,7 @@
 ## Kaggle에서 실행
 
 1. 새 **Private** Kaggle Notebook을 만든다.
-2. [`notebooks/celebdf_score_calibration_kaggle.ipynb`](notebooks/celebdf_score_calibration_kaggle.ipynb)를 Import한다.
+2. [`notebooks/celebdf_score_calibration_kaggle.ipynb`](../../notebooks/celebdf_score_calibration_kaggle.ipynb)를 Import한다.
 3. Input에 기존 `deepsogak-celebdf-preprocess` Output을 연결한다.
 4. Input에 기존 `deepsogak-celebdf-train` Output을 연결한다.
 5. GPU를 선택하고 `Run All`을 누른다.
@@ -27,7 +27,7 @@
 
 ## 결과 판단
 
-2026-08-08 KST 실제 실행 결과는 [`reports/deepfake_score_calibration/2026-08-08`](reports/deepfake_score_calibration/2026-08-08)에 있다. Isotonic이 선택됐고 ECE Gate는 통과했지만 공식 Test 실제영상 FPR이 `0.016854`로 목표 `0.01`을 넘어 `display_approved=false`가 됐다.
+2026-08-08 KST 실제 실행 결과는 [`reports/deepfake_score_calibration/2026-08-08`](../../reports/deepfake_score_calibration/2026-08-08)에 있다. Isotonic이 선택됐고 ECE Gate는 통과했지만 공식 Test 실제영상 FPR이 `0.016854`로 목표 `0.01`을 넘어 `display_approved=false`가 됐다.
 
 `deepfake_video_calibration.json`의 다음 값을 확인한다.
 

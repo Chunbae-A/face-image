@@ -192,7 +192,7 @@ Issue #15의 목표인 재현 가능한 전체 딥페이크 기준선은 완료�
 2. [Issue #17](https://github.com/Chunbae-A/face-image/issues/17)에서 ONNX를 연구용 비동기 분석 API에 연결한다.
 3. 한국인·최신 생성 방식·실제 웹 재압축 영상으로 외부 검증한다.
 
-실행 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](../../../DEEPFAKE_KAGGLE_RUNBOOK.md), 전체 진행 기록은 [Issue #15](https://github.com/Chunbae-A/face-image/issues/15)에 있다.
+실행 방법은 [딥페이크 Kaggle 실행 가이드](../../../docs/experiments/deepfake-kaggle.md), 전체 진행 기록은 [Issue #15](https://github.com/Chunbae-A/face-image/issues/15)에 있다.
 
 ## 개인정보·라이선스·해석 제한
 

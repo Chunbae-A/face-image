@@ -58,7 +58,7 @@ Kaggle의 `Datasets` → `New Dataset`에서 승인받은 전체 파일을 올�
 
 ## 2. 1단계 — 얼굴 전처리
 
-사용할 파일: [`notebooks/celebdf_deepfake_preprocess_kaggle.ipynb`](notebooks/celebdf_deepfake_preprocess_kaggle.ipynb)
+사용할 파일: [`notebooks/celebdf_deepfake_preprocess_kaggle.ipynb`](../../notebooks/celebdf_deepfake_preprocess_kaggle.ipynb)
 
 1. Kaggle `Code` → `New Notebook`을 연다.
 2. 위 IPYNB를 Import한다.
@@ -86,7 +86,7 @@ celebdf_deepfake_preflight_sanitized.zip
 
 ## 3. 2단계 — 모델 학습과 공식 평가
 
-사용할 파일: [`notebooks/celebdf_deepfake_train_kaggle.ipynb`](notebooks/celebdf_deepfake_train_kaggle.ipynb)
+사용할 파일: [`notebooks/celebdf_deepfake_train_kaggle.ipynb`](../../notebooks/celebdf_deepfake_train_kaggle.ipynb)
 
 1. 새 Private Kaggle Notebook을 만든다.
 2. 위 IPYNB를 Import한다.
@@ -154,7 +154,7 @@ research_gate_pass
 
 ## 7. 3단계 — 화면용 점수 보정
 
-사용할 파일: [`notebooks/celebdf_score_calibration_kaggle.ipynb`](notebooks/celebdf_score_calibration_kaggle.ipynb)
+사용할 파일: [`notebooks/celebdf_score_calibration_kaggle.ipynb`](../../notebooks/celebdf_score_calibration_kaggle.ipynb)
 
 이 단계는 학습을 다시 하지 않는다. 새 Private Notebook에 파일을 Import하고 Input으로 다음 두 저장 결과를 연결한다.
 
@@ -170,4 +170,4 @@ README_score_calibration.md
 deepfake_score_calibration_sanitized.zip
 ```
 
-자세한 결과 해석과 API 설치 방법은 [`SCORE_CALIBRATION_RUNBOOK.md`](SCORE_CALIBRATION_RUNBOOK.md)를 따른다.
+자세한 결과 해석과 API 설치 방법은 [점수 보정 실행 안내](score-calibration.md)를 따른다.

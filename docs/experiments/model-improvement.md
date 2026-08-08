@@ -48,7 +48,7 @@ flowchart LR
 - 데이터, 얼굴 crop, seed, 학습 예산과 평가 방식은 유지한다.
 - **모델 구조만** EfficientNet-B4에서 Xception으로 바꾼다.
 - 더 좋아도 FPR·Recall·처리시간을 함께 보고 판단한다.
-- 실행 코드와 Kaggle 노트북은 준비됐으며 새 학습 결과는 아직 실행 전이다. 자세한 클릭 순서는 [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
+- 실행 코드와 Kaggle 노트북은 준비됐으며 실제 비교 결과까지 기록됐다. 자세한 실행과 결과는 [EfficientNet-B4·Xception 비교](xception-comparison.md)에 있다.
 
 ### P2. SBI로 보지 못한 조작 방식에 대비
 
@@ -98,7 +98,7 @@ flowchart LR
 6. 공식 Test는 후보와 기준값을 모두 고정한 뒤 마지막에 한 번 확인한다.
 7. 공식 Test 오류를 학습 데이터로 되돌리지 않는다.
 
-설정은 [`configs/deepfake/model_improvement_plan.json`](configs/deepfake/model_improvement_plan.json)에 고정되어 있고 아래 명령으로 누수 방지 규칙을 검사한다.
+설정은 [`configs/deepfake/model_improvement_plan.json`](../../configs/deepfake/model_improvement_plan.json)에 고정되어 있고 아래 명령으로 누수 방지 규칙을 검사한다.
 
 ```bash
 python scripts/validate_deepfake_model_improvement_plan.py

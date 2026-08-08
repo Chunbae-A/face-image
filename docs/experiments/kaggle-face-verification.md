@@ -4,7 +4,7 @@
 
 ## 완료된 실행
 
-2026-08-06 Kaggle P100에서 여섯 조건 전체 실행을 완료했다. 처리 성공률과 TAR Gate는 통과했지만 FAR 목표는 통과하지 못해 API 판정 기준값을 변경하지 않았다. 집계 결과와 해석은 [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06)에 있다. 비공개 Dataset 주소와 인증정보는 기록하지 않는다.
+2026-08-06 Kaggle P100에서 여섯 조건 전체 실행을 완료했다. 처리 성공률과 TAR Gate는 통과했지만 FAR 목표는 통과하지 못해 API 판정 기준값을 변경하지 않았다. 집계 결과와 해석은 [`reports/celebdf_robustness/2026-08-06`](../../reports/celebdf_robustness/2026-08-06)에 있다. 비공개 Dataset 주소와 인증정보는 기록하지 않는다.
 
 ## 먼저 확인할 것
 
@@ -33,7 +33,7 @@
 ## 2. 노트북 준비
 
 1. `Code` → `New Notebook`을 연다.
-2. [`notebooks/celebdf_arcface_robustness_kaggle.ipynb`](notebooks/celebdf_arcface_robustness_kaggle.ipynb)를 가져온다.
+2. [`notebooks/celebdf_arcface_robustness_kaggle.ipynb`](../../notebooks/celebdf_arcface_robustness_kaggle.ipynb)를 가져온다.
 3. 오른쪽 `Input` → `Add Input`에서 앞서 만든 비공개 Dataset을 연결한다.
 4. 오른쪽 `Settings`에서 `Accelerator`를 `GPU P100`으로 선택한다.
 5. `Internet`을 켠다. InsightFace 모델을 처음 내려받을 때 필요하다.

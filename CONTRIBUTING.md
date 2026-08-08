@@ -65,3 +65,16 @@ git diff --exit-code -- notebooks/celebdf_arcface_full_colab.ipynb
 - 실행 output이 남은 notebook
 
 외부에 공유할 수 있는 것은 집계 metric, 비식별 reject reason, 실행 환경과 hash, 그래프로 제한한다.
+
+## 7. 문서 위치
+
+새 문서를 루트에 추가하지 않는다. 전체 문서 지도는 [`docs/README.md`](docs/README.md)에서 관리한다.
+
+| 위치 | 내용 |
+|---|---|
+| `docs/api/` | API 실행, 엔드포인트, 검색 어댑터 사용법 |
+| `docs/demo/` | 발표와 데모 화면·API 흐름 |
+| `docs/experiments/` | 모델 실험 계획과 Colab·Kaggle 재현 절차 |
+| `reports/<실험>/<날짜>/` | 개인정보를 제외한 실제 실행 결과 |
+
+문서를 이동하거나 링크를 추가하면 `tests/test_documentation_links.py`를 실행해 상대 링크가 유효한지 확인한다.

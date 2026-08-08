@@ -390,7 +390,7 @@ retrieval_match=true 후보만 단일 이미지 ONNX 분석
 후보별 유사도·딥페이크 점수·품질·실패 코드 반환
 ```
 
-Swagger에서 등록 얼굴 사진과 폼 값을 입력하는 방법은 [`API_QUICKSTART.md`](API_QUICKSTART.md)에 있다. 명령줄 예시는 다음과 같다.
+Swagger에서 등록 얼굴 사진과 폼 값을 입력하는 방법은 [API 빠른 실행](quickstart.md)에 있다. 명령줄 예시는 다음과 같다.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
@@ -439,9 +439,9 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 
 이 값은 파이프라인이 끝까지 동작하는지 확인한 **1건의 스모크 테스트**다. 정확도, 오인식률, 한국인 일반화 또는 운영 안전성을 증명하는 결과가 아니다.
 
-영상 연결 시험은 **2026-08-08 Asia/Seoul(KST)**에 사용 동의를 받은 실제 얼굴 이미지로 런타임에서만 4초 MP4를 만들었고 종료 즉시 삭제했다. 비식별 결과와 한계는 [`reports/video_deepfake_api_smoke/2026-08-08`](reports/video_deepfake_api_smoke/2026-08-08)에 기록했다.
+영상 연결 시험은 **2026-08-08 Asia/Seoul(KST)**에 사용 동의를 받은 실제 얼굴 이미지로 런타임에서만 4초 MP4를 만들었고 종료 즉시 삭제했다. 비식별 결과와 한계는 [`reports/video_deepfake_api_smoke/2026-08-08`](../../reports/video_deepfake_api_smoke/2026-08-08)에 기록했다.
 
-추가로 Docker HTTP API에 승인받은 Celeb-real 전체 프레임을 직접 전송한 로컬 데모 스모크에서는 같은 사람 `0.694200`, 다른 사람 `-0.051950`이 관측됐다. 예열 후 CPU 처리시간은 두 요청에서 `962.706ms`, `1,188.254ms`였다. 개인정보를 제외한 실행 환경과 한계는 [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06)에 기록했다.
+추가로 Docker HTTP API에 승인받은 Celeb-real 전체 프레임을 직접 전송한 로컬 데모 스모크에서는 같은 사람 `0.694200`, 다른 사람 `-0.051950`이 관측됐다. 예열 후 CPU 처리시간은 두 요청에서 `962.706ms`, `1,188.254ms`였다. 개인정보를 제외한 실행 환경과 한계는 [`reports/faceguard_demo_smoke/2026-08-06`](../../reports/faceguard_demo_smoke/2026-08-06)에 기록했다.
 
 ## 주요 오류
 
@@ -495,7 +495,7 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 
 ## 테스트
 
-`scan_id` 기반 비동기 이미지 후보 데모는 [`ASYNC_EXPOSURE_SCAN_QUICKSTART.md`](ASYNC_EXPOSURE_SCAN_QUICKSTART.md)의 Swagger 순서를 따른다. 등록 임베딩은 기본 30분, 스캔 결과는 60분 동안 프로세스 메모리에만 보관되며 재시작 복구는 아직 지원하지 않는다.
+`scan_id` 기반 비동기 이미지 후보 데모는 [비동기 노출 스캔 안내](async-exposure-scan.md)의 Swagger 순서를 따른다. 등록 임베딩은 기본 30분, 스캔 결과는 60분 동안 프로세스 메모리에만 보관되며 재시작 복구는 아직 지원하지 않는다.
 
 API 경계 테스트는 실제 얼굴이나 모델 파일 없이 실행된다.
 
