@@ -73,6 +73,16 @@ python3 scripts/build_effb4_xception_comparison_kaggle_notebook.py
 
 노트북은 모든 후보를 Validation-only로 먼저 평가한 뒤 [`compare_deepfake_model_candidates.py`](compare_deepfake_model_candidates.py)가 후보 하나를 고정한다. 그 후보에만 공식 Test와 ONNX 변환을 실행한다. 클릭 순서는 [`XCEPTION_KAGGLE_RUNBOOK.md`](../XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
 
+## JPEG 조건부 두 모델 결합
+
+전체 비교에서 Xception이 JPEG q30 조건에서만 우세했기 때문에, 아래 생성기는 기존 두 checkpoint를 다시 학습하지 않고 Validation 프레임 점수만 조건부로 결합하는 비공개 Kaggle 노트북을 만든다.
+
+```bash
+python3 scripts/build_jpeg_conditional_ensemble_kaggle_notebook.py
+```
+
+[`optimize_deepfake_score_ensemble.py`](optimize_deepfake_score_ensemble.py)는 두 CSV의 영상·프레임 키와 라벨이 정확히 같고 split이 Validation일 때만 실행한다. EfficientNet-B4 단독, 항상 결합, JPEG 조건부 결합을 비교하고 식별자가 없는 집계 JSON만 저장한다. 실행 순서는 [`JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md`](../JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md)에 있다.
+
 ## 노트북 재생성
 
 ```bash
@@ -83,6 +93,7 @@ python3 scripts/build_celebdf_robustness_kaggle_notebook.py
 python3 scripts/build_celebdf_deepfake_colab_notebook.py
 python3 scripts/build_celebdf_deepfake_kaggle_notebooks.py
 python3 scripts/build_effb4_xception_comparison_kaggle_notebook.py
+python3 scripts/build_jpeg_conditional_ensemble_kaggle_notebook.py
 ```
 
 노트북은 실행 스크립트를 내장하므로 생성 후 ArcFace와 딥페이크 관련 원본 스크립트의 변경이 정확히 포함됐는지 테스트로 검증한다.

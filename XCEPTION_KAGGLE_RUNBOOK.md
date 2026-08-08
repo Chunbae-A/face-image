@@ -2,11 +2,24 @@
 
 ## 지금 무엇이 준비됐나요?
 
-두 모델을 같은 조건에서 비교하는 코드와 Kaggle 노트북이 준비됐다. **학습 결과는 아직 실행 전**이다.
+두 모델을 같은 조건에서 비교하는 Kaggle 실행을 완료했다. **전체 후보는 EfficientNet-B4를 유지**하고, Xception은 JPEG 압축 보조 후보로만 남겼다.
 
 - 실행 노트북: [`notebooks/celebdf_effb4_xception_compare_kaggle.ipynb`](notebooks/celebdf_effb4_xception_compare_kaggle.ipynb)
 - 고정 설정: [`configs/deepfake/effb4_xception_comparison.json`](configs/deepfake/effb4_xception_comparison.json)
 - 결과 선택 코드: [`scripts/compare_deepfake_model_candidates.py`](scripts/compare_deepfake_model_candidates.py)
+
+## 실제 실행 결과
+
+- Kaggle T4 x2 실행시간: `2시간 43분 4초`
+- 선택 후보: `EfficientNet-B4`
+- Validation Clean ROC-AUC: EfficientNet-B4 `0.999987`, Xception `0.999962`
+- 열화 4조건 평균 ROC-AUC: EfficientNet-B4 `0.998630`, Xception `0.998394`
+- Validation p95: EfficientNet-B4 `69.35ms`, Xception `94.22ms`
+- 선택 EfficientNet-B4 공식 Test ROC-AUC: `0.999554`
+- 선택 EfficientNet-B4 공식 Test FPR: `1.685%`
+- 연구 Gate: `미통과`
+
+Xception은 전체 후보로는 졌지만 JPEG q30 Validation ROC-AUC가 `0.999491`로 EfficientNet-B4의 `0.999122`보다 높았다. 이 차이가 실제로 쓸 만한지 [`JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md`](JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md)의 후속 실험으로 확인한다.
 
 ## 쉽게 말하면 무엇을 하나요?
 

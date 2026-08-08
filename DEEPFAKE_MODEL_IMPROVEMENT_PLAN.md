@@ -4,7 +4,7 @@
 
 현재 EfficientNet-B4를 버리고 새 모델 하나를 바로 채택하는 계획이 아니다. **같은 데이터 분할·같은 판정 기준·같은 지표**로 Xception, SBI, hard negative 보강, FTCN을 차례로 비교하고 실제 영상 오경고(FPR)를 1% 이하로 줄이는 것이 목표다.
 
-> 이 문서는 실행 순서를 정한 것이다. Xception·SBI·FTCN의 새 성능이 이미 나온 것은 아니다.
+> EfficientNet-B4와 Xception의 1차 비교는 완료됐다. 전체 성능과 속도는 EfficientNet-B4가 우세했고, Xception은 JPEG 압축 조건에서만 우세했다. SBI·Hard Negative·FTCN과 외부 검증은 아직 남아 있다.
 
 ## 왜 고도화가 필요한가?
 
@@ -48,7 +48,9 @@ flowchart LR
 - 데이터, 얼굴 crop, seed, 학습 예산과 평가 방식은 유지한다.
 - **모델 구조만** EfficientNet-B4에서 Xception으로 바꾼다.
 - 더 좋아도 FPR·Recall·처리시간을 함께 보고 판단한다.
-- 실행 코드와 Kaggle 노트북은 준비됐으며 새 학습 결과는 아직 실행 전이다. 자세한 클릭 순서는 [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
+- Kaggle 비교를 완료했다. EfficientNet-B4가 열화 평균 ROC-AUC `0.998630`, p95 `69.35ms`로 Xception의 `0.998394`, `94.22ms`보다 좋았다.
+- Xception은 JPEG q30 Validation ROC-AUC가 `0.999491`로 EfficientNet-B4의 `0.999122`보다 높았다. 그래서 전체 교체는 하지 않고 [Issue #35](https://github.com/Chunbae-A/face-image/issues/35)에서 JPEG 조건부 보조 모델만 검증한다.
+- 자세한 실행과 결과는 [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
 
 ### P2. SBI로 보지 못한 조작 방식에 대비
 
@@ -73,6 +75,7 @@ flowchart LR
 
 - 서로 다른 실수를 내는 두 모델의 점수를 조합했을 때만 앙상블 가치가 있다.
 - Validation에서 단일 모델보다 좋아지지 않으면 복잡성만 늘어나므로 채택하지 않는다.
+- 첫 소규모 실험은 JPEG 압축에서만 Xception을 실행하는 조건부 logit 결합이다. 학습 없이 효과와 지연을 먼저 측정하고, 이득이 확인된 경우에만 지식 증류 파인튜닝으로 빠른 단일 모델에 장점을 옮긴다.
 
 ## 데이터를 어떻게 늘리나?
 
@@ -136,7 +139,8 @@ python scripts/validate_deepfake_model_improvement_plan.py
 | 후보 | Clean FPR | Clean Recall | 저조도 Recall | 축소 FPR | 외부 AUC | p95 | 판정 |
 |---|---:|---:|---:|---:|---:|---:|---|
 | P0 EfficientNet-B4 | 1.6854% | 100% | 78.24% | 12.92% | 측정 전 | 측정 전 | 기준선 |
-| P1 Xception | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 미정 |
+| P1 Xception | Validation 0% | 99.86% | 89.84% | 15.74% | 측정 전 | 94.22ms | 전체 교체 미채택 |
+| P1b JPEG 조건부 결합 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 측정 전 | 실행 전 | 코드 준비 |
 | P2 SBI | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 미정 |
 | P3 Hard negative | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 미정 |
 | P4 FTCN | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 실행 전 | 미정 |

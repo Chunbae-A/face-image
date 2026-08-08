@@ -31,7 +31,7 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 | 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | **무료 URL 제보 + SearXNG 키워드 검색 구현, 얼굴 역검색 미연결** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
 | 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
 | 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 이미지·영상 16프레임 평균 API 구현, 운영 Gate 미통과** ([#25](https://github.com/Chunbae-A/face-image/issues/25)) |
-| 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **EfficientNet-B4/Xception 공정 비교 코드·Kaggle 노트북 준비, GPU 결과 대기; SBI·Hard Negative·FTCN 실행 전** ([#29](https://github.com/Chunbae-A/face-image/issues/29)) |
+| 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **EfficientNet-B4/Xception 비교 완료·EfficientNet-B4 유지, JPEG 조건부 결합 실험 준비; 외부 검증 전** ([#35](https://github.com/Chunbae-A/face-image/issues/35)) |
 | 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | **딥페이크 보정 실험·API 완료, FPR Gate 미통과로 확률 표시 보류; 얼굴 보정 데이터 미확보** ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | **임시 등록·`scan_id`·진행 조회·이미지 후보 결과 완료, 영상 URL·영구 큐는 미연결** ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
 
@@ -100,6 +100,19 @@ Kaggle 4차 실행에서 학습·공식 Test·ONNX 변환·CPU 추론 시험을 
 초기 연구 Gate는 `ROC-AUC ≥ 0.90`, `FPR ≤ 0.01`이다. AUC는 통과했지만 FPR이 목표 1%보다 높아 **즉시 경보·자동 차단용 모델로 승인하지 않는다.** ONNX는 정상 생성됐고 CPU 추론 smoke도 약 `171ms`로 통과했지만, 이는 연결 시험일 뿐 API 응답시간 SLA가 아니다.
 
 열화 평가에서는 해상도 25% 축소와 흐림에서 FPR이 각각 약 `12.92%`, `11.80%`로 증가했고 저조도에서는 Recall이 약 `78.24%`로 감소했다. 따라서 실제 웹에서 재압축·축소된 영상에 바로 적용하면 안 된다. 상세 수치·무결성 hash·그래프는 [최종 결과 보고서](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
+
+### EfficientNet-B4와 Xception 비교
+
+같은 얼굴 crop, 분할, seed, `256×256` 입력, 증강, 학습 예산으로 모델 구조만 바꿔 비교했다. Validation에서 후보를 먼저 고정한 뒤 선택된 EfficientNet-B4 하나만 공식 Test를 실행했다.
+
+| Validation 지표 | EfficientNet-B4 | Xception | 판단 |
+|---|---:|---:|---|
+| Clean ROC-AUC | 0.999987 | 0.999962 | EfficientNet-B4 우세 |
+| 열화 4조건 평균 ROC-AUC | 0.998630 | 0.998394 | EfficientNet-B4 우세 |
+| p95 추론시간 | 69.35ms | 94.22ms | EfficientNet-B4가 빠름 |
+| JPEG q30 ROC-AUC | 0.999122 | **0.999491** | 이 조건만 Xception 우세 |
+
+전체 성능과 속도는 EfficientNet-B4가 좋아 Xception으로 교체하지 않았다. 선택 모델의 공식 Test FPR은 여전히 약 `1.685%`여서 운영 Gate를 통과하지 못했다. 다만 Xception이 JPEG 압축에서만 보인 장점을 활용할 수 있는지 [Issue #35](https://github.com/Chunbae-A/face-image/issues/35)의 조건부 점수 결합 실험으로 확인한다. 실행 전까지는 기존 API 모델을 바꾸지 않는다.
 
 재현 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md), 데이터 분할과 사전검사·현재 결과는 [`reports/celebdf_deepfake_baseline/2026-08-07`](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
 
@@ -220,6 +233,7 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 | [`DEEPFAKE_BASELINE_RUNBOOK.md`](DEEPFAKE_BASELINE_RUNBOOK.md) | 딥페이크 모델 명령 구조 설명 |
 | [`DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md`](DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md) | EfficientNet-B4 → Xception → SBI → Hard Negative → FTCN 고도화 순서와 합격 기준 |
 | [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md) | EfficientNet-B4와 Xception을 같은 조건으로 비교하는 Kaggle 실행 순서 |
+| [`JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md`](JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md) | JPEG 압축에서만 두 모델을 결합하는 Validation 실험 순서 |
 | [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md) | Kaggle 무료 GPU 실행 순서 |
 | [`SCORE_CALIBRATION_RUNBOOK.md`](SCORE_CALIBRATION_RUNBOOK.md) | 딥페이크 원점수 보정 실험과 API 설치 순서 |
 | [`SEARXNG_RUNBOOK.md`](SEARXNG_RUNBOOK.md) | 무료 키워드 검색 실행·시험·한계 |
@@ -247,9 +261,9 @@ python scripts/check_repository_hygiene.py
 
 ## 다음 작업 순서
 
-모델링은 아래 순서로 진행한다. 새 모델의 성능 수치는 아직 실행 전이며, 각 단계는 같은 분할과 같은 지표로 비교한다.
+모델링은 아래 순서로 진행한다. EfficientNet-B4와 Xception의 1차 비교는 끝났고, 이후 단계도 같은 분할과 같은 지표로 비교한다.
 
-1. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
+1. JPEG 압축에서만 Xception을 보조로 쓰는 결합 효과 검증 ([#35](https://github.com/Chunbae-A/face-image/issues/35))
 2. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
 3. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
 4. 결승 후보에 FTCN 시간 정보와 앙상블 추가 효과 검증 ([#32](https://github.com/Chunbae-A/face-image/issues/32))
