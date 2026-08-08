@@ -50,7 +50,7 @@ flowchart LR
 - 더 좋아도 FPR·Recall·처리시간을 함께 보고 판단한다.
 - Kaggle 비교를 완료했다. EfficientNet-B4가 열화 평균 ROC-AUC `0.998630`, p95 `69.35ms`로 Xception의 `0.998394`, `94.22ms`보다 좋았다.
 - Xception은 JPEG q30 Validation ROC-AUC가 `0.999491`로 EfficientNet-B4의 `0.999122`보다 높았다. 그래서 전체 교체는 하지 않고 [Issue #35](https://github.com/Chunbae-A/face-image/issues/35)에서 JPEG 조건부 보조 모델만 검증한다.
-- 자세한 실행과 결과는 [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
+- 자세한 실행과 결과는 [EfficientNet-B4·Xception 비교](xception-comparison.md)에 있다.
 
 ### P2. SBI로 보지 못한 조작 방식에 대비
 
@@ -101,7 +101,7 @@ flowchart LR
 6. 공식 Test는 후보와 기준값을 모두 고정한 뒤 마지막에 한 번 확인한다.
 7. 공식 Test 오류를 학습 데이터로 되돌리지 않는다.
 
-설정은 [`configs/deepfake/model_improvement_plan.json`](configs/deepfake/model_improvement_plan.json)에 고정되어 있고 아래 명령으로 누수 방지 규칙을 검사한다.
+설정은 [`configs/deepfake/model_improvement_plan.json`](../../configs/deepfake/model_improvement_plan.json)에 고정되어 있고 아래 명령으로 누수 방지 규칙을 검사한다.
 
 ```bash
 python scripts/validate_deepfake_model_improvement_plan.py

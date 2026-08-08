@@ -25,7 +25,7 @@ Colab은 딥소각 얼굴가드의 Debug/Pilot 연산 환경으로 사용한다.
 
 ## 시작
 
-1. GitHub에 작업 브랜치가 있는 경우 [`notebooks/faceguard_colab.ipynb`](notebooks/faceguard_colab.ipynb)를 Colab으로 연다.
+1. GitHub에 작업 브랜치가 있는 경우 [`notebooks/faceguard_colab.ipynb`](../../notebooks/faceguard_colab.ipynb)를 Colab으로 연다.
 2. Runtime → Change runtime type에서 GPU를 선택한다. 할당 GPU는 고정값으로 가정하지 않는다.
 3. 보안 게이트 cell에서 hosted cloud 승인 여부를 선택한다. 승인이 없으면 Drive mount/data path cell이 중단된다.
 4. 환경 inventory와 저장 여유를 저장한다. 실제 GPU/VRAM/batch size를 run manifest에 기록한다.
@@ -37,7 +37,7 @@ Colab의 `Connect to local runtime`으로 사용자 Mac에 연결한다. 이 모
 
 ## Celeb-DF-v2 전체 얼굴인식 baseline
 
-AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파일은 [`notebooks/celebdf_arcface_full_colab.ipynb`](notebooks/celebdf_arcface_full_colab.ipynb)에서 처리한다. 단, 데이터 이용약관상 Google Drive·Hosted Colab 처리가 허용되는지 사용자가 확인한 뒤 노트북의 권한 확인 값을 변경해야 한다.
+AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파일은 [`notebooks/celebdf_arcface_full_colab.ipynb`](../../notebooks/celebdf_arcface_full_colab.ipynb)에서 처리한다. 단, 데이터 이용약관상 Google Drive·Hosted Colab 처리가 허용되는지 사용자가 확인한 뒤 노트북의 권한 확인 값을 변경해야 한다.
 
 이 노트북의 smoke 실행은 최종 데이터 축소가 아니다. 2개 영상으로 설치·모델 다운로드·얼굴 탐지를 확인한 뒤 동일 checkpoint에서 Celeb-real 590개 영상 전체 실행을 자동으로 이어간다.
 
@@ -54,7 +54,7 @@ AI-Hub 승인과 별개로, 공식 신청·승인으로 받은 Celeb-DF-v2 파�
 
 ## Celeb-DF baseline 재현성 감사
 
-[`notebooks/celebdf_arcface_audit_colab.ipynb`](notebooks/celebdf_arcface_audit_colab.ipynb)는 영상당 1/5/10프레임을 각각 다시 추론한 뒤 등록 1/3/5개, subject split seed 5개를 비교한다. 등록 수와 관계없이 query는 항상 6번째 영상부터 사용해 공정하게 비교한다.
+[`notebooks/celebdf_arcface_audit_colab.ipynb`](../../notebooks/celebdf_arcface_audit_colab.ipynb)는 영상당 1/5/10프레임을 각각 다시 추론한 뒤 등록 1/3/5개, subject split seed 5개를 비교한다. 등록 수와 관계없이 query는 항상 6번째 영상부터 사용해 공정하게 비교한다.
 
 - validation/test identity intersection을 seed별로 검증한다.
 - registration/query video intersection을 frame run·seed별로 검증한다.
@@ -71,7 +71,7 @@ DriveFS가 `mount failed`로 반복 종료되면 Drive 웹에서 승인 ZIP의 �
 
 ## 촬영 열화 강건성 평가
 
-[`notebooks/celebdf_arcface_robustness_colab.ipynb`](notebooks/celebdf_arcface_robustness_colab.ipynb)는 Issue #6의 후속 실험이다. 깨끗한 영상으로 얼굴을 등록한 뒤 압축, 흐림, 어두움, 저해상도, 복합 열화 query에서 같은 사람을 얼마나 안정적으로 찾는지 확인한다.
+[`notebooks/celebdf_arcface_robustness_colab.ipynb`](../../notebooks/celebdf_arcface_robustness_colab.ipynb)는 Issue #6의 후속 실험이다. 깨끗한 영상으로 얼굴을 등록한 뒤 압축, 흐림, 어두움, 저해상도, 복합 열화 query에서 같은 사람을 얼마나 안정적으로 찾는지 확인한다.
 
 1. Drive의 비공개 `face-image-data` 폴더에 929MB Celeb-real 전용 ZIP을 둔다.
 2. 기본 경로 `/content/drive/MyDrive/face-image-data/Celeb-DF-v2.zip`과 정확한 크기 `928,989,923 bytes`가 맞는지 확인한다.

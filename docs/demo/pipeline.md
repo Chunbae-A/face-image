@@ -1,6 +1,6 @@
 # 딥소각 얼굴가드 데모 파이프라인 v0.1
 
-> 이 문서는 얼굴 두 장을 직접 비교하는 기본 데모를 설명한다. `공개 후보 검색 → ArcFace 선별 → ONNX 분석`을 `scan_id`로 실행하는 v0.8 비동기 데모는 [`ASYNC_EXPOSURE_SCAN_QUICKSTART.md`](ASYNC_EXPOSURE_SCAN_QUICKSTART.md)를 따른다.
+> 이 문서는 얼굴 두 장을 직접 비교하는 기본 데모를 설명한다. `공개 후보 검색 → ArcFace 선별 → ONNX 분석`을 `scan_id`로 실행하는 v0.8 비동기 데모는 [비동기 노출 스캔 안내](../api/async-exposure-scan.md)를 따른다.
 
 ## 한 문장으로 설명
 
@@ -175,7 +175,7 @@ API 응답에는 단일 요청의 `similarity`가 포함되지만, 데모 로그
 
 같은 사람·다른 사람 시험 한 건이 통과해도 정확도를 증명하지 않는다. 이 표는 데모 파이프라인 연결과 실패 처리가 의도대로 동작하는지를 확인한다.
 
-2026-08-06 Docker CPU 환경에서 이 시험표의 같은 사람·다른 사람 API 분기를 확인했다. 사진·식별자·임베딩을 제외한 결과는 [`reports/faceguard_demo_smoke/2026-08-06`](reports/faceguard_demo_smoke/2026-08-06)에 있다.
+2026-08-06 Docker CPU 환경에서 이 시험표의 같은 사람·다른 사람 API 분기를 확인했다. 사진·식별자·임베딩을 제외한 결과는 [`reports/faceguard_demo_smoke/2026-08-06`](../../reports/faceguard_demo_smoke/2026-08-06)에 있다.
 
 ## 데모 이후 고도화 순서
 

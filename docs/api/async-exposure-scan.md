@@ -4,7 +4,7 @@
 
 ## 준비
 
-1. [README의 Docker 실행 순서](README.md#docker-권장-실행)로 API를 실행한다.
+1. [README의 Docker 실행 순서](../../README.md#docker-권장-실행)로 API를 실행한다.
 2. 브라우저에서 [Swagger](http://127.0.0.1:8000/docs)를 연다.
 3. `비동기 노출 스캔` 그룹을 찾는다.
 

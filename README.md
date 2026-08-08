@@ -114,7 +114,7 @@ Kaggle 4차 실행에서 학습·공식 Test·ONNX 변환·CPU 추론 시험을 
 
 전체 성능과 속도는 EfficientNet-B4가 좋아 Xception으로 교체하지 않았다. 선택 모델의 공식 Test FPR은 여전히 약 `1.685%`여서 운영 Gate를 통과하지 못했다. 다만 Xception이 JPEG 압축에서만 보인 장점을 활용할 수 있는지 [Issue #35](https://github.com/Chunbae-A/face-image/issues/35)의 조건부 점수 결합 실험으로 확인한다. 실행 전까지는 기존 API 모델을 바꾸지 않는다.
 
-재현 방법은 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md), 데이터 분할과 사전검사·현재 결과는 [`reports/celebdf_deepfake_baseline/2026-08-07`](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
+재현 방법은 [`docs/experiments/deepfake-kaggle.md`](docs/experiments/deepfake-kaggle.md), 데이터 분할과 사전검사·현재 결과는 [`reports/celebdf_deepfake_baseline/2026-08-07`](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
 
 ## 3. 화면용 딥페이크 점수 보정 결과
 
@@ -185,14 +185,14 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --
 | `reference_quality`, `query_quality` | 얼굴 크기·선명도·밝기 등 입력 품질 |
 | `processing_ms` | 서버 내부 처리시간 |
 
-`is_same_person=true`는 “같은 사람 후보”라는 뜻이지 딥페이크라는 뜻이 아니다. 자세한 실행과 오류 코드는 [`API_QUICKSTART.md`](API_QUICKSTART.md)와 [`API_RUNBOOK.md`](API_RUNBOOK.md)에 있다.
+`is_same_person=true`는 “같은 사람 후보”라는 뜻이지 딥페이크라는 뜻이 아니다. 자세한 실행과 오류 코드는 [API 빠른 실행](docs/api/quickstart.md)과 [API 운영 가이드](docs/api/operations.md)에 있다.
 
 공개 후보 경로는 같은 Swagger 화면의 `POST /v1/search/candidates`에서 시험한다.
 
 - `privacy_strict`: 사용자가 직접 넣은 공개 URL만 정리한다. 로컬·내부망 주소를 차단하고 추적 파라미터를 제거한 뒤 중복을 합친다.
 - `web_monitoring`: 명시적 동의 후 검색어를 로컬 SearXNG에 보내 공개 이미지·영상 후보를 찾는다. 얼굴 사진은 보내지 않는다.
 
-SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮은 웹 사진을 자동으로 찾는 얼굴 역검색은 아니며, 찾은 후보가 본인인지와 딥페이크인지는 다음 ArcFace·ONNX 단계에서 별도로 검사해야 한다. 자세한 실행법은 [`SEARXNG_RUNBOOK.md`](SEARXNG_RUNBOOK.md)에 있다.
+SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮은 웹 사진을 자동으로 찾는 얼굴 역검색은 아니며, 찾은 후보가 본인인지와 딥페이크인지는 다음 ArcFace·ONNX 단계에서 별도로 검사해야 한다. 자세한 실행법은 [SearXNG 실행 가이드](docs/api/searxng.md)에 있다.
 
 검색부터 딥페이크 이미지 분석까지 한 번에 시험할 때는 `POST /v1/pipeline/search-and-filter`를 사용한다. 등록 사진은 로컬 ArcFace에만 입력되고, SearXNG에는 검색어만 전달된다. 넓은 얼굴 후보 기준을 통과한 이미지만 ONNX로 분석하며 후보별 `similarity_raw`, `deepfake.deepfake_score`, 판정 여부, 품질과 실패 코드를 반환한다.
 
@@ -205,7 +205,7 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 3. `GET /v1/exposure-scans/{scan_id}`: `searching → identity_filtering → deepfake_analyzing → completed` 진행 단계와 개수를 확인한다.
 4. `GET /v1/exposure-scans/{scan_id}/candidates`: 후보별 얼굴 유사도와 ONNX 점수를 확인한다.
 
-등록 요청에서 원본 사진을 처리한 뒤에는 풀링한 임베딩과 품질 정보만 기본 30분 동안 메모리에 남는다. 스캔 결과는 기본 60분 동안 남으며 서버를 재시작하면 모두 사라진다. 재시도 시 중복 작업을 막으려면 `Idempotency-Key` 헤더를 같게 보낸다. 초보자용 Swagger 실행 순서와 JSON 예시는 [`ASYNC_EXPOSURE_SCAN_QUICKSTART.md`](ASYNC_EXPOSURE_SCAN_QUICKSTART.md)에 있다.
+등록 요청에서 원본 사진을 처리한 뒤에는 풀링한 임베딩과 품질 정보만 기본 30분 동안 메모리에 남는다. 스캔 결과는 기본 60분 동안 남으며 서버를 재시작하면 모두 사라진다. 재시도 시 중복 작업을 막으려면 `Idempotency-Key` 헤더를 같게 보낸다. 초보자용 Swagger 실행 순서와 JSON 예시는 [비동기 노출 스캔 안내](docs/api/async-exposure-scan.md)에 있다.
 
 ## 데모에서 보여줄 내용
 
@@ -217,7 +217,7 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 4. Celeb-DF 전체 딥페이크 실험 결과에서 AUC와 FPR을 함께 보여준다.
 5. “AUC는 높지만 FPR Gate를 통과하지 못해 운영 승인하지 않았다”고 설명한다.
 
-검색 → 얼굴 선별 → 단일 이미지 딥페이크 판별은 `scan_id`를 사용해 비동기로 시연할 수 있고, 짧은 영상 16프레임 분석은 별도 API로 시연할 수 있다. 다만 `deepfake_score`, `video_score`, `raw_score`는 확률이나 확정 신뢰도가 아니다. 화면은 `calibrated_probability`가 `null`이면 퍼센트를 숨기고 `원점수·검토 필요`로 표시해야 한다. 검색 후보 영상을 자동으로 내려받는 부분과 프로세스 재시작에도 복구되는 영구 큐는 [Issue #17](https://github.com/Chunbae-A/face-image/issues/17)의 남은 범위다. 화면 흐름과 오류 처리는 [`DEMO_PIPELINE.md`](DEMO_PIPELINE.md)에 있다.
+검색 → 얼굴 선별 → 단일 이미지 딥페이크 판별은 `scan_id`를 사용해 비동기로 시연할 수 있고, 짧은 영상 16프레임 분석은 별도 API로 시연할 수 있다. 다만 `deepfake_score`, `video_score`, `raw_score`는 확률이나 확정 신뢰도가 아니다. 화면은 `calibrated_probability`가 `null`이면 퍼센트를 숨기고 `원점수·검토 필요`로 표시해야 한다. 검색 후보 영상을 자동으로 내려받는 부분과 프로세스 재시작에도 복구되는 영구 큐는 [Issue #17](https://github.com/Chunbae-A/face-image/issues/17)의 남은 범위다. 화면 흐름과 오류 처리는 [데모 파이프라인](docs/demo/pipeline.md)에 있다.
 
 ## 저장소 안내
 
@@ -230,14 +230,7 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 | [`configs/deepfake`](configs/deepfake) | 딥페이크 기준선·후보 비교의 고정 실험 설정 |
 | [`reports`](reports) | 개인정보를 제외한 집계 결과와 그래프 |
 | [`tests`](tests) | 누수·지표·API·노트북 재현 테스트 |
-| [`DEEPFAKE_BASELINE_RUNBOOK.md`](DEEPFAKE_BASELINE_RUNBOOK.md) | 딥페이크 모델 명령 구조 설명 |
-| [`DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md`](DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md) | EfficientNet-B4 → Xception → SBI → Hard Negative → FTCN 고도화 순서와 합격 기준 |
-| [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md) | EfficientNet-B4와 Xception을 같은 조건으로 비교하는 Kaggle 실행 순서 |
-| [`JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md`](JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md) | JPEG 압축에서만 두 모델을 결합하는 Validation 실험 순서 |
-| [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md) | Kaggle 무료 GPU 실행 순서 |
-| [`SCORE_CALIBRATION_RUNBOOK.md`](SCORE_CALIBRATION_RUNBOOK.md) | 딥페이크 원점수 보정 실험과 API 설치 순서 |
-| [`SEARXNG_RUNBOOK.md`](SEARXNG_RUNBOOK.md) | 무료 키워드 검색 실행·시험·한계 |
-| [`ASYNC_EXPOSURE_SCAN_QUICKSTART.md`](ASYNC_EXPOSURE_SCAN_QUICKSTART.md) | `scan_id` 비동기 노출 스캔 Swagger 데모 순서 |
+| [`docs`](docs) | 목적별 사용 가이드·데모·실험 문서와 읽는 순서 |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 브랜치·커밋·PR·금지 산출물 규칙 |
 
 ## 로컬 테스트

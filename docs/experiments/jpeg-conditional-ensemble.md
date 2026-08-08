@@ -8,9 +8,9 @@
 
 ## 준비된 파일
 
-- 실행 노트북: [`notebooks/celebdf_jpeg_conditional_ensemble_kaggle.ipynb`](notebooks/celebdf_jpeg_conditional_ensemble_kaggle.ipynb)
-- 고정 설정: [`configs/deepfake/jpeg_conditional_ensemble.json`](configs/deepfake/jpeg_conditional_ensemble.json)
-- 점수 결합 코드: [`scripts/optimize_deepfake_score_ensemble.py`](scripts/optimize_deepfake_score_ensemble.py)
+- 실행 노트북: [`notebooks/celebdf_jpeg_conditional_ensemble_kaggle.ipynb`](../../notebooks/celebdf_jpeg_conditional_ensemble_kaggle.ipynb)
+- 고정 설정: [`configs/deepfake/jpeg_conditional_ensemble.json`](../../configs/deepfake/jpeg_conditional_ensemble.json)
+- 점수 결합 코드: [`scripts/optimize_deepfake_score_ensemble.py`](../../scripts/optimize_deepfake_score_ensemble.py)
 - GitHub 작업: [Issue #35](https://github.com/Chunbae-A/face-image/issues/35)
 
 ## 사용할 비공개 Output 두 개
