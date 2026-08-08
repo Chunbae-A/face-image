@@ -278,3 +278,109 @@ class SearchAndFilterResponse(BaseModel):
     deepfake_model_fingerprint: str | None = None
     config_version: str
     warning: str
+
+
+class FaceEnrollmentResponse(BaseModel):
+    enrollment_id: str
+    status: Literal["active"]
+    reference_count: int = Field(gt=0, le=5)
+    recommended_reference_count: int = Field(gt=0)
+    reference_quality: list[ImageQualityResponse]
+    created_at: datetime
+    expires_at: datetime
+    storage: Literal["memory_only"]
+    warning: str
+
+
+class ExposureScanRequest(BaseModel):
+    enrollment_id: str = Field(min_length=1, max_length=64)
+    privacy_mode: Literal["privacy_strict", "web_monitoring"] = "privacy_strict"
+    web_monitoring_consent: bool = False
+    query_text: str | None = Field(default=None, min_length=1, max_length=200)
+    language: str = Field(default="ko-KR", pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$")
+    safe_search: Literal[1, 2] = 2
+    maximum_results: int = Field(default=5, ge=1, le=10)
+    candidates: list[SubmittedSearchCandidate] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def validate_search_source(self) -> ExposureScanRequest:
+        if self.privacy_mode == "privacy_strict" and not self.candidates:
+            raise ValueError("privacy_strict 모드에는 사용자 제보 URL이 필요합니다.")
+        if self.privacy_mode == "web_monitoring" and not self.query_text:
+            raise ValueError("web_monitoring 모드에는 검색어가 필요합니다.")
+        return self
+
+
+class ExposureScanCreatedResponse(BaseModel):
+    scan_id: str
+    status: Literal[
+        "queued",
+        "searching",
+        "identity_filtering",
+        "deepfake_analyzing",
+        "completed",
+        "partial_failed",
+        "failed",
+    ]
+    reused: bool
+    status_url: str
+    candidates_url: str
+    created_at: datetime
+    expires_at: datetime
+    warning: str
+
+
+class ExposureScanProgressResponse(BaseModel):
+    searched_candidate_count: int = Field(ge=0)
+    analyzed_candidate_count: int = Field(ge=0)
+    skipped_candidate_count: int = Field(ge=0)
+    identity_match_count: int = Field(ge=0)
+    deepfake_completed_count: int = Field(ge=0)
+    deepfake_failed_count: int = Field(ge=0)
+
+
+class ExposureScanStatusResponse(BaseModel):
+    scan_id: str
+    status: Literal[
+        "queued",
+        "searching",
+        "identity_filtering",
+        "deepfake_analyzing",
+        "completed",
+        "partial_failed",
+        "failed",
+    ]
+    progress_percent: int = Field(ge=0, le=100)
+    progress: ExposureScanProgressResponse
+    stage_durations_ms: dict[str, float]
+    error_code: str | None = None
+    created_at: datetime
+    started_at: datetime | None = None
+    updated_at: datetime
+    completed_at: datetime | None = None
+    expires_at: datetime
+    processing_ms: float = Field(ge=0.0)
+    warning: str
+
+
+class ExposureCandidateResponse(BaseModel):
+    candidate_id: str
+    scan_id: str
+    result: CandidateFaceDecisionResponse
+    warning: str
+
+
+class ExposureCandidatesResponse(BaseModel):
+    scan_id: str
+    status: Literal[
+        "queued",
+        "searching",
+        "identity_filtering",
+        "deepfake_analyzing",
+        "completed",
+        "partial_failed",
+        "failed",
+    ]
+    candidate_count: int = Field(ge=0)
+    candidates: list[ExposureCandidateResponse]
+    warning: str

@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import time
+from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, Request, UploadFile
+from fastapi import FastAPI, File, Form, Header, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -17,6 +18,12 @@ from .deepfake import DeepfakeOnnxAnalyzer
 from .domain import FaceQuality
 from .engine import InsightFaceEncoder
 from .errors import FaceGuardError
+from .exposure import (
+    EphemeralEnrollmentStore,
+    ExposureCandidate,
+    ExposureScanManager,
+    ExposureScanRecord,
+)
 from .media import PublicImageDownloader
 from .schemas import (
     CandidateDeepfakeDecisionResponse,
@@ -25,6 +32,13 @@ from .schemas import (
     DeepfakeVideoAnalysisResponse,
     ErrorBody,
     ErrorResponse,
+    ExposureCandidateResponse,
+    ExposureCandidatesResponse,
+    ExposureScanCreatedResponse,
+    ExposureScanProgressResponse,
+    ExposureScanRequest,
+    ExposureScanStatusResponse,
+    FaceEnrollmentResponse,
     HealthResponse,
     ImageQualityResponse,
     SearchAndFilterResponse,
@@ -68,6 +82,11 @@ PIPELINE_WARNING = (
     "검색 후보를 ArcFace로 선별하고 넓은 후보 기준을 통과한 단일 얼굴 이미지만 ONNX로 "
     "분석한 연구용 결과입니다. deepfake_score는 보정된 확률이나 확정 신뢰도가 아니며, "
     "사람 검토 없이 피해 사실을 확정하거나 자동 신고·삭제하지 않습니다."
+)
+EXPOSURE_WARNING = (
+    "현재는 이미지 후보만 비동기로 처리하는 로컬 데모입니다. "
+    "등록 임베딩과 작업 결과는 TTL 동안 프로세스 메모리에만 보관되며, "
+    "서버를 재시작하면 사라집니다. 수치는 연구용이며 자동 신고·삭제에 사용하지 않습니다."
 )
 DEEPFAKE_WARNING = (
     "deepfake_score는 Celeb-DF-v2로 학습한 모델의 단일 얼굴 이미지 점수입니다. "
@@ -151,6 +170,92 @@ def _quality_response(quality: FaceQuality) -> ImageQualityResponse:
     )
 
 
+def _candidate_decision_response(item: Any) -> CandidateFaceDecisionResponse:
+    return CandidateFaceDecisionResponse(
+        page_url=item.page_url,
+        media_url=item.media_url,
+        thumbnail_url=item.thumbnail_url,
+        provider=item.provider,
+        source_engine=item.source_engine,
+        status=item.status,
+        similarity_raw=item.similarity_raw,
+        retrieval_match=item.retrieval_match,
+        identity_match=item.identity_match,
+        analyzed_url=item.analyzed_url,
+        matched_frame_count=1 if item.identity_match else 0,
+        analyzed_frame_count=0 if item.status == "skipped" else 1,
+        error_code=item.error_code,
+        quality_summary=_quality_response(item.quality) if item.quality else None,
+        deepfake=CandidateDeepfakeDecisionResponse(
+            status=item.deepfake.status,
+            deepfake_score=item.deepfake.deepfake_score,
+            raw_score=item.deepfake.deepfake_score,
+            calibrated_probability=None,
+            calibration_status=(
+                "not_applicable_single_image"
+                if item.deepfake.status == "analyzed"
+                else "not_analyzed"
+            ),
+            calibration_version=None,
+            risk_level=None,
+            is_suspected_deepfake=item.deepfake.is_suspected_deepfake,
+            error_code=item.deepfake.error_code,
+            processing_ms=item.deepfake.processing_ms,
+            inference_ms=item.deepfake.inference_ms,
+            execution_provider=item.deepfake.execution_provider,
+            model_fingerprint=item.deepfake.model_fingerprint,
+        ),
+        processing_ms=item.processing_ms,
+    )
+
+
+def _exposure_candidate_response(
+    scan_id: str, candidate: ExposureCandidate
+) -> ExposureCandidateResponse:
+    return ExposureCandidateResponse(
+        candidate_id=candidate.candidate_id,
+        scan_id=scan_id,
+        result=_candidate_decision_response(candidate.decision),
+        warning=PIPELINE_WARNING,
+    )
+
+
+def _scan_progress_percent(record: ExposureScanRecord) -> int:
+    if record.status in {"completed", "partial_failed", "failed"}:
+        return 100
+    return {
+        "queued": 0,
+        "searching": 15,
+        "identity_filtering": 45,
+        "deepfake_analyzing": 80,
+    }[record.status]
+
+
+def _scan_status_response(record: ExposureScanRecord) -> ExposureScanStatusResponse:
+    return ExposureScanStatusResponse(
+        scan_id=record.scan_id,
+        status=record.status,
+        progress_percent=_scan_progress_percent(record),
+        progress=ExposureScanProgressResponse(
+            searched_candidate_count=record.progress.searched_candidate_count,
+            analyzed_candidate_count=record.progress.analyzed_candidate_count,
+            skipped_candidate_count=record.progress.skipped_candidate_count,
+            identity_match_count=record.progress.identity_match_count,
+            deepfake_completed_count=record.progress.deepfake_completed_count,
+            deepfake_failed_count=record.progress.deepfake_failed_count,
+        ),
+        stage_durations_ms=record.stage_durations_ms,
+        error_code=record.error_code,
+        created_at=record.created_at,
+        started_at=record.started_at,
+        updated_at=record.updated_at,
+        completed_at=record.completed_at,
+        expires_at=record.expires_at,
+        processing_ms=record.processing_ms,
+        warning=EXPOSURE_WARNING,
+    )
+
+
 async def _read_upload(upload: UploadFile, settings: Settings) -> bytes:
     if upload.content_type not in ALLOWED_CONTENT_TYPES:
         raise FaceGuardError(
@@ -202,6 +307,7 @@ def create_app(
     deepfake_analyzer: Any | None = None,
     video_deepfake_analyzer: Any | None = None,
     video_score_calibration: ScoreCalibration | None = None,
+    exposure_scan_manager: Any | None = None,
 ) -> FastAPI:
     active_settings = settings or Settings.from_environment()
     active_encoder = encoder or InsightFaceEncoder(active_settings)
@@ -253,6 +359,24 @@ def create_app(
         active_image_downloader,
         active_deepfake_analyzer,
     )
+    owns_exposure_scan_manager = exposure_scan_manager is None
+    active_exposure_scan_manager = exposure_scan_manager or ExposureScanManager(
+        search_service=active_search_service,
+        candidate_filter_service=candidate_filter_service,
+        enrollment_store=EphemeralEnrollmentStore(
+            ttl_seconds=active_settings.exposure_enrollment_ttl_seconds,
+            maximum_entries=active_settings.maximum_exposure_enrollments,
+        ),
+        scan_ttl_seconds=active_settings.exposure_scan_ttl_seconds,
+        maximum_scans=active_settings.maximum_exposure_scans,
+    )
+
+    @asynccontextmanager
+    async def lifespan(application: FastAPI):
+        del application
+        yield
+        if owns_exposure_scan_manager:
+            await active_exposure_scan_manager.close()
 
     application = FastAPI(
         title="딥소각 얼굴가드 API",
@@ -262,7 +386,9 @@ def create_app(
             "원본과 임베딩은 애플리케이션에 영구 저장하지 않습니다."
         ),
         version=active_settings.api_version,
+        lifespan=lifespan,
     )
+    application.state.exposure_scan_manager = active_exposure_scan_manager
     application.add_middleware(
         _RequestBodyLimitMiddleware,
         path="/v1/deepfake/analyze-video",
@@ -286,6 +412,10 @@ def create_app(
             message = "privacy_mode와 공개 후보 URL 목록을 JSON 형식으로 보내세요."
         elif request.url.path == "/v1/pipeline/search-and-filter":
             message = "등록 사진과 검색어를 multipart/form-data 형식으로 보내세요."
+        elif request.url.path == "/v1/faceguard/enrollments":
+            message = "등록 사진 1~5장을 multipart/form-data 형식으로 보내세요."
+        elif request.url.path == "/v1/exposure-scans":
+            message = "enrollment_id와 검색 조건을 JSON 형식으로 보내세요."
         elif request.url.path == "/v1/deepfake/analyze":
             message = "분석할 얼굴 이미지를 multipart/form-data 형식으로 보내세요."
         elif request.url.path == "/v1/deepfake/analyze-video":
@@ -338,6 +468,174 @@ def create_app(
                 else None
             ),
         )
+
+    @application.post(
+        "/v1/faceguard/enrollments",
+        response_model=FaceEnrollmentResponse,
+        status_code=201,
+        responses={
+            413: {"model": ErrorResponse},
+            415: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            429: {"model": ErrorResponse},
+            503: {"model": ErrorResponse},
+        },
+        tags=["비동기 노출 스캔"],
+        summary="비동기 스캔에 쓸 본인 얼굴을 임시 등록",
+    )
+    async def create_face_enrollment(
+        reference_images: Annotated[
+            list[UploadFile],
+            File(description="등록 얼굴 사진 1~5장, 3장 권장"),
+        ],
+    ) -> FaceEnrollmentResponse:
+        if not active_settings.accept_noncommercial_model_license:
+            raise FaceGuardError(
+                "MODEL_LICENSE_NOT_ACCEPTED",
+                "InsightFace 비상업 연구용 가중치 조건 확인이 필요합니다.",
+                503,
+            )
+        if len(reference_images) < active_settings.minimum_reference_images:
+            raise FaceGuardError(
+                "TOO_FEW_REFERENCES",
+                f"등록 사진이 최소 {active_settings.minimum_reference_images}장 필요합니다.",
+            )
+        if len(reference_images) > active_settings.maximum_reference_images:
+            raise FaceGuardError(
+                "TOO_MANY_REFERENCES",
+                f"등록 사진은 최대 {active_settings.maximum_reference_images}장까지 사용할 수 있습니다.",
+            )
+        reference_payloads = [
+            await _read_upload(upload, active_settings) for upload in reference_images
+        ]
+        record = await active_exposure_scan_manager.create_enrollment(
+            reference_payloads
+        )
+        return FaceEnrollmentResponse(
+            enrollment_id=record.enrollment_id,
+            status="active",
+            reference_count=len(record.references.faces),
+            recommended_reference_count=active_settings.recommended_reference_images,
+            reference_quality=[
+                _quality_response(face.quality) for face in record.references.faces
+            ],
+            created_at=record.created_at,
+            expires_at=record.expires_at,
+            storage="memory_only",
+            warning=EXPOSURE_WARNING,
+        )
+
+    @application.post(
+        "/v1/exposure-scans",
+        response_model=ExposureScanCreatedResponse,
+        status_code=202,
+        responses={
+            404: {"model": ErrorResponse},
+            409: {"model": ErrorResponse},
+            410: {"model": ErrorResponse},
+            422: {"model": ErrorResponse},
+            429: {"model": ErrorResponse},
+        },
+        tags=["비동기 노출 스캔"],
+        summary="공개 후보 검색·얼굴 선별·ONNX 분석 작업 시작",
+    )
+    async def create_exposure_scan(
+        payload: ExposureScanRequest,
+        idempotency_key: Annotated[
+            str | None,
+            Header(
+                alias="Idempotency-Key",
+                min_length=8,
+                max_length=128,
+                description="재시도 시 같은 scan_id를 받기 위한 요청 키",
+            ),
+        ] = None,
+    ) -> ExposureScanCreatedResponse:
+        if payload.maximum_results > active_settings.maximum_pipeline_candidates:
+            raise FaceGuardError(
+                "TOO_MANY_PIPELINE_CANDIDATES",
+                f"얼굴 비교 후보는 최대 {active_settings.maximum_pipeline_candidates}개까지 처리할 수 있습니다.",
+            )
+        query = SearchQuery(
+            privacy_mode=payload.privacy_mode,
+            web_monitoring_consent=payload.web_monitoring_consent,
+            text_query=payload.query_text,
+            categories=("images",),
+            language=payload.language,
+            safe_search=payload.safe_search,
+            maximum_results=payload.maximum_results,
+            submitted_candidates=[
+                SubmittedCandidate(
+                    page_url=candidate.page_url,
+                    media_url=candidate.media_url,
+                    thumbnail_url=candidate.thumbnail_url,
+                    content_sha256=candidate.content_sha256,
+                    perceptual_hash=candidate.perceptual_hash,
+                )
+                for candidate in payload.candidates
+            ],
+        )
+        record, reused = await active_exposure_scan_manager.create_scan(
+            enrollment_id=payload.enrollment_id,
+            query=query,
+            idempotency_key=idempotency_key,
+        )
+        return ExposureScanCreatedResponse(
+            scan_id=record.scan_id,
+            status=record.status,
+            reused=reused,
+            status_url=f"/v1/exposure-scans/{record.scan_id}",
+            candidates_url=f"/v1/exposure-scans/{record.scan_id}/candidates",
+            created_at=record.created_at,
+            expires_at=record.expires_at,
+            warning=EXPOSURE_WARNING,
+        )
+
+    @application.get(
+        "/v1/exposure-scans/{scan_id}",
+        response_model=ExposureScanStatusResponse,
+        responses={404: {"model": ErrorResponse}, 410: {"model": ErrorResponse}},
+        tags=["비동기 노출 스캔"],
+        summary="스캔 진행 단계와 처리 개수 확인",
+    )
+    async def get_exposure_scan(scan_id: str) -> ExposureScanStatusResponse:
+        record = await active_exposure_scan_manager.get_scan(scan_id)
+        return _scan_status_response(record)
+
+    @application.get(
+        "/v1/exposure-scans/{scan_id}/candidates",
+        response_model=ExposureCandidatesResponse,
+        responses={404: {"model": ErrorResponse}, 410: {"model": ErrorResponse}},
+        tags=["비동기 노출 스캔"],
+        summary="스캔에서 찾은 노출 후보 목록 확인",
+    )
+    async def get_exposure_candidates(scan_id: str) -> ExposureCandidatesResponse:
+        record = await active_exposure_scan_manager.get_scan(scan_id)
+        return ExposureCandidatesResponse(
+            scan_id=record.scan_id,
+            status=record.status,
+            candidate_count=len(record.candidates),
+            candidates=[
+                _exposure_candidate_response(record.scan_id, candidate)
+                for candidate in record.candidates
+            ],
+            warning=EXPOSURE_WARNING,
+        )
+
+    @application.get(
+        "/v1/exposure-candidates/{candidate_id}/analysis",
+        response_model=ExposureCandidateResponse,
+        responses={404: {"model": ErrorResponse}, 410: {"model": ErrorResponse}},
+        tags=["비동기 노출 스캔"],
+        summary="후보 하나의 얼굴 유사도와 딥페이크 분석 확인",
+    )
+    async def get_exposure_candidate_analysis(
+        candidate_id: str,
+    ) -> ExposureCandidateResponse:
+        record, candidate = await active_exposure_scan_manager.get_candidate(
+            candidate_id
+        )
+        return _exposure_candidate_response(record.scan_id, candidate)
 
     @application.post(
         "/v1/faceguard/verify",
@@ -774,45 +1072,7 @@ def create_app(
             deepfake_threshold_source=active_settings.deepfake_threshold_source,
             reference_count=filtered.reference_count,
             candidates=[
-                CandidateFaceDecisionResponse(
-                    page_url=item.page_url,
-                    media_url=item.media_url,
-                    thumbnail_url=item.thumbnail_url,
-                    provider=item.provider,
-                    source_engine=item.source_engine,
-                    status=item.status,
-                    similarity_raw=item.similarity_raw,
-                    retrieval_match=item.retrieval_match,
-                    identity_match=item.identity_match,
-                    analyzed_url=item.analyzed_url,
-                    matched_frame_count=1 if item.identity_match else 0,
-                    analyzed_frame_count=0 if item.status == "skipped" else 1,
-                    error_code=item.error_code,
-                    quality_summary=(
-                        _quality_response(item.quality) if item.quality else None
-                    ),
-                    deepfake=CandidateDeepfakeDecisionResponse(
-                        status=item.deepfake.status,
-                        deepfake_score=item.deepfake.deepfake_score,
-                        raw_score=item.deepfake.deepfake_score,
-                        calibrated_probability=None,
-                        calibration_status=(
-                            "not_applicable_single_image"
-                            if item.deepfake.status == "analyzed"
-                            else "not_analyzed"
-                        ),
-                        calibration_version=None,
-                        risk_level=None,
-                        is_suspected_deepfake=(item.deepfake.is_suspected_deepfake),
-                        error_code=item.deepfake.error_code,
-                        processing_ms=item.deepfake.processing_ms,
-                        inference_ms=item.deepfake.inference_ms,
-                        execution_provider=item.deepfake.execution_provider,
-                        model_fingerprint=item.deepfake.model_fingerprint,
-                    ),
-                    processing_ms=item.processing_ms,
-                )
-                for item in filtered.candidates
+                _candidate_decision_response(item) for item in filtered.candidates
             ],
             providers=[
                 SearchProviderResponse(

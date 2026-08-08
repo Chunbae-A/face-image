@@ -29,7 +29,7 @@ def _environment_bool(name: str, default: bool) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    api_version: str = "0.7.0"
+    api_version: str = "0.8.0"
     model_name: str = "buffalo_l"
     model_root: Path = Path(".models/insightface")
     device: str = "auto"
@@ -60,6 +60,10 @@ class Settings:
     maximum_pipeline_candidates: int = 10
     candidate_download_timeout_seconds: float = 4.0
     candidate_download_maximum_redirects: int = 2
+    exposure_enrollment_ttl_seconds: int = 30 * 60
+    exposure_scan_ttl_seconds: int = 60 * 60
+    maximum_exposure_enrollments: int = 100
+    maximum_exposure_scans: int = 100
     deepfake_model_name: str = "efficientnet_b4_celebdf_v2"
     deepfake_model_path: Path = Path(".models/deepfake/efficientnet_b4.onnx")
     deepfake_model_sha256: str = DEEPFAKE_MODEL_SHA256
@@ -146,6 +150,12 @@ class Settings:
             raise ValueError(
                 "candidate_download_maximum_redirects는 0 이상이어야 합니다."
             )
+        if self.exposure_enrollment_ttl_seconds <= 0:
+            raise ValueError("exposure_enrollment_ttl_seconds는 양수여야 합니다.")
+        if self.exposure_scan_ttl_seconds <= 0:
+            raise ValueError("exposure_scan_ttl_seconds는 양수여야 합니다.")
+        if self.maximum_exposure_enrollments <= 0 or self.maximum_exposure_scans <= 0:
+            raise ValueError("비동기 저장소 항목 수는 양수여야 합니다.")
         if self.deepfake_device not in {"auto", "cpu", "cuda"}:
             raise ValueError("deepfake_device는 auto, cpu, cuda 중 하나여야 합니다.")
         if self.deepfake_input_size <= 0 or self.deepfake_aligned_face_size <= 0:
@@ -237,6 +247,18 @@ class Settings:
             ),
             candidate_download_maximum_redirects=int(
                 os.environ.get("FACEGUARD_CANDIDATE_DOWNLOAD_MAXIMUM_REDIRECTS", "2")
+            ),
+            exposure_enrollment_ttl_seconds=int(
+                os.environ.get("FACEGUARD_EXPOSURE_ENROLLMENT_TTL_SECONDS", "1800")
+            ),
+            exposure_scan_ttl_seconds=int(
+                os.environ.get("FACEGUARD_EXPOSURE_SCAN_TTL_SECONDS", "3600")
+            ),
+            maximum_exposure_enrollments=int(
+                os.environ.get("FACEGUARD_MAXIMUM_EXPOSURE_ENROLLMENTS", "100")
+            ),
+            maximum_exposure_scans=int(
+                os.environ.get("FACEGUARD_MAXIMUM_EXPOSURE_SCANS", "100")
             ),
             deepfake_model_name=os.environ.get(
                 "FACEGUARD_DEEPFAKE_MODEL_NAME", "efficientnet_b4_celebdf_v2"

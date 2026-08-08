@@ -151,6 +151,24 @@ class CandidateFilterServiceTests(unittest.TestCase):
         self.assertEqual(result.identity_match_count, 1)
         self.assertEqual(result.reference_count, 3)
 
+    def test_progress_callback_reports_each_finished_candidate(self):
+        progress = []
+
+        async def scenario():
+            prepared = await self.service.prepare_references([b"ref"])
+
+            async def record(decisions):
+                progress.append(len(decisions))
+
+            await self.service.filter_prepared(
+                prepared,
+                [candidate("same", 1), candidate("different", 2)],
+                progress_callback=record,
+            )
+
+        asyncio.run(scenario())
+        self.assertEqual(progress, [1, 2])
+
     def test_limits_pipeline_candidate_count(self):
         settings = Settings(
             accept_noncommercial_model_license=True,

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import time
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal, Protocol
 
@@ -204,6 +204,12 @@ class CandidateFilterService:
         self,
         references: PreparedReferences,
         candidates: Sequence[SearchCandidate],
+        *,
+        deepfake_stage_callback: Callable[[], Awaitable[None]] | None = None,
+        progress_callback: Callable[
+            [tuple[CandidateFaceDecision, ...]], Awaitable[None]
+        ]
+        | None = None,
     ) -> CandidateFilterResult:
         if len(candidates) > self.settings.maximum_pipeline_candidates:
             raise FaceGuardError(
@@ -213,6 +219,7 @@ class CandidateFilterService:
 
         started = time.perf_counter()
         decisions: list[CandidateFaceDecision] = []
+        deepfake_stage_started = False
         for candidate in candidates:
             candidate_started = time.perf_counter()
             try:
@@ -227,6 +234,13 @@ class CandidateFilterService:
                     similarity >= self.settings.retrieval_similarity_threshold
                 )
                 identity_match = similarity >= self.settings.similarity_threshold
+                if (
+                    retrieval_match
+                    and deepfake_stage_callback is not None
+                    and not deepfake_stage_started
+                ):
+                    await deepfake_stage_callback()
+                    deepfake_stage_started = True
                 deepfake = (
                     await self._analyze_deepfake(downloaded.payload)
                     if retrieval_match
@@ -299,6 +313,8 @@ class CandidateFilterService:
                         * 1000.0,
                     )
                 )
+            if progress_callback is not None:
+                await progress_callback(tuple(decisions))
 
         analyzed_count = sum(item.status != "skipped" for item in decisions)
         skipped_count = len(decisions) - analyzed_count

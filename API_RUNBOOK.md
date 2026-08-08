@@ -92,7 +92,7 @@ curl http://127.0.0.1:8000/health
 ```json
 {
   "status": "ok",
-  "api_version": "0.7.0",
+  "api_version": "0.8.0",
   "model_name": "buffalo_l",
   "model_loaded": false,
   "execution_provider": null,
@@ -468,6 +468,13 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 | `URL_SECRET_PARAMETER_NOT_ALLOWED` | URL에 토큰·키로 보이는 쿼리 포함 | 비밀 쿼리를 제거한 공개 URL 사용 |
 | `WEB_MONITORING_CONSENT_REQUIRED` | 외부 이미지 검색 동의 없음 | 개인정보 엄격 모드 사용 또는 별도 동의 |
 | `SEARCH_PROVIDER_UNAVAILABLE` | 외부 검색 제공자 미설정 | 무료 URL 제보 모드 사용 |
+| `ENROLLMENT_NOT_FOUND` | 임시 얼굴 등록 ID 없음 | 사진을 다시 등록 |
+| `ENROLLMENT_EXPIRED` | 기본 30분의 등록 TTL 만료 | 사진을 다시 등록 |
+| `ENROLLMENT_CAPACITY_EXCEEDED` | 활성 등록 저장소 포화 | 잠시 후 재시도 |
+| `IDEMPOTENCY_KEY_REUSED` | 같은 멱등성 키를 다른 요청에 사용 | 새 요청 키 발급 |
+| `SCAN_NOT_FOUND` | 스캔 ID 없음 | `scan_id` 다시 확인 |
+| `SCAN_EXPIRED` | 기본 60분의 결과 TTL 만료 | 새 스캔 시작 |
+| `SCAN_CAPACITY_EXCEEDED` | 비동기 작업 저장소 포화 | 잠시 후 재시도 |
 | `CANDIDATE_DNS_FAILED` | 후보 이미지 도메인 확인 실패 | 다른 공개 후보 사용 |
 | `CANDIDATE_DOWNLOAD_TIMEOUT` | 후보 이미지 다운로드 제한시간 초과 | 나중에 재시도 |
 | `CANDIDATE_IMAGE_TOO_LARGE` | 후보 이미지가 8MB 초과 | 더 작은 공개 이미지 사용 |
@@ -487,6 +494,8 @@ curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
 ```
 
 ## 테스트
+
+`scan_id` 기반 비동기 이미지 후보 데모는 [`ASYNC_EXPOSURE_SCAN_QUICKSTART.md`](ASYNC_EXPOSURE_SCAN_QUICKSTART.md)의 Swagger 순서를 따른다. 등록 임베딩은 기본 30분, 스캔 결과는 60분 동안 프로세스 메모리에만 보관되며 재시작 복구는 아직 지원하지 않는다.
 
 API 경계 테스트는 실제 얼굴이나 모델 파일 없이 실행된다.
 
