@@ -1,9 +1,11 @@
 import importlib.util
 import sys
 import tempfile
+import types
 import unittest
 import zipfile
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 
@@ -205,6 +207,16 @@ class MetricTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inconsistent labels"):
             deepfake.aggregate_video_scores(rows, method="mean")
 
+    def test_operating_point_at_recall_uses_lowest_available_fpr(self):
+        labels = np.asarray([0, 0, 0, 1, 1])
+        scores = np.asarray([0.1, 0.2, 0.8, 0.7, 0.9])
+        half_recall = deepfake.operating_point_at_recall(labels, scores, 0.5)
+        full_recall = deepfake.operating_point_at_recall(labels, scores, 1.0)
+        self.assertAlmostEqual(half_recall["recall"], 0.5)
+        self.assertAlmostEqual(half_recall["fpr"], 0.0)
+        self.assertAlmostEqual(full_recall["recall"], 1.0)
+        self.assertAlmostEqual(full_recall["fpr"], 1 / 3)
+
 
 class RunnerUtilityTests(unittest.TestCase):
     def test_frame_indices_are_unique_and_avoid_video_edges(self):
@@ -250,6 +262,71 @@ class RunnerUtilityTests(unittest.TestCase):
         )[0]
         self.assertIn("torch.onnx.export(", export_call)
         self.assertIn("dynamo=False", export_call)
+
+    def test_fair_comparison_normalization_is_shared(self):
+        expected = ((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        self.assertEqual(
+            runner.normalization_spec("efficientnet_b4", "half"),
+            expected,
+        )
+        self.assertEqual(runner.normalization_spec("xception", "half"), expected)
+
+    def test_xception_uses_pinned_timm_model_interface(self):
+        calls = []
+        fake_model = types.SimpleNamespace(
+            pretrained_cfg={
+                "url": "https://weights.invalid/xception.pth",
+                "license": "apache-2.0",
+            }
+        )
+
+        def create_model(*args, **kwargs):
+            calls.append((args, kwargs))
+            return fake_model
+
+        fake_timm = types.SimpleNamespace(__version__="test", create_model=create_model)
+        with mock.patch.dict(sys.modules, {"timm": fake_timm}):
+            model, inventory = runner.build_model(
+                architecture="xception",
+                pretrained=True,
+            )
+        self.assertIs(model, fake_model)
+        self.assertEqual(calls[0][0], ("legacy_xception.tf_in1k",))
+        self.assertEqual(calls[0][1]["num_classes"], 1)
+        self.assertTrue(calls[0][1]["exportable"])
+        self.assertEqual(inventory["architecture_id"], "xception")
+
+    def test_parser_accepts_validation_only_xception_comparison(self):
+        parser = runner.build_parser()
+        train_args = parser.parse_args(
+            [
+                "train",
+                "--crop-manifest", "manifest.csv",
+                "--crop-root", "crops",
+                "--checkpoint", "model.pt",
+                "--train-report", "train.json",
+                "--architecture", "xception",
+                "--normalization", "half",
+                "--input-size", "256",
+            ]
+        )
+        evaluate_args = parser.parse_args(
+            [
+                "evaluate",
+                "--crop-manifest", "manifest.csv",
+                "--crop-root", "crops",
+                "--checkpoint", "model.pt",
+                "--private-scores", "scores.csv",
+                "--metrics", "metrics.json",
+                "--validation-only",
+                "--frame-counts", "16",
+                "--aggregation-methods", "mean",
+            ]
+        )
+        self.assertEqual(train_args.architecture, "xception")
+        self.assertEqual(train_args.normalization, "half")
+        self.assertTrue(evaluate_args.validation_only)
+        self.assertEqual(evaluate_args.aggregation_methods, ["mean"])
 
 
 if __name__ == "__main__":

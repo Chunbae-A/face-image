@@ -52,6 +52,11 @@ jobs:
             notebooks/celebdf_deepfake_preprocess_kaggle.ipynb \
             notebooks/celebdf_deepfake_train_kaggle.ipynb
 
+      - name: Verify generated EfficientNet-B4 Xception comparison notebook
+        run: |
+          python scripts/build_effb4_xception_comparison_kaggle_notebook.py
+          git diff --exit-code -- notebooks/celebdf_effb4_xception_compare_kaggle.ipynb
+
       - name: Verify generated score calibration Kaggle notebook
         run: |
           python scripts/build_score_calibration_kaggle_notebook.py

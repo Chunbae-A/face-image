@@ -48,6 +48,7 @@ flowchart LR
 - 데이터, 얼굴 crop, seed, 학습 예산과 평가 방식은 유지한다.
 - **모델 구조만** EfficientNet-B4에서 Xception으로 바꾼다.
 - 더 좋아도 FPR·Recall·처리시간을 함께 보고 판단한다.
+- 실행 코드와 Kaggle 노트북은 준비됐으며 새 학습 결과는 아직 실행 전이다. 자세한 클릭 순서는 [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
 
 ### P2. SBI로 보지 못한 조작 방식에 대비
 

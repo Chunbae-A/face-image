@@ -31,7 +31,7 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 | 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | **무료 URL 제보 + SearXNG 키워드 검색 구현, 얼굴 역검색 미연결** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
 | 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
 | 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 이미지·영상 16프레임 평균 API 구현, 운영 Gate 미통과** ([#25](https://github.com/Chunbae-A/face-image/issues/25)) |
-| 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **공정 비교 계획·누수 방지 검사 완료, Xception·SBI·Hard Negative·FTCN 실행 전** ([계획](DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md)) |
+| 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **EfficientNet-B4/Xception 공정 비교 코드·Kaggle 노트북 준비, GPU 결과 대기; SBI·Hard Negative·FTCN 실행 전** ([#29](https://github.com/Chunbae-A/face-image/issues/29)) |
 | 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | **딥페이크 보정 실험·API 완료, FPR Gate 미통과로 확률 표시 보류; 얼굴 보정 데이터 미확보** ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | **임시 등록·`scan_id`·진행 조회·이미지 후보 결과 완료, 영상 URL·영구 큐는 미연결** ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
 
@@ -214,10 +214,12 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 | [`notebooks`](notebooks) | Colab·Kaggle 재현 노트북 |
 | [`scripts`](scripts) | 데이터 점검·전처리·학습·평가 도구 |
 | [`configs/faceguard`](configs/faceguard) | 분할·평가 프로토콜 설정 |
+| [`configs/deepfake`](configs/deepfake) | 딥페이크 기준선·후보 비교의 고정 실험 설정 |
 | [`reports`](reports) | 개인정보를 제외한 집계 결과와 그래프 |
 | [`tests`](tests) | 누수·지표·API·노트북 재현 테스트 |
 | [`DEEPFAKE_BASELINE_RUNBOOK.md`](DEEPFAKE_BASELINE_RUNBOOK.md) | 딥페이크 모델 명령 구조 설명 |
 | [`DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md`](DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md) | EfficientNet-B4 → Xception → SBI → Hard Negative → FTCN 고도화 순서와 합격 기준 |
+| [`XCEPTION_KAGGLE_RUNBOOK.md`](XCEPTION_KAGGLE_RUNBOOK.md) | EfficientNet-B4와 Xception을 같은 조건으로 비교하는 Kaggle 실행 순서 |
 | [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md) | Kaggle 무료 GPU 실행 순서 |
 | [`SCORE_CALIBRATION_RUNBOOK.md`](SCORE_CALIBRATION_RUNBOOK.md) | 딥페이크 원점수 보정 실험과 API 설치 순서 |
 | [`SEARXNG_RUNBOOK.md`](SEARXNG_RUNBOOK.md) | 무료 키워드 검색 실행·시험·한계 |
