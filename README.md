@@ -289,14 +289,15 @@ SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮�
 
 ### 비동기 노출 스캔 데모
 
-긴 검색 작업 동안 화면이 멈추지 않게 하려면 다음 네 API를 순서대로 사용한다.
+긴 검색 작업 동안 화면이 멈추지 않게 하려면 다음 API를 순서대로 사용한다.
 
 1. `POST /v1/faceguard/enrollments`: 본인 사진 3장을 임시 등록하고 `enrollment_id`를 받는다.
 2. `POST /v1/exposure-scans`: 공개 후보 URL 또는 동의한 검색어로 작업을 만들고 즉시 `scan_id`를 받는다.
 3. `GET /v1/exposure-scans/{scan_id}`: `searching → identity_filtering → deepfake_analyzing → completed` 진행 단계와 개수를 확인한다.
-4. `GET /v1/exposure-scans/{scan_id}/candidates`: 후보별 얼굴 유사도와 ONNX 점수를 확인한다.
+4. `GET /v1/exposure-scans/{scan_id}/client-candidates`: 딥소각 화면용 후보와 검토 행동값을 확인한다.
+5. `GET /v1/exposure-scans/{scan_id}/candidates`: 모델 개발자가 후보별 상세 판정 근거를 확인한다.
 
-등록 요청에서 원본 사진을 처리한 뒤에는 풀링한 임베딩과 품질 정보만 기본 30분 동안 메모리에 남는다. 스캔 결과는 기본 60분 동안 남으며 서버를 재시작하면 모두 사라진다. 재시도 시 중복 작업을 막으려면 `Idempotency-Key` 헤더를 같게 보낸다. 초보자용 Swagger 실행 순서와 JSON 예시는 [비동기 노출 스캔 안내](docs/api/async-exposure-scan.md)에 있다.
+등록 요청에서 원본 사진을 처리한 뒤에는 풀링한 임베딩과 품질 정보만 기본 30분 동안 메모리에 남는다. 스캔 결과는 기본 60분 동안 남으며 서버를 재시작하면 모두 사라진다. 재시도 시 중복 작업을 막으려면 `Idempotency-Key` 헤더를 같게 보낸다. 초보자용 Swagger 실행 순서와 JSON 예시는 [비동기 노출 스캔 안내](docs/api/async-exposure-scan.md)에 있다. 프론트·백엔드 연결 계약은 [클라이언트용 공개 노출 모니터링 API](docs/api/client-monitoring.md)에 정리했다.
 
 ## 데모에서 보여줄 내용
 

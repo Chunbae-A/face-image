@@ -325,6 +325,7 @@ class ExposureScanCreatedResponse(BaseModel):
     reused: bool
     status_url: str
     candidates_url: str
+    client_candidates_url: str
     created_at: datetime
     expires_at: datetime
     warning: str
@@ -383,4 +384,50 @@ class ExposureCandidatesResponse(BaseModel):
     ]
     candidate_count: int = Field(ge=0)
     candidates: list[ExposureCandidateResponse]
+    warning: str
+
+
+class ClientExposureCandidateResponse(BaseModel):
+    """딥소각 화면에서 모델 내부 구조를 몰라도 사용할 수 있는 후보 응답."""
+
+    candidate_id: str
+    source_url: str
+    media_url: str | None = None
+    thumbnail_url: str | None = None
+    source_type: str
+    source_engine: str | None = None
+    face_similarity: float | None = Field(default=None, ge=-1.0, le=1.0)
+    face_match_level: Literal["matched", "review", "not_matched", "unavailable"]
+    deepfake_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    deepfake_signal: Literal[
+        "suspected", "not_suspected", "not_analyzed", "unavailable"
+    ]
+    recommended_action: Literal[
+        "review_required",
+        "identity_review_required",
+        "monitor",
+        "exclude_recommended",
+        "analysis_unavailable",
+    ]
+    analysis_status: Literal["completed", "partial_failed", "unavailable"]
+    warning: str
+
+
+class ClientExposureCandidatesResponse(BaseModel):
+    """화면 목록과 요약 카드에 필요한 최소 노출 후보 묶음."""
+
+    scan_id: str
+    status: Literal[
+        "queued",
+        "searching",
+        "identity_filtering",
+        "deepfake_analyzing",
+        "completed",
+        "partial_failed",
+        "failed",
+    ]
+    candidate_count: int = Field(ge=0)
+    identity_match_count: int = Field(ge=0)
+    review_candidate_count: int = Field(ge=0)
+    candidates: list[ClientExposureCandidateResponse]
     warning: str

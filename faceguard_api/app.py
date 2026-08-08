@@ -28,6 +28,8 @@ from .media import PublicImageDownloader
 from .schemas import (
     CandidateDeepfakeDecisionResponse,
     CandidateFaceDecisionResponse,
+    ClientExposureCandidateResponse,
+    ClientExposureCandidatesResponse,
     DeepfakeAnalysisResponse,
     DeepfakeVideoAnalysisResponse,
     ErrorBody,
@@ -216,6 +218,68 @@ def _exposure_candidate_response(
         candidate_id=candidate.candidate_id,
         scan_id=scan_id,
         result=_candidate_decision_response(candidate.decision),
+        warning=PIPELINE_WARNING,
+    )
+
+
+def _client_exposure_candidate_response(
+    candidate: ExposureCandidate,
+) -> ClientExposureCandidateResponse:
+    """연구 원점수를 확률로 오해하지 않는 화면용 후보로 변환한다."""
+
+    decision = candidate.decision
+    if decision.status == "identity_match":
+        face_match_level = "matched"
+    elif decision.status == "retrieval_match":
+        face_match_level = "review"
+    elif decision.status == "not_matched":
+        face_match_level = "not_matched"
+    else:
+        face_match_level = "unavailable"
+
+    if decision.deepfake.status == "analyzed":
+        deepfake_signal = (
+            "suspected"
+            if decision.deepfake.is_suspected_deepfake is True
+            else "not_suspected"
+        )
+    elif decision.deepfake.status == "not_analyzed":
+        deepfake_signal = "not_analyzed"
+    else:
+        deepfake_signal = "unavailable"
+
+    if face_match_level == "not_matched":
+        recommended_action = "exclude_recommended"
+        analysis_status = "completed"
+    elif face_match_level == "unavailable":
+        recommended_action = "analysis_unavailable"
+        analysis_status = "unavailable"
+    elif decision.deepfake.status in {"failed", "unavailable"}:
+        recommended_action = "analysis_unavailable"
+        analysis_status = "partial_failed"
+    elif face_match_level == "review":
+        recommended_action = "identity_review_required"
+        analysis_status = "completed"
+    elif deepfake_signal == "suspected":
+        recommended_action = "review_required"
+        analysis_status = "completed"
+    else:
+        recommended_action = "monitor"
+        analysis_status = "completed"
+
+    return ClientExposureCandidateResponse(
+        candidate_id=candidate.candidate_id,
+        source_url=decision.page_url,
+        media_url=decision.media_url,
+        thumbnail_url=decision.thumbnail_url,
+        source_type=decision.provider,
+        source_engine=decision.source_engine,
+        face_similarity=decision.similarity_raw,
+        face_match_level=face_match_level,
+        deepfake_score=decision.deepfake.deepfake_score,
+        deepfake_signal=deepfake_signal,
+        recommended_action=recommended_action,
+        analysis_status=analysis_status,
         warning=PIPELINE_WARNING,
     )
 
@@ -586,6 +650,9 @@ def create_app(
             reused=reused,
             status_url=f"/v1/exposure-scans/{record.scan_id}",
             candidates_url=f"/v1/exposure-scans/{record.scan_id}/candidates",
+            client_candidates_url=(
+                f"/v1/exposure-scans/{record.scan_id}/client-candidates"
+            ),
             created_at=record.created_at,
             expires_at=record.expires_at,
             warning=EXPOSURE_WARNING,
@@ -619,6 +686,37 @@ def create_app(
                 _exposure_candidate_response(record.scan_id, candidate)
                 for candidate in record.candidates
             ],
+            warning=EXPOSURE_WARNING,
+        )
+
+    @application.get(
+        "/v1/exposure-scans/{scan_id}/client-candidates",
+        response_model=ClientExposureCandidatesResponse,
+        responses={404: {"model": ErrorResponse}, 410: {"model": ErrorResponse}},
+        tags=["비동기 노출 스캔"],
+        summary="딥소각 후보 화면용 얼굴·딥페이크 결과 확인",
+    )
+    async def get_client_exposure_candidates(
+        scan_id: str,
+    ) -> ClientExposureCandidatesResponse:
+        record = await active_exposure_scan_manager.get_scan(scan_id)
+        candidates = [
+            _client_exposure_candidate_response(candidate)
+            for candidate in record.candidates
+        ]
+        return ClientExposureCandidatesResponse(
+            scan_id=record.scan_id,
+            status=record.status,
+            candidate_count=len(candidates),
+            identity_match_count=sum(
+                item.face_match_level == "matched" for item in candidates
+            ),
+            review_candidate_count=sum(
+                item.recommended_action
+                in {"review_required", "identity_review_required"}
+                for item in candidates
+            ),
+            candidates=candidates,
             warning=EXPOSURE_WARNING,
         )
 
