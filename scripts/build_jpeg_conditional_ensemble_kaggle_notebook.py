@@ -102,6 +102,8 @@ BRANCH = "agent/jpeg-conditional-ensemble"
 CODE_SOURCE = "embedded"  # 권한 문제를 피하려면 embedded 유지
 PREPROCESS_ARCHIVE_PATH = ""  # 비우면 Kaggle Input에서 자동 탐색
 PRIVATE_MODELS_ZIP_PATH = ""  # 비우면 Kaggle Input에서 자동 탐색
+PREPROCESS_NOTEBOOK_HANDLE = "hywznn/deepsogak-celebdf-preprocess"
+PRIVATE_MODELS_NOTEBOOK_HANDLE = "hywznn/deepsogak-effb4-xception-compare"
 
 I_CONFIRM_PRIVATE_PREPROCESS_OUTPUT_MAY_BE_USED = False
 I_CONFIRM_PRIVATE_MODEL_OUTPUT_MAY_BE_USED = False
@@ -159,15 +161,29 @@ import shutil
 import tarfile
 import zipfile
 
-def find_one(explicit_path, filename):
+def find_one(explicit_path, filename, notebook_handle):
     candidates = (
         [Path(explicit_path).expanduser()]
         if explicit_path.strip()
         else sorted(Path("/kaggle/input").rglob(filename))
     )
     exact = [path for path in candidates if path.is_file()]
+    if not exact and IN_KAGGLE:
+        import kagglehub
+
+        attached = Path(
+            kagglehub.notebook_output_download(notebook_handle, path=filename)
+        )
+        exact = (
+            [attached]
+            if attached.is_file()
+            else sorted(attached.rglob(filename))
+        )
     if len(exact) != 1:
-        raise FileNotFoundError(f"{filename} 하나가 필요합니다: {exact}")
+        raise FileNotFoundError(
+            f"{filename} 하나가 필요합니다. "
+            f"Kaggle Input 또는 {notebook_handle} Output을 확인하세요: {exact}"
+        )
     return exact[0]
 
 def safe_extract_zip(archive_path, output_dir):
@@ -182,10 +198,12 @@ def safe_extract_zip(archive_path, output_dir):
 PREPROCESS_ARCHIVE = find_one(
     PREPROCESS_ARCHIVE_PATH,
     "celebdf_deepfake_preprocess_private.tar",
+    PREPROCESS_NOTEBOOK_HANDLE,
 )
 PRIVATE_MODELS_ZIP = find_one(
     PRIVATE_MODELS_ZIP_PATH,
     "effb4_xception_private_models.zip",
+    PRIVATE_MODELS_NOTEBOOK_HANDLE,
 )
 
 WORK_ROOT = Path("/kaggle/temp/jpeg_conditional_ensemble") if IN_KAGGLE else REPO_DIR / "outputs" / "jpeg_conditional_ensemble"

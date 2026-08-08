@@ -77,6 +77,15 @@ class JpegConditionalEnsembleNotebookTests(unittest.TestCase):
 
     def test_reuses_private_models_without_training_or_official_test(self):
         self.assertIn("effb4_xception_private_models.zip", self.code_source)
+        self.assertIn(
+            'PREPROCESS_NOTEBOOK_HANDLE = "hywznn/deepsogak-celebdf-preprocess"',
+            self.code_source,
+        )
+        self.assertIn(
+            'PRIVATE_MODELS_NOTEBOOK_HANDLE = "hywznn/deepsogak-effb4-xception-compare"',
+            self.code_source,
+        )
+        self.assertIn("kagglehub.notebook_output_download", self.code_source)
         self.assertIn('"--validation-only"', self.code_source)
         self.assertNotIn('"scripts/run_celebdf_deepfake.py", "train"', self.code_source)
         self.assertIn('"official_test": "locked"', self.code_source)

@@ -13,28 +13,29 @@
 - 점수 결합 코드: [`scripts/optimize_deepfake_score_ensemble.py`](scripts/optimize_deepfake_score_ensemble.py)
 - GitHub 작업: [Issue #35](https://github.com/Chunbae-A/face-image/issues/35)
 
-## Kaggle에 연결할 비공개 Input 두 개
+## 사용할 비공개 Output 두 개
 
 1. 전처리 Output의 `celebdf_deepfake_preprocess_private.tar`
 2. 이전 비교 Output의 `effb4_xception_private_models.zip`
 
 두 파일에는 얼굴 crop 또는 모델 checkpoint가 있으므로 Kaggle Notebook과 Input을 모두 `Private`으로 유지한다. GitHub에 올리지 않는다.
 
+노트북은 두 파일이 `Add Input`으로 이미 연결돼 있으면 그대로 사용한다. 연결돼 있지 않으면 Kaggle 공식 `kagglehub.notebook_output_download`로 본인 소유 Output을 자동 연결한다. 따라서 큰 Output을 편집 화면에서 반복해서 붙일 필요가 없다.
+
 ## 실행 순서
 
 1. Kaggle에서 새 Private Notebook을 만든다.
 2. `celebdf_jpeg_conditional_ensemble_kaggle.ipynb`를 Import한다.
-3. `Add Input`에서 위 두 비공개 Output을 연결한다.
-4. `Settings`에서 `GPU T4 x2` 또는 사용 가능한 GPU를 고른다.
-5. Internet을 켠다. `timm` 설치에 사용한다.
-6. 첫 번째 설정 셀에서 아래 두 값을 `True`로 바꾼다.
+3. `Settings`에서 `GPU T4 x2` 또는 사용 가능한 GPU를 고른다.
+4. Internet을 켠다. `timm` 설치와 두 비공개 Output의 자동 연결에 사용한다.
+5. 첫 번째 설정 셀에서 아래 두 값을 `True`로 바꾼다.
 
 ```python
 I_CONFIRM_PRIVATE_PREPROCESS_OUTPUT_MAY_BE_USED = True
 I_CONFIRM_PRIVATE_MODEL_OUTPUT_MAY_BE_USED = True
 ```
 
-7. `Save Version` → `Save & Run All`을 한 번만 누른다.
+6. `Save Version` → `Save & Run All`을 한 번만 누른다.
 
 학습은 하지 않지만 Validation 5조건을 두 모델로 다시 추론한다. Kaggle GPU 종류와 부하에 따라 달라지며 **대략 30~70분 범위**를 예상한다. 첫 모델의 완료 시간을 보고 남은 시간을 판단하는 편이 정확하다.
 
