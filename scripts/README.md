@@ -51,7 +51,7 @@ python3 scripts/celebdf_deepfake.py inventory /path/to/Celeb-DF-v2.zip \
 python3 scripts/run_celebdf_deepfake.py --help
 ```
 
-내부 라벨은 `실제=0`, `딥페이크=1`이다. 공식 목록의 반대 표기를 자동 변환하고 경로와 대조한다. 8/16/32프레임과 평균/중앙값/상위평균은 Validation에서만 선택하고, 선택 후 공식 Test를 평가한다. 자세한 순서와 결과 해석은 [`DEEPFAKE_BASELINE_RUNBOOK.md`](../DEEPFAKE_BASELINE_RUNBOOK.md)에 있다.
+내부 라벨은 `실제=0`, `딥페이크=1`이다. 공식 목록의 반대 표기를 자동 변환하고 경로와 대조한다. 8/16/32프레임과 평균/중앙값/상위평균은 Validation에서만 선택하고, 선택 후 공식 Test를 평가한다. 자세한 순서와 결과 해석은 [딥페이크 기준선 실행 안내](../docs/experiments/deepfake-baseline.md)에 있다.
 
 ## 딥페이크 모델 고도화 계획 검사
 
@@ -61,7 +61,7 @@ Xception, SBI, hard negative 보강, FTCN을 비교하기 전에 데이터 누�
 python3 scripts/validate_deepfake_model_improvement_plan.py
 ```
 
-검사 대상은 [`configs/deepfake/model_improvement_plan.json`](../configs/deepfake/model_improvement_plan.json)이다. 공식 Test를 학습·기준값 선택에 사용하거나 Test 오류를 hard negative로 되돌리는 설정, 단계 의존성 오류와 비공개 산출물 공개 설정을 발견하면 실패한다. 전체 실행 순서는 [`DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md`](../DEEPFAKE_MODEL_IMPROVEMENT_PLAN.md)에 있다.
+검사 대상은 [`configs/deepfake/model_improvement_plan.json`](../configs/deepfake/model_improvement_plan.json)이다. 공식 Test를 학습·기준값 선택에 사용하거나 Test 오류를 hard negative로 되돌리는 설정, 단계 의존성 오류와 비공개 산출물 공개 설정을 발견하면 실패한다. 전체 실행 순서는 [딥페이크 모델 고도화 계획](../docs/experiments/model-improvement.md)에 있다.
 
 ## EfficientNet-B4와 Xception 공정 비교
 
@@ -71,7 +71,7 @@ python3 scripts/validate_deepfake_model_improvement_plan.py
 python3 scripts/build_effb4_xception_comparison_kaggle_notebook.py
 ```
 
-노트북은 모든 후보를 Validation-only로 먼저 평가한 뒤 [`compare_deepfake_model_candidates.py`](compare_deepfake_model_candidates.py)가 후보 하나를 고정한다. 그 후보에만 공식 Test와 ONNX 변환을 실행한다. 클릭 순서는 [`XCEPTION_KAGGLE_RUNBOOK.md`](../XCEPTION_KAGGLE_RUNBOOK.md)에 있다.
+노트북은 모든 후보를 Validation-only로 먼저 평가한 뒤 [`compare_deepfake_model_candidates.py`](compare_deepfake_model_candidates.py)가 후보 하나를 고정한다. 그 후보에만 공식 Test와 ONNX 변환을 실행한다. 클릭 순서는 [EfficientNet-B4·Xception 비교](../docs/experiments/xception-comparison.md)에 있다.
 
 ## 노트북 재생성
 

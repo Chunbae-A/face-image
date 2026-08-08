@@ -43,7 +43,7 @@
 
 ### Colab 사용 결정
 
-주 연산 환경은 Google Colab으로 하되, 원본 얼굴/정렬본/임베딩의 hosted Colab·Drive 반출은 제공약관과 보안 승인 전에 금지한다. 승인 전에는 Colab local runtime 또는 비식별 Debug data만 사용한다. 승인 후 hosted GPU는 2~10GB shard 단위로 실행하고, 세션 종료에 대비해 shard별 checkpoint와 `_SUCCESS`를 남긴다. 세부 절차는 [`COLAB_RUNBOOK.md`](COLAB_RUNBOOK.md)와 [`notebooks/faceguard_colab.ipynb`](notebooks/faceguard_colab.ipynb)를 따른다.
+주 연산 환경은 Google Colab으로 하되, 원본 얼굴/정렬본/임베딩의 hosted Colab·Drive 반출은 제공약관과 보안 승인 전에 금지한다. 승인 전에는 Colab local runtime 또는 비식별 Debug data만 사용한다. 승인 후 hosted GPU는 2~10GB shard 단위로 실행하고, 세션 종료에 대비해 shard별 checkpoint와 `_SUCCESS`를 남긴다. 세부 절차는 [Colab 실행 가이드](colab.md)와 [`notebooks/faceguard_colab.ipynb`](../../notebooks/faceguard_colab.ipynb)를 따른다.
 
 ---
 

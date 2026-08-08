@@ -33,11 +33,11 @@ Validation에서 8/16/32프레임과 평균/중앙값/상위평균 비교
 
 ## 권장 실행 방법
 
-전체 6,529개 실험은 **Kaggle 무료 GPU 2단계 실행**을 권장한다. 1단계 전처리 Output을 비공개로 저장한 뒤 2단계 학습에 연결하므로 세션 실패 시 반복 범위가 작다. 클릭 순서는 [`DEEPFAKE_KAGGLE_RUNBOOK.md`](DEEPFAKE_KAGGLE_RUNBOOK.md)에 있다.
+전체 6,529개 실험은 **Kaggle 무료 GPU 2단계 실행**을 권장한다. 1단계 전처리 Output을 비공개로 저장한 뒤 2단계 학습에 연결하므로 세션 실패 시 반복 범위가 작다. 클릭 순서는 [딥페이크 Kaggle 실행 가이드](deepfake-kaggle.md)에 있다.
 
-- 1단계: [`notebooks/celebdf_deepfake_preprocess_kaggle.ipynb`](notebooks/celebdf_deepfake_preprocess_kaggle.ipynb)
-- 2단계: [`notebooks/celebdf_deepfake_train_kaggle.ipynb`](notebooks/celebdf_deepfake_train_kaggle.ipynb)
-- Colab 대안: [`notebooks/celebdf_efficientnet_b4_colab.ipynb`](notebooks/celebdf_efficientnet_b4_colab.ipynb)
+- 1단계: [`notebooks/celebdf_deepfake_preprocess_kaggle.ipynb`](../../notebooks/celebdf_deepfake_preprocess_kaggle.ipynb)
+- 2단계: [`notebooks/celebdf_deepfake_train_kaggle.ipynb`](../../notebooks/celebdf_deepfake_train_kaggle.ipynb)
+- Colab 대안: [`notebooks/celebdf_efficientnet_b4_colab.ipynb`](../../notebooks/celebdf_efficientnet_b4_colab.ipynb)
 
 Kaggle에서는 전체 ZIP을 Private Dataset으로 연결한다. Colab을 사용할 때만 Google Drive의 다음 경로를 쓴다.
 
