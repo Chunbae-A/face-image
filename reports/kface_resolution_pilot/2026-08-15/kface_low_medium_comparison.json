@@ -1,0 +1,28 @@
+{
+  "dataset": "K-FACE",
+  "comparison": "low_vs_medium",
+  "pilot_subjects": 30,
+  "images_per_resolution": 450,
+  "low": {
+    "accepted_images": 353,
+    "rejected_images": 97,
+    "face_acceptance_rate": 0.7844444444444445,
+    "within_subject_similarity_mean": 0.5953397013816888
+  },
+  "medium": {
+    "accepted_images": 399,
+    "rejected_images": 51,
+    "face_acceptance_rate": 0.8866666666666667,
+    "within_subject_similarity_mean": 0.6506109718317376
+  },
+  "cross_resolution_same_subject_similarity": {
+    "mean": 0.9070796509583791,
+    "p05": 0.8582106113433838,
+    "median": 0.9099665582180023,
+    "p95": 0.9388941615819931
+  },
+  "contains_raw_paths": false,
+  "contains_face_images": false,
+  "contains_embeddings": false,
+  "status": "research_pilot_not_approved_for_operations"
+}
