@@ -112,6 +112,9 @@ def compare_results(low_dir: Path, medium_dir: Path) -> dict[str, Any]:
     return {
         "dataset": "K-FACE",
         "comparison": "low_vs_medium",
+        "evaluation_scope": (
+            "full_400_subjects" if len(paired) == 400 else "bounded_subject_sample"
+        ),
         "low": _resolution_metrics(low_summary, low_subjects),
         "medium": _resolution_metrics(medium_summary, medium_subjects),
         "paired_subject_count": len(paired),
@@ -120,7 +123,7 @@ def compare_results(low_dir: Path, medium_dir: Path) -> dict[str, Any]:
         "contains_raw_paths": False,
         "contains_face_images": False,
         "contains_embeddings": False,
-        "note": "파일럿 표본의 얼굴 검출·특징 안정성 비교이며 운영 정확도 승인이 아닙니다.",
+        "note": "K-FACE 얼굴 검출·특징 안정성 비교이며 운영 정확도 승인이 아닙니다.",
     }
 
 

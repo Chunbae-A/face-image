@@ -40,6 +40,25 @@ Colab 세션에 의존하지 않고 승인받은 K-FACE 저화질·중화질 ZIP
   --output data/metadata/kface/low_medium_comparison.json
 ```
 
+400명 전체 처리 후에는 중화질 등록 사진 3장·5장으로 나눠
+validation 인물에서 FAR 목표 기준값을 고르고, 완전히 다른 test
+인물에 고정 적용한다. 타인 점수는 같은 split 안의 다른 인물
+등록 중심과의 비교로 만든다.
+
+```bash
+.venv/bin/python scripts/evaluate_kface_verification.py \
+  --low-dir data/processed/kface/v3_400/low \
+  --medium-dir data/processed/kface/v3_400/medium \
+  --references 3 5 \
+  --target-far 0.001 \
+  --seed 20260815 \
+  --output data/metadata/kface/kface_v3_400_verification.json
+```
+
+공개 결과에는 집계 분포와 지표만 남고, 원본 경로·인물 식별자·개별
+점수·임베딩은 넣지 않는다. 이 기준값은 한국인 얼굴 연구 검증이며
+운영·본인인증 승인값이 아니다.
+
 전체 중화질 다운로드가 오래 걸리면 이미 완전히 내려받힌 인물별 ZIP 중 저화질
 표본과 같은 인물만 CRC 검증해 비공개 파일럿 ZIP을 만들 수 있다. 이 명령은 원본
 얼굴을 포함한 결과를 만들기 때문에 출력 경로는 반드시 Git에서 제외된 `data/`

@@ -1,0 +1,59 @@
+{
+  "dataset": "K-FACE",
+  "comparison": "low_vs_medium",
+  "evaluation_scope": "full_400_subjects",
+  "low": {
+    "subject_count": 400,
+    "selected_images": 6000,
+    "accepted_images": 4732,
+    "rejected_images": 1268,
+    "face_acceptance_rate": 0.7886666666666666,
+    "within_subject_similarity": {
+      "mean": 0.6143834722163006,
+      "p05": 0.4766837641596794,
+      "median": 0.622658371925354,
+      "p95": 0.7188167005777358
+    },
+    "quality_means": {
+      "detection_score": 0.6961385011672974,
+      "face_area_ratio": 0.09799019992351532,
+      "blur_score": 3230.085693359375,
+      "brightness_mean": 72.2003402709961,
+      "image_width": 173.0,
+      "image_height": 115.0
+    }
+  },
+  "medium": {
+    "subject_count": 400,
+    "selected_images": 6000,
+    "accepted_images": 5307,
+    "rejected_images": 693,
+    "face_acceptance_rate": 0.8845,
+    "within_subject_similarity": {
+      "mean": 0.6652355307219323,
+      "p05": 0.5068415582180024,
+      "median": 0.6800864338874817,
+      "p95": 0.7706209778785705
+    },
+    "quality_means": {
+      "detection_score": 0.7182835340499878,
+      "face_area_ratio": 0.09460248798131943,
+      "blur_score": 1565.5594482421875,
+      "brightness_mean": 69.59143829345703,
+      "image_width": 346.0,
+      "image_height": 230.0
+    }
+  },
+  "paired_subject_count": 400,
+  "paired_subjects_with_faces": 400,
+  "cross_resolution_same_subject_similarity": {
+    "mean": 0.9180406720936298,
+    "p05": 0.8791601419448852,
+    "median": 0.9210935235023499,
+    "p95": 0.948391643166542
+  },
+  "contains_raw_paths": false,
+  "contains_face_images": false,
+  "contains_embeddings": false,
+  "note": "K-FACE 얼굴 검출·특징 안정성 비교이며 운영 정확도 승인이 아닙니다."
+}

@@ -59,6 +59,7 @@ class CompareKFaceResolutionsTests(unittest.TestCase):
                 result["cross_resolution_same_subject_similarity"]["mean"], 1.0
             )
             self.assertAlmostEqual(result["low"]["face_acceptance_rate"], 1.0)
+            self.assertEqual(result["evaluation_scope"], "bounded_subject_sample")
             serialized = json.dumps(result)
             self.assertNotIn("subject_aaa", serialized)
             self.assertFalse(result["contains_embeddings"])
