@@ -57,11 +57,14 @@ def prepare(
     dataset_id: str = DEFAULT_DATASET_ID,
     expected_subjects: int = 400,
     expected_chunks: int = 8_800,
+    subjects_per_batch: int = 0,
 ) -> dict[str, Any]:
     source = source.resolve()
     destination = destination.resolve()
     if source == destination:
         raise ValueError("원본과 업로드 폴더는 달라야 합니다.")
+    if subjects_per_batch < 0:
+        raise ValueError("subjects_per_batch는 0 이상이어야 합니다.")
     subjects = _discover(source)
     chunk_count = sum(len(items) for items in subjects.values())
     if len(subjects) != expected_subjects or chunk_count != expected_chunks:
@@ -75,11 +78,23 @@ def prepare(
     linked_bytes = 0
     linked_files = 0
     expected_names: set[str] = set()
-    for subject, chunks in subjects.items():
+    subject_items = list(subjects.items())
+    for subject_position, (subject, chunks) in enumerate(subject_items, start=1):
+        target_directory = destination
+        if subjects_per_batch:
+            batch_start = (
+                (subject_position - 1) // subjects_per_batch * subjects_per_batch + 1
+            )
+            batch_end = min(
+                len(subject_items), batch_start + subjects_per_batch - 1
+            )
+            target_directory = destination / f"subjects_{batch_start:03d}_{batch_end:03d}"
+            target_directory.mkdir(parents=True, exist_ok=True)
         for chunk in chunks:
             target_name = f"{subject}__{chunk.name}"
-            expected_names.add(target_name)
-            target = destination / target_name
+            relative_name = str(target_directory.relative_to(destination) / target_name)
+            expected_names.add(relative_name)
+            target = target_directory / target_name
             source_stat = chunk.stat()
             if target.exists():
                 target_stat = target.stat()
@@ -95,8 +110,8 @@ def prepare(
 
     stale = [
         path
-        for path in destination.glob("subject_*__chunk_*.npz")
-        if path.name not in expected_names
+        for path in destination.rglob("subject_*__chunk_*.npz")
+        if str(path.relative_to(destination)) not in expected_names
     ]
     if stale:
         raise ValueError(f"예상하지 못한 기존 파일이 있습니다: {stale[0].name}")
@@ -111,6 +126,10 @@ def prepare(
         "subject_count": len(subjects),
         "chunk_count": linked_files,
         "embedding_bytes": linked_bytes,
+        "upload_layout": (
+            "batched_directories" if subjects_per_batch else "flat_hardlinks"
+        ),
+        "subjects_per_batch": subjects_per_batch or None,
         "contains_raw_paths": False,
         "contains_subject_identifiers": False,
         "contains_face_images": False,
@@ -142,6 +161,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--dataset-id", default=DEFAULT_DATASET_ID)
     parser.add_argument("--expected-subjects", type=int, default=400)
     parser.add_argument("--expected-chunks", type=int, default=8_800)
+    parser.add_argument(
+        "--subjects-per-batch",
+        type=int,
+        default=0,
+        help="0이면 평탄화 파일, 양수이면 해당 인물 수마다 TAR 업로드 디렉터리 생성",
+    )
     args = parser.parse_args(argv)
     result = prepare(
         args.source,
@@ -149,6 +174,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         dataset_id=args.dataset_id,
         expected_subjects=args.expected_subjects,
         expected_chunks=args.expected_chunks,
+        subjects_per_batch=args.subjects_per_batch,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0

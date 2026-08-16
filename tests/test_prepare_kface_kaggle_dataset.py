@@ -55,6 +55,31 @@ class PrepareKFaceKaggleDatasetTests(unittest.TestCase):
             self.assertEqual(metadata["id"], "hywznn/private-test")
             self.assertNotIn("public", metadata)
 
+            batched = root / "batched"
+            batched_result = MODULE.prepare(
+                source,
+                batched,
+                dataset_id="hywznn/private-test-batched",
+                expected_subjects=2,
+                expected_chunks=4,
+                subjects_per_batch=1,
+            )
+            self.assertEqual(batched_result["upload_layout"], "batched_directories")
+            self.assertTrue(
+                (
+                    batched
+                    / "subjects_001_001"
+                    / "subject_0000000000000001__chunk_00000.npz"
+                ).is_file()
+            )
+            self.assertTrue(
+                (
+                    batched
+                    / "subjects_002_002"
+                    / "subject_0000000000000002__chunk_00001.npz"
+                ).is_file()
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

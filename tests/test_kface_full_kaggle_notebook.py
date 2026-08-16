@@ -72,6 +72,7 @@ class KFaceFullKaggleNotebookTests(unittest.TestCase):
         self.assertIn('Path("/kaggle/working/kface_full_verification.json")', source)
         self.assertIn('Path("/kaggle/working/kface_full_verification.png")', source)
         self.assertIn('result["contains_embeddings"] is False', source)
+        self.assertIn('Path("/kaggle/temp/kface_private_embeddings")', source)
         self.assertNotIn("np.save", source)
 
 

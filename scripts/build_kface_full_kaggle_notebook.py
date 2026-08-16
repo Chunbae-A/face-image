@@ -119,6 +119,9 @@ print({"kaggle": True, "references": REFERENCES, "seeds": SEEDS})
         code(
             """
 # 2. GPU와 비공개 입력 데이터 확인
+import shutil
+import subprocess
+
 import torch
 
 if not torch.cuda.is_available():
@@ -128,15 +131,31 @@ if len(manifest_candidates) != 1:
     raise FileNotFoundError(
         f"K-FACE 비공개 임베딩 Dataset의 manifest 하나가 필요합니다: {manifest_candidates}"
     )
-INPUT_DIR = manifest_candidates[0].parent
+DATASET_DIR = manifest_candidates[0].parent
 private_manifest = json.loads(manifest_candidates[0].read_text(encoding="utf-8"))
 if private_manifest.get("subject_count") != 400 or private_manifest.get("chunk_count") != 8800:
     raise RuntimeError(f"400명 전체 처리본이 아닙니다: {private_manifest}")
 if private_manifest.get("contains_face_images") is not False:
     raise RuntimeError("원본 얼굴 이미지가 없는 비공개 특징값 Dataset만 사용합니다.")
+
+INPUT_DIR = DATASET_DIR
+tar_candidates = sorted(DATASET_DIR.glob("subjects_*.tar"))
+if tar_candidates:
+    INPUT_DIR = Path("/kaggle/temp/kface_private_embeddings")
+    if INPUT_DIR.exists():
+        shutil.rmtree(INPUT_DIR)
+    INPUT_DIR.mkdir(parents=True)
+    for position, archive in enumerate(tar_candidates, start=1):
+        subprocess.run(["tar", "-xf", str(archive), "-C", str(INPUT_DIR)], check=True)
+        print({"extracted_batches": position, "total_batches": len(tar_candidates)})
+
+runtime_chunks = len(list(INPUT_DIR.glob("subject_*__chunk_*.npz")))
+if runtime_chunks != 8800:
+    raise RuntimeError(f"실행 임베딩 chunk 수가 다릅니다: {runtime_chunks}/8800")
 print({
     "gpu": torch.cuda.get_device_name(0),
-    "input": str(INPUT_DIR),
+    "dataset": str(DATASET_DIR),
+    "runtime_input": str(INPUT_DIR),
     "subjects": private_manifest["subject_count"],
     "chunks": private_manifest["chunk_count"],
     "embedding_gb": round(private_manifest["embedding_bytes"] / 1e9, 3),
