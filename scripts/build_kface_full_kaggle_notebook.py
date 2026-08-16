@@ -13,7 +13,7 @@ OUTPUT_DIR = ROOT / "notebooks" / "kaggle" / "kface_full_verification"
 NOTEBOOK_OUTPUT = OUTPUT_DIR / "notebook.ipynb"
 METADATA_OUTPUT = OUTPUT_DIR / "kernel-metadata.json"
 DATASET_SOURCE = "hywznn/deepsogak-kface-arcface-private-2026-08-17"
-KERNEL_ID = "hywznn/deepsogak-kface-full-verification"
+KERNEL_ID = "hywznn/k-face-400"
 
 
 def markdown(source: str) -> dict[str, object]:
