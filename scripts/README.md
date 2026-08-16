@@ -94,6 +94,41 @@ caffeinate -dimsu .venv/bin/python scripts/kface_pilot.py retry \
 점수·임베딩은 넣지 않는다. 이 기준값은 한국인 얼굴 연구 검증이며
 운영·본인인증 승인값이 아니다.
 
+### K-FACE 저·중화질 전체 864만 장 처리
+
+Mac M4에서는 중화질에서 SCRFD 얼굴을 찾은 뒤 같은 촬영의 저화질에 위치를
+공유하고, ArcFace R50 특징 추출은 Core ML로 실행한다. 96 입력에서 먼저
+검출하고 실패한 사진만 160 입력으로 재시도한다. 512쌍마다 비공개 임베딩과
+체크포인트를 저장하므로 중단돼도 같은 명령으로 이어서 처리된다. 제한 옵션을
+지정하지 않아야 400명 × 저화질·중화질 각 10,800장을 전부 시도한다.
+
+```bash
+caffeinate -dimsu .venv/bin/python scripts/kface_full_paired.py \
+  --low-archive /private/Low_Resolution.zip \
+  --medium-archive /private/Middle_Resolution.zip \
+  --output-dir data/processed/kface/full_paired_v2_fast96 \
+  --subject-start 1 \
+  --subject-end 400 \
+  --chunk-size 512 \
+  --detection-size 160 \
+  --fast-detection-size 96 \
+  --fast-detection-score 0.50 \
+  --minimum-detection-score 0.50 \
+  --minimum-face-area-ratio 0.01 \
+  --recognition-provider coreml \
+  --expected-low-bytes 10442596690 \
+  --expected-medium-bytes 25001457787 \
+  --accept-noncommercial-model-license
+
+# 별도 터미널에서 진행률·속도·예상 완료 시각 확인
+.venv/bin/python scripts/kface_full_status.py \
+  data/processed/kface/full_paired_v2_fast96
+```
+
+전체 처리란 모든 입력을 모델에 시도한다는 뜻이다. 얼굴을 찾은 쌍은 임베딩을
+저장하고, 찾지 못한 쌍도 누락시키지 않고 거절 사유와 개수를 체크포인트에 남긴다.
+원본 이미지·정렬 얼굴·원본 인물명은 결과 폴더에 저장하지 않는다.
+
 전체 중화질 다운로드가 오래 걸리면 이미 완전히 내려받힌 인물별 ZIP 중 저화질
 표본과 같은 인물만 CRC 검증해 비공개 파일럿 ZIP을 만들 수 있다. 이 명령은 원본
 얼굴을 포함한 결과를 만들기 때문에 출력 경로는 반드시 Git에서 제외된 `data/`
