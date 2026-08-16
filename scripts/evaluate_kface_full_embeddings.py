@@ -53,7 +53,10 @@ def discover_subject_files(root: Path) -> dict[str, list[Path]]:
 
     root = root.resolve()
     subjects: dict[str, list[Path]] = defaultdict(list)
-    for path in sorted(root.glob("subject_*__chunk_*.npz")):
+    # Kaggle의 ``--dir-mode tar`` 업로드는 묶음 tar를 Dataset 내부의
+    # ``subjects_001_020/`` 같은 폴더로 자동 확장한다. 로컬 평탄 구조와
+    # Kaggle 묶음 폴더를 같은 평가 코드로 읽기 위해 재귀 탐색한다.
+    for path in sorted(root.rglob("subject_*__chunk_*.npz")):
         match = FLAT_PATTERN.fullmatch(path.name)
         if match is not None:
             subjects[match.group(1)].append(path)

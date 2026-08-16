@@ -20,6 +20,26 @@ SPEC.loader.exec_module(MODULE)
 
 
 class EvaluateKFaceFullEmbeddingsTests(unittest.TestCase):
+    def test_discovers_kaggle_batched_directories(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            batch = root / "subjects_001_020"
+            batch.mkdir()
+            first = batch / "subject_0000000000000001__chunk_00000.npz"
+            second = batch / "subject_0000000000000002__chunk_00000.npz"
+            first.touch()
+            second.touch()
+
+            discovered = MODULE.discover_subject_files(root)
+
+            self.assertEqual(
+                discovered,
+                {
+                    "subject_0000000000000001": [first.resolve()],
+                    "subject_0000000000000002": [second.resolve()],
+                },
+            )
+
     def test_repeated_subject_disjoint_full_evaluation(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

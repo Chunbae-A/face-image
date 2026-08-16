@@ -149,7 +149,7 @@ if tar_candidates:
         subprocess.run(["tar", "-xf", str(archive), "-C", str(INPUT_DIR)], check=True)
         print({"extracted_batches": position, "total_batches": len(tar_candidates)})
 
-runtime_chunks = len(list(INPUT_DIR.glob("subject_*__chunk_*.npz")))
+runtime_chunks = len(list(INPUT_DIR.rglob("subject_*__chunk_*.npz")))
 if runtime_chunks != 8800:
     raise RuntimeError(f"실행 임베딩 chunk 수가 다릅니다: {runtime_chunks}/8800")
 print({
