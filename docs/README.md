@@ -52,6 +52,8 @@ JPEG 조건부 두 모델 결합은 현재 [Issue #35](https://github.com/Chunba
 - [얼굴가드 데모 연결 시험](../reports/faceguard_demo_smoke/2026-08-06/README.md)
 - [영상 딥페이크 API 연결 시험](../reports/video_deepfake_api_smoke/2026-08-08/README.md)
 - [K-FACE 저화질·중화질 파일럿](../reports/kface_resolution_pilot/2026-08-15/README.md)
+- [K-FACE 400명 3장·5장 기준선](../reports/kface_v3_400_evaluation/2026-08-15/README.md)
+- [K-FACE 적응형 검출·품질 Gate](../reports/kface_adaptive_quality_gate/2026-08-16/README.md)
 
 ## 개발자용 위치
 

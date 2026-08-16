@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""K-FACE 3장·5장 test 점수 분포를 개인정보 없이 PNG로 그린다."""
+"""K-FACE 등록 장수별 test 점수 분포를 개인정보 없이 PNG로 그린다."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import math
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -87,33 +88,49 @@ def _panel(
 
 
 def plot(payload: dict[str, Any], output: Path) -> None:
-    image = Image.new("RGB", (1800, 1180), "#FFFFFF")
+    protocols = sorted(
+        payload["protocols"].items(), key=lambda item: item[1]["reference_count"]
+    )
+    panels = [
+        (
+            f"{protocol['reference_count']}장 등록 · "
+            f"{'저화질' if resolution == 'low' else '중화질'} 질의",
+            protocol,
+            resolution,
+        )
+        for _, protocol in protocols
+        for resolution in ("low", "medium")
+    ]
+    rows = math.ceil(len(panels) / 2)
+    image_height = 165 + rows * 500 + 15
+    image = Image.new("RGB", (1800, image_height), "#FFFFFF")
     draw = ImageDraw.Draw(image)
     draw.text((70, 45), "K-FACE 400명 ArcFace 저·중화질 검증", font=_font(42, bold=True), fill="#0F172A")
+    reference_label = "·".join(str(item[1]["reference_count"]) for item in protocols)
+    subtitle = f"중화질 등록 {reference_label}장 · subject-disjoint test 점수 분포"
+    minimum_score = payload.get("minimum_query_detection_score")
+    if minimum_score is not None:
+        subtitle += (
+            f" · 검출점수 {minimum_score:.2f} 이상"
+            f" · validation FAR {payload['calibration_far']:.4%}"
+        )
     draw.text(
         (70, 102),
-        "중화질 등록 3장·5장, subject-disjoint test 점수 분포",
+        subtitle,
         font=_font(23),
         fill="#475569",
     )
-    boxes = (
-        (70, 165, 870, 620),
-        (930, 165, 1730, 620),
-        (70, 665, 870, 1120),
-        (930, 665, 1730, 1120),
-    )
-    panels = (
-        ("3장 등록 · 저화질 질의", "references_3", "low"),
-        ("3장 등록 · 중화질 질의", "references_3", "medium"),
-        ("5장 등록 · 저화질 질의", "references_5", "low"),
-        ("5장 등록 · 중화질 질의", "references_5", "medium"),
-    )
-    for box, (title, protocol, resolution) in zip(boxes, panels):
+    for index, (title, protocol, resolution) in enumerate(panels):
+        column = index % 2
+        row = index // 2
+        left = 70 if column == 0 else 930
+        top = 165 + row * 500
+        box = (left, top, left + 800, top + 455)
         _panel(
             draw,
             box,
             title=title,
-            metrics=payload["protocols"][protocol]["conditions"][resolution]["test"],
+            metrics=protocol["conditions"][resolution]["test"],
         )
     output.parent.mkdir(parents=True, exist_ok=True)
     image.save(output, format="PNG", optimize=True)

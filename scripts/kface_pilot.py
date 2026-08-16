@@ -264,6 +264,271 @@ def _save_embeddings(
     os.replace(temporary, path)
 
 
+def _load_embeddings(path: Path) -> tuple[list[np.ndarray], list[list[float]], list[int]]:
+    """비공개 NPZ를 검증해 재시도 파이프라인의 시작점으로 읽는다."""
+
+    if not path.is_file():
+        raise FileNotFoundError(f"기준 임베딩을 찾지 못했습니다: {path}")
+    with np.load(path, allow_pickle=False) as payload:
+        embeddings = np.asarray(payload["embeddings"], dtype=np.float32)
+        quality = np.asarray(payload["quality"], dtype=np.float32)
+        selected_indices = np.asarray(payload["selected_indices"], dtype=np.int32)
+    if embeddings.ndim != 2 or embeddings.shape[1:] != (512,):
+        raise ValueError(f"기준 임베딩 형식이 다릅니다: {path.name}")
+    if quality.shape != (len(embeddings), 6):
+        raise ValueError(f"기준 품질값 형식이 다릅니다: {path.name}")
+    if selected_indices.shape != (len(embeddings),):
+        raise ValueError(f"기준 선택 인덱스 형식이 다릅니다: {path.name}")
+    if len(np.unique(selected_indices)) != len(selected_indices):
+        raise ValueError(f"기준 선택 인덱스가 중복됐습니다: {path.name}")
+    if not np.all(np.isfinite(embeddings)) or not np.all(np.isfinite(quality)):
+        raise ValueError(f"기준 NPZ에 유한하지 않은 값이 있습니다: {path.name}")
+    return (
+        [row.copy() for row in embeddings],
+        quality.astype(float).tolist(),
+        selected_indices.astype(int).tolist(),
+    )
+
+
+def process_adaptive_retry(
+    archive_path: Path,
+    *,
+    resolution: str,
+    baseline_dir: Path,
+    output_dir: Path,
+    max_subjects: int,
+    images_per_subject: int,
+    retry_encoders: Sequence[tuple[str, Any]],
+    archive_sha256: str | None = None,
+    progress: Callable[[dict[str, Any]], None] | None = None,
+) -> dict[str, Any]:
+    """기준 처리에서 실패한 이미지만 더 큰 검출 입력으로 다시 시도한다.
+
+    기준 NPZ는 수정하지 않고 새 디렉터리에 병합 결과를 만든다. 인물별 완료
+    체크포인트를 남기므로 Mac이 잠들거나 명령이 중단돼도 완료 인물은 건너뛴다.
+    """
+
+    if resolution not in SUPPORTED_RESOLUTIONS:
+        raise ValueError("해상도는 low 또는 medium이어야 합니다.")
+    if max_subjects <= 0 or images_per_subject <= 0:
+        raise ValueError("인물 수와 인물당 이미지 수는 양수여야 합니다.")
+    if not retry_encoders or any(not label.strip() for label, _ in retry_encoders):
+        raise ValueError("이름이 있는 재시도 인코더가 하나 이상 필요합니다.")
+    labels = [label for label, _ in retry_encoders]
+    if len(set(labels)) != len(labels):
+        raise ValueError("재시도 단계 이름은 중복될 수 없습니다.")
+
+    baseline_summary_path = baseline_dir / "summary.json"
+    if not baseline_summary_path.is_file():
+        raise FileNotFoundError(
+            f"기준 처리 요약을 찾지 못했습니다: {baseline_summary_path}"
+        )
+    baseline_summary = json.loads(baseline_summary_path.read_text(encoding="utf-8"))
+    if baseline_summary.get("resolution") != resolution:
+        raise ValueError("기준 처리 해상도와 재시도 해상도가 다릅니다.")
+    if int(baseline_summary.get("subject_count", 0)) < max_subjects:
+        raise ValueError("기준 처리 인물 수가 요청한 재시도 인물 수보다 적습니다.")
+
+    subjects = list_subject_archives(archive_path)[:max_subjects]
+    source_sha256 = archive_sha256 or _sha256_file(archive_path)
+    if baseline_summary.get("archive_sha256") not in {None, source_sha256}:
+        raise ValueError("기준 처리와 재시도 원본 ZIP의 SHA-256이 다릅니다.")
+    retry_stage_configs = []
+    for label, encoder in retry_encoders:
+        settings = getattr(encoder, "settings", None)
+        retry_stage_configs.append(
+            {
+                "label": label,
+                "detection_size": getattr(settings, "detection_size", None),
+                "minimum_detection_score": getattr(
+                    settings, "minimum_detection_score", None
+                ),
+                "model_name": getattr(settings, "model_name", None),
+            }
+        )
+    config = {
+        "pipeline_version": "kface-adaptive-retry-v1",
+        "resolution": resolution,
+        "archive_sha256": source_sha256,
+        "baseline_config_fingerprint": baseline_summary.get("config_fingerprint"),
+        "max_subjects": max_subjects,
+        "images_per_subject": images_per_subject,
+        "retry_stages": retry_stage_configs,
+    }
+    config_fingerprint = _config_fingerprint(config)
+    stage_recoveries: Counter[str] = Counter()
+    remaining_reasons: Counter[str] = Counter()
+    initial_accepted = 0
+    final_accepted = 0
+    skipped_subjects = 0
+    started = time.perf_counter()
+
+    with zipfile.ZipFile(archive_path) as outer:
+        for position, subject in enumerate(subjects, start=1):
+            output_embedding, output_checkpoint = _subject_paths(
+                output_dir, subject.pseudonym
+            )
+            completed = _completed_checkpoint(output_checkpoint, config_fingerprint)
+            if completed is not None and output_embedding.is_file():
+                skipped_subjects += 1
+                initial_accepted += int(completed["initial_accepted_images"])
+                final_accepted += int(completed["accepted_images"])
+                stage_recoveries.update(completed.get("retry_recoveries", {}))
+                remaining_reasons.update(completed.get("remaining_reject_reasons", {}))
+                if progress:
+                    progress(
+                        {
+                            "subject": position,
+                            "subjects": len(subjects),
+                            "status": "skipped",
+                            "accepted": int(completed["accepted_images"]),
+                        }
+                    )
+                continue
+
+            baseline_embedding, _ = _subject_paths(baseline_dir, subject.pseudonym)
+            embeddings, qualities, accepted_indices = _load_embeddings(
+                baseline_embedding
+            )
+            if any(index < 0 or index >= images_per_subject for index in accepted_indices):
+                raise ValueError(
+                    f"기준 선택 인덱스가 요청 범위를 벗어났습니다: {baseline_embedding.name}"
+                )
+            subject_initial = len(embeddings)
+            missing = sorted(set(range(images_per_subject)) - set(accepted_indices))
+            subject_recoveries: Counter[str] = Counter()
+            subject_reasons: Counter[str] = Counter()
+            subject_started = time.perf_counter()
+
+            if missing:
+                nested_payload = outer.read(subject.outer_member)
+                if len(nested_payload) != subject.uncompressed_bytes:
+                    raise OSError("인물별 ZIP 크기가 바깥 ZIP 목록과 다릅니다.")
+                with zipfile.ZipFile(BytesIO(nested_payload)) as inner:
+                    selected = evenly_spaced(_image_infos(inner), images_per_subject)
+                    if len(selected) != images_per_subject:
+                        raise ValueError("기준 처리와 같은 이미지 수를 선택하지 못했습니다.")
+                    for image_index in missing:
+                        image_payload = inner.read(selected[image_index])
+                        final_error: Exception | None = None
+                        for stage_label, encoder in retry_encoders:
+                            try:
+                                encoded = encoder.encode(image_payload)
+                                embedding = np.asarray(
+                                    encoded.embedding, dtype=np.float32
+                                ).reshape(-1)
+                                if embedding.shape != (512,) or not np.all(
+                                    np.isfinite(embedding)
+                                ):
+                                    raise ValueError(
+                                        "얼굴 임베딩이 512차원 유한값이 아닙니다."
+                                    )
+                                item_quality = encoded.quality
+                                embeddings.append(embedding)
+                                qualities.append(
+                                    [
+                                        float(item_quality.detection_score),
+                                        float(item_quality.face_area_ratio),
+                                        float(item_quality.blur_score),
+                                        float(item_quality.brightness_mean),
+                                        float(item_quality.image_width),
+                                        float(item_quality.image_height),
+                                    ]
+                                )
+                                accepted_indices.append(image_index)
+                                subject_recoveries[stage_label] += 1
+                                final_error = None
+                                break
+                            except Exception as error:  # noqa: BLE001 - 다음 단계로 재시도
+                                final_error = error
+                        if final_error is not None:
+                            code = getattr(final_error, "code", None) or type(
+                                final_error
+                            ).__name__
+                            subject_reasons[str(code)] += 1
+
+            order = np.argsort(np.asarray(accepted_indices, dtype=np.int32))
+            sorted_embeddings = [embeddings[int(index)] for index in order]
+            sorted_qualities = [qualities[int(index)] for index in order]
+            sorted_indices = [accepted_indices[int(index)] for index in order]
+            _save_embeddings(
+                output_embedding,
+                embeddings=sorted_embeddings,
+                quality=sorted_qualities,
+                selected_indices=sorted_indices,
+            )
+            subject_final = len(sorted_embeddings)
+            checkpoint = {
+                "complete": True,
+                "config_fingerprint": config_fingerprint,
+                "selected_images": images_per_subject,
+                "initial_accepted_images": subject_initial,
+                "accepted_images": subject_final,
+                "rejected_images": images_per_subject - subject_final,
+                "retry_recoveries": dict(sorted(subject_recoveries.items())),
+                "remaining_reject_reasons": dict(sorted(subject_reasons.items())),
+                "elapsed_seconds": time.perf_counter() - subject_started,
+                "contains_raw_path": False,
+                "contains_face_image": False,
+            }
+            _atomic_json(output_checkpoint, checkpoint)
+            initial_accepted += subject_initial
+            final_accepted += subject_final
+            stage_recoveries.update(subject_recoveries)
+            remaining_reasons.update(subject_reasons)
+            if progress:
+                progress(
+                    {
+                        "subject": position,
+                        "subjects": len(subjects),
+                        "status": "processed",
+                        "initial_accepted": subject_initial,
+                        "recovered": subject_final - subject_initial,
+                        "remaining_rejected": images_per_subject - subject_final,
+                        "elapsed_seconds": round(time.perf_counter() - subject_started, 3),
+                    }
+                )
+
+    summary = {
+        "dataset": "K-FACE",
+        "resolution": resolution,
+        "pipeline_version": config["pipeline_version"],
+        "config_fingerprint": config_fingerprint,
+        "archive_bytes": archive_path.stat().st_size,
+        "archive_sha256": source_sha256,
+        "subject_count": len(subjects),
+        "skipped_completed_subjects": skipped_subjects,
+        "selected_images": len(subjects) * images_per_subject,
+        "initial_accepted_images": initial_accepted,
+        "accepted_images": final_accepted,
+        "recovered_images": final_accepted - initial_accepted,
+        "rejected_images": len(subjects) * images_per_subject - final_accepted,
+        "retry_recoveries": dict(sorted(stage_recoveries.items())),
+        "retry_stages": retry_stage_configs,
+        "remaining_reject_reasons": dict(sorted(remaining_reasons.items())),
+        "processing_seconds": time.perf_counter() - started,
+        "model_providers": sorted(
+            {
+                getattr(encoder, "provider", None)
+                for _, encoder in retry_encoders
+                if getattr(encoder, "provider", None)
+            }
+        ),
+        "model_fingerprints": sorted(
+            {
+                getattr(encoder, "model_fingerprint", None)
+                for _, encoder in retry_encoders
+                if getattr(encoder, "model_fingerprint", None)
+            }
+        ),
+        "contains_raw_paths": False,
+        "contains_face_images": False,
+        "embeddings_are_private": True,
+    }
+    _atomic_json(output_dir / "summary.json", summary)
+    return summary
+
+
 def process_archive(
     archive_path: Path,
     *,
@@ -447,6 +712,42 @@ def _build_encoder(args: argparse.Namespace) -> Any:
     )
 
 
+def _build_retry_encoders(args: argparse.Namespace) -> list[tuple[str, Any]]:
+    if not args.accept_noncommercial_model_license:
+        raise PermissionError(
+            "InsightFace 제공 가중치의 비상업 연구 조건을 확인한 뒤 "
+            "--accept-noncommercial-model-license를 지정하세요."
+        )
+    project_root = str(Path(__file__).resolve().parents[1])
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+
+    from faceguard_api.engine import InsightFaceEncoder
+    from faceguard_api.settings import Settings
+
+    encoders: list[tuple[str, Any]] = []
+    for detection_size in args.retry_detection_sizes:
+        label = (
+            f"det{detection_size}_score"
+            f"{int(round(args.retry_minimum_detection_score * 100)):02d}"
+        )
+        encoders.append(
+            (
+                label,
+                InsightFaceEncoder(
+                    Settings(
+                        model_root=args.model_root,
+                        device="cpu",
+                        detection_size=detection_size,
+                        minimum_detection_score=args.retry_minimum_detection_score,
+                        accept_noncommercial_model_license=True,
+                    )
+                ),
+            )
+        )
+    return encoders
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -468,6 +769,24 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("--archive-sha256")
     process.add_argument("--expected-bytes", type=int)
     process.add_argument("--accept-noncommercial-model-license", action="store_true")
+
+    retry = subparsers.add_parser(
+        "retry", help="기준 처리에서 실패한 이미지만 더 큰 검출 입력으로 재시도"
+    )
+    retry.add_argument("archive", type=Path)
+    retry.add_argument("--resolution", choices=sorted(SUPPORTED_RESOLUTIONS), required=True)
+    retry.add_argument("--baseline-dir", type=Path, required=True)
+    retry.add_argument("--output-dir", type=Path, required=True)
+    retry.add_argument("--max-subjects", type=int, default=400)
+    retry.add_argument("--images-per-subject", type=int, default=15)
+    retry.add_argument("--model-root", type=Path, default=Path(".models/insightface"))
+    retry.add_argument("--archive-sha256")
+    retry.add_argument("--expected-bytes", type=int)
+    retry.add_argument(
+        "--retry-detection-sizes", type=int, nargs="+", default=[960, 1280]
+    )
+    retry.add_argument("--retry-minimum-detection-score", type=float, default=0.50)
+    retry.add_argument("--accept-noncommercial-model-license", action="store_true")
     return parser
 
 
@@ -483,6 +802,24 @@ def main(argv: Sequence[str] | None = None) -> int:
             inspect_subjects=args.inspect_subjects,
         )
         _atomic_json(args.output, payload)
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return 0
+    if args.command == "retry":
+        if any(size <= 0 for size in args.retry_detection_sizes):
+            raise ValueError("재시도 검출 입력 크기는 양수여야 합니다.")
+        if not 0.0 <= args.retry_minimum_detection_score <= 1.0:
+            raise ValueError("재시도 최소 검출 점수는 0과 1 사이여야 합니다.")
+        payload = process_adaptive_retry(
+            args.archive,
+            resolution=args.resolution,
+            baseline_dir=args.baseline_dir,
+            output_dir=args.output_dir,
+            max_subjects=args.max_subjects,
+            images_per_subject=args.images_per_subject,
+            retry_encoders=_build_retry_encoders(args),
+            archive_sha256=args.archive_sha256,
+            progress=_progress_line,
+        )
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0
     encoder = _build_encoder(args)
