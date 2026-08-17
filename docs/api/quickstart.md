@@ -109,7 +109,6 @@ curl http://127.0.0.1:8000/health
 ```json
 {
   "privacy_mode": "privacy_strict",
-  "web_monitoring_consent": false,
   "candidates": [
     {
       "page_url": "https://example.com/public-post",
@@ -121,65 +120,16 @@ curl http://127.0.0.1:8000/health
 
 이 기능은 공개 URL을 안전하게 정리하고 중복을 제거한다. 인터넷에서 새 후보를 자동으로 찾는 역이미지 검색 기능은 아직 연결되지 않았다.
 
-## 9. 무료 키워드 검색 시험
+## 9. Google Vision 후보의 `scan_id` 비동기 데모
 
-실행 중인 기본 API를 먼저 종료하고 SearXNG 결합 구성을 켠다.
-
-```bash
-docker compose down
-docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --detach
-```
-
-`POST /v1/search/candidates`에 다음 JSON을 넣는다. 검색어에는 공개 검색에 동의한 표현만 사용한다.
-
-```json
-{
-  "privacy_mode": "web_monitoring",
-  "web_monitoring_consent": true,
-  "query_text": "동의받은 검색어",
-  "categories": ["images"],
-  "language": "ko-KR",
-  "safe_search": 2,
-  "maximum_results": 10,
-  "candidates": []
-}
-```
-
-응답의 `provider`가 `searxng`이면 정상이다. 이 기능은 검색어로 후보 URL을 모으는 단계이며 얼굴 사진 역검색이나 동일인 판정은 하지 않는다.
-
-## 10. 검색부터 얼굴 선별·딥페이크 분석까지 한 번에 시험
-
-같은 Swagger 화면에서 `POST /v1/pipeline/search-and-filter`를 선택한다.
-
-1. `reference_images`에 동의받은 등록 얼굴 3장을 넣는다.
-2. `query_text`에 공개 검색에 동의한 검색어를 넣는다.
-3. `web_monitoring_consent`를 `true`로 설정한다.
-4. `maximum_results`는 처음에는 `3`으로 설정한다.
-5. `Execute`를 누른다.
-
-결과에서 확인할 값은 다음과 같다.
-
-- `similarity_raw`: 등록 얼굴과 후보 얼굴의 코사인 유사도 원값
-- `retrieval_match`: 넓은 후보수집 기준을 통과했는지
-- `identity_match`: 더 엄격한 연구용 동일인 기준을 통과했는지
-- `quality_summary`: 후보 얼굴 크기·선명도·밝기
-- `deepfake.status`: `analyzed`, `not_analyzed`, `failed`, `unavailable` 중 분석 상태
-- `deepfake.deepfake_score`: 넓은 얼굴 후보 기준을 통과한 이미지의 ONNX 점수
-- `deepfake.is_suspected_deepfake`: 연구 기준값을 넘었는지
-- `error_code`: 다운로드·얼굴 검출에 실패한 이유
-
-현재 `retrieval_threshold=0.20`은 기능 연결용 임시값이며 정확도 검증을 마친 운영값이 아니다. ArcFace가 후보가 아니라고 판단한 이미지는 불필요한 ONNX 경고를 피하려고 `deepfake.status=not_analyzed`로 남긴다. 여러 얼굴이 있는 이미지와 영상 후보는 아직 이 경로에서 처리하지 않는다.
-
-## 11. `scan_id` 비동기 데모
-
-화면이 검색 처리를 기다리며 멈추지 않게 하려면 `POST /v1/faceguard/enrollments`로 얼굴을 임시 등록한 뒤 `POST /v1/exposure-scans`로 작업을 시작한다. 서버가 즉시 반환한 `scan_id`를 `GET /v1/exposure-scans/{scan_id}`에 넣어 진행 상태를 확인한다.
+딥소각 서버가 Google Vision으로 수집한 후보 URL을 분석할 때는 `POST /v1/faceguard/enrollments`로 얼굴을 임시 등록한 뒤 `POST /v1/exposure-scans`로 작업을 시작한다. 서버가 즉시 반환한 `scan_id`를 `GET /v1/exposure-scans/{scan_id}`에 넣어 진행 상태를 확인한다.
 
 초보자용 네 단계 Swagger 순서와 복사할 JSON은 [비동기 노출 스캔 안내](async-exposure-scan.md)에 있다. 현재 비동기 경로는 공개 이미지 후보만 지원하고, 서버를 재시작하면 메모리의 등록·작업·결과가 사라진다.
 
-## 12. 종료
+## 10. 종료
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.searxng.yml down
+docker compose down
 ```
 
 ## 주의사항

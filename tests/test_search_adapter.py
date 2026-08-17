@@ -1,16 +1,12 @@
 import asyncio
 import unittest
 from datetime import datetime, timezone
-from urllib.parse import parse_qs
-
-import httpx
 
 from faceguard_api.errors import FaceGuardError
 from faceguard_api.search import (
     SearchCandidate,
     SearchQuery,
     SearchService,
-    SearXNGProvider,
     SubmittedCandidate,
     UserSubmittedUrlProvider,
     normalize_public_url,
@@ -116,140 +112,6 @@ class PublicUrlNormalizationTests(unittest.TestCase):
         with self.assertRaises(FaceGuardError) as raised:
             normalize_public_url("https://example.com/path\nprivate")
         self.assertEqual(raised.exception.code, "INVALID_PUBLIC_URL")
-
-
-class SearXNGProviderTests(unittest.TestCase):
-    def run_provider(self, provider: SearXNGProvider, search_query: SearchQuery):
-        return asyncio.run(provider.search(search_query))
-
-    def test_maps_image_results_without_sending_a_face_image(self):
-        captured = {}
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            captured["form"] = parse_qs(request.content.decode("utf-8"))
-            return httpx.Response(
-                200,
-                json={
-                    "results": [
-                        {
-                            "url": "https://news.example.com/post?utm_source=search",
-                            "img_src": "https://cdn.example.com/person.jpg",
-                            "thumbnail_src": "https://thumb.example.com/person.jpg",
-                            "engines": ["duckduckgo images"],
-                        }
-                    ]
-                },
-            )
-
-        provider = SearXNGProvider(
-            "http://searxng:8080",
-            transport=httpx.MockTransport(handler),
-            clock=lambda: FIXED_TIME,
-        )
-        results = self.run_provider(
-            provider,
-            query(
-                privacy_mode="web_monitoring",
-                consent=True,
-                text_query="동의받은 검색어",
-            ),
-        )
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].page_url, "https://news.example.com/post")
-        self.assertEqual(results[0].media_url, "https://cdn.example.com/person.jpg")
-        self.assertEqual(results[0].provider, "searxng")
-        self.assertEqual(results[0].source_engine, "duckduckgo images")
-        self.assertEqual(captured["form"]["q"], ["동의받은 검색어"])
-        self.assertEqual(captured["form"]["categories"], ["images"])
-        self.assertNotIn("image", captured["form"])
-        self.assertNotIn("image_url", captured["form"])
-
-    def test_skips_unsafe_result_urls_and_keeps_safe_page(self):
-        def handler(request: httpx.Request) -> httpx.Response:
-            del request
-            return httpx.Response(
-                200,
-                json={
-                    "results": [
-                        {"url": "http://127.0.0.1/private", "img_src": "x"},
-                        {
-                            "url": "https://example.com/post",
-                            "img_src": "http://192.168.0.2/private.jpg",
-                            "thumbnail_src": "/relative-thumbnail",
-                        },
-                    ]
-                },
-            )
-
-        provider = SearXNGProvider(
-            "http://searxng:8080", transport=httpx.MockTransport(handler)
-        )
-        results = self.run_provider(
-            provider,
-            query(
-                privacy_mode="web_monitoring",
-                consent=True,
-                text_query="public candidate",
-            ),
-        )
-        self.assertEqual(len(results), 1)
-        self.assertEqual(results[0].page_url, "https://example.com/post")
-        self.assertIsNone(results[0].media_url)
-        self.assertIsNone(results[0].thumbnail_url)
-
-    def test_retries_retryable_status_then_succeeds(self):
-        calls = []
-        delays = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            calls.append(request)
-            if len(calls) == 1:
-                return httpx.Response(503, text="temporary")
-            return httpx.Response(200, json={"results": []})
-
-        async def record_sleep(delay: float):
-            delays.append(delay)
-
-        provider = SearXNGProvider(
-            "http://searxng:8080",
-            maximum_retries=1,
-            retry_backoff_seconds=0.1,
-            transport=httpx.MockTransport(handler),
-            sleep=record_sleep,
-        )
-        results = self.run_provider(
-            provider,
-            query(
-                privacy_mode="web_monitoring",
-                consent=True,
-                text_query="retry query",
-            ),
-        )
-        self.assertEqual(results, [])
-        self.assertEqual(len(calls), 2)
-        self.assertEqual(delays, [0.1])
-
-    def test_invalid_json_becomes_provider_failure_without_body_leak(self):
-        def handler(request: httpx.Request) -> httpx.Response:
-            del request
-            return httpx.Response(200, content=b"private upstream body")
-
-        provider = SearXNGProvider(
-            "http://searxng:8080", transport=httpx.MockTransport(handler)
-        )
-        service = SearchService([provider])
-        with self.assertRaises(FaceGuardError) as raised:
-            asyncio.run(
-                service.search(
-                    query(
-                        privacy_mode="web_monitoring",
-                        consent=True,
-                        text_query="query",
-                    )
-                )
-            )
-        self.assertEqual(raised.exception.code, "ALL_SEARCH_PROVIDERS_FAILED")
-        self.assertNotIn("private upstream body", raised.exception.message)
 
 
 class SearchServiceTests(unittest.TestCase):

@@ -5,7 +5,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlsplit
 
 RESEARCH_THRESHOLD = 0.2823836207389832
 RESEARCH_RETRIEVAL_THRESHOLD = 0.20
@@ -53,10 +52,6 @@ class Settings:
     minimum_face_area_ratio: float = 0.01
     maximum_search_candidates: int = 100
     search_provider_timeout_seconds: float = 12.0
-    searxng_base_url: str | None = None
-    searxng_request_timeout_seconds: float = 4.0
-    searxng_maximum_retries: int = 1
-    searxng_retry_backoff_seconds: float = 0.25
     maximum_pipeline_candidates: int = 10
     candidate_download_timeout_seconds: float = 4.0
     candidate_download_maximum_redirects: int = 2
@@ -123,25 +118,6 @@ class Settings:
             raise ValueError("maximum_search_candidates는 양수여야 합니다.")
         if self.search_provider_timeout_seconds <= 0:
             raise ValueError("search_provider_timeout_seconds는 양수여야 합니다.")
-        if self.searxng_base_url:
-            parsed = urlsplit(self.searxng_base_url)
-            if (
-                parsed.scheme not in {"http", "https"}
-                or parsed.hostname is None
-                or parsed.username is not None
-                or parsed.password is not None
-                or parsed.query
-                or parsed.fragment
-            ):
-                raise ValueError(
-                    "searxng_base_url은 인증정보·쿼리 없는 HTTP(S) URL이어야 합니다."
-                )
-        if self.searxng_request_timeout_seconds <= 0:
-            raise ValueError("searxng_request_timeout_seconds는 양수여야 합니다.")
-        if self.searxng_maximum_retries < 0:
-            raise ValueError("searxng_maximum_retries는 0 이상이어야 합니다.")
-        if self.searxng_retry_backoff_seconds < 0:
-            raise ValueError("searxng_retry_backoff_seconds는 0 이상이어야 합니다.")
         if self.maximum_pipeline_candidates <= 0:
             raise ValueError("maximum_pipeline_candidates는 양수여야 합니다.")
         if self.candidate_download_timeout_seconds <= 0:
@@ -226,18 +202,6 @@ class Settings:
             ),
             search_provider_timeout_seconds=float(
                 os.environ.get("FACEGUARD_SEARCH_PROVIDER_TIMEOUT_SECONDS", "12.0")
-            ),
-            searxng_base_url=(
-                os.environ.get("FACEGUARD_SEARXNG_BASE_URL", "").strip() or None
-            ),
-            searxng_request_timeout_seconds=float(
-                os.environ.get("FACEGUARD_SEARXNG_REQUEST_TIMEOUT_SECONDS", "4.0")
-            ),
-            searxng_maximum_retries=int(
-                os.environ.get("FACEGUARD_SEARXNG_MAXIMUM_RETRIES", "1")
-            ),
-            searxng_retry_backoff_seconds=float(
-                os.environ.get("FACEGUARD_SEARXNG_RETRY_BACKOFF_SECONDS", "0.25")
             ),
             maximum_pipeline_candidates=int(
                 os.environ.get("FACEGUARD_MAXIMUM_PIPELINE_CANDIDATES", "10")

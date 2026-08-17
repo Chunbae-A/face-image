@@ -2,7 +2,6 @@ import json
 import unittest
 from pathlib import Path
 
-import httpx
 import numpy as np
 from fastapi.testclient import TestClient
 
@@ -12,11 +11,6 @@ from faceguard_api.deepfake import DeepfakeAnalysis
 from faceguard_api.domain import EncodedFace, FaceQuality
 from faceguard_api.errors import FaceGuardError
 from faceguard_api.media import DownloadedImage
-from faceguard_api.search import (
-    SearchService,
-    SearXNGProvider,
-    UserSubmittedUrlProvider,
-)
 from faceguard_api.settings import Settings
 from faceguard_api.video import (
     DeepfakeVideoAnalysis,
@@ -396,18 +390,6 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertEqual(response.status_code, 413)
         self.assertEqual(response.json()["error"]["code"], "REQUEST_BODY_TOO_LARGE")
 
-    def test_health_reports_configured_searxng_provider(self):
-        settings = Settings(
-            accept_noncommercial_model_license=True,
-            similarity_threshold=0.5,
-            searxng_base_url="http://searxng:8080",
-        )
-        client = TestClient(create_app(settings, FakeEncoder()))
-        response = client.get("/health")
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["search_providers"], ["user_url", "searxng"])
-        self.assertTrue(response.json()["web_search_enabled"])
-
     def test_verify_returns_same_person_without_embedding_or_filename(self):
         response = self.client.post(
             "/v1/faceguard/verify",
@@ -508,7 +490,6 @@ class FaceguardHttpTests(unittest.TestCase):
             "/v1/search/candidates",
             json={
                 "privacy_mode": "privacy_strict",
-                "web_monitoring_consent": False,
                 "candidates": [
                     {
                         "page_url": "https://Example.com/post?utm_source=demo",
@@ -555,35 +536,18 @@ class FaceguardHttpTests(unittest.TestCase):
         self.assertEqual(response.json()["error"]["code"], "INVALID_REQUEST")
         self.assertIn("공개 후보 URL", response.json()["error"]["message"])
 
-    def test_web_monitoring_mode_requires_consent(self):
-        response = self.client.post(
-            "/v1/search/candidates",
-            json={
-                "privacy_mode": "web_monitoring",
-                "web_monitoring_consent": False,
-                "query_text": "동의하지 않은 검색어",
-                "candidates": [{"page_url": "https://example.com/post"}],
-            },
-        )
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(
-            response.json()["error"]["code"], "WEB_MONITORING_CONSENT_REQUIRED"
-        )
-
-    def test_web_monitoring_mode_requires_configured_external_provider(self):
+    def test_keyword_search_mode_is_not_exposed(self):
         response = self.client.post(
             "/v1/search/candidates",
             json={
                 "privacy_mode": "web_monitoring",
                 "web_monitoring_consent": True,
-                "query_text": "검색 제공자 확인",
+                "query_text": "사용하지 않는 검색어",
                 "candidates": [{"page_url": "https://example.com/post"}],
             },
         )
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(
-            response.json()["error"]["code"], "SEARCH_PROVIDER_UNAVAILABLE"
-        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"]["code"], "INVALID_REQUEST")
 
     def test_search_does_not_require_face_model_license(self):
         client = TestClient(
@@ -595,196 +559,6 @@ class FaceguardHttpTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()["candidate_count"], 1)
-
-    def test_searxng_keyword_search_returns_normalized_candidate(self):
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(
-                200,
-                json={
-                    "results": [
-                        {
-                            "url": "https://example.com/public-post",
-                            "img_src": "https://cdn.example.com/candidate.jpg",
-                            "engine": "duckduckgo images",
-                        }
-                    ]
-                },
-            )
-
-        provider = SearXNGProvider(
-            "http://searxng:8080", transport=httpx.MockTransport(handler)
-        )
-        search_service = SearchService([UserSubmittedUrlProvider(), provider])
-        client = TestClient(
-            create_app(test_settings(), FakeEncoder(), search_service=search_service)
-        )
-        response = client.post(
-            "/v1/search/candidates",
-            json={
-                "privacy_mode": "web_monitoring",
-                "web_monitoring_consent": True,
-                "query_text": "동의받은 이름 공개 이미지",
-                "categories": ["images"],
-                "maximum_results": 10,
-            },
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        body = response.json()
-        self.assertEqual(body["candidate_count"], 1)
-        self.assertEqual(body["candidates"][0]["provider"], "searxng")
-        self.assertEqual(body["candidates"][0]["source_engine"], "duckduckgo images")
-        self.assertIn("역검색이 아닙니다", body["warning"])
-        self.assertNotIn("query_text", body)
-        self.assertNotIn("동의받은 이름", json.dumps(body, ensure_ascii=False))
-
-    def test_web_monitoring_requires_query_text(self):
-        response = self.client.post(
-            "/v1/search/candidates",
-            json={
-                "privacy_mode": "web_monitoring",
-                "web_monitoring_consent": True,
-                "candidates": [{"page_url": "https://example.com/post"}],
-            },
-        )
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()["error"]["code"], "INVALID_REQUEST")
-
-    def test_search_and_filter_pipeline_returns_numeric_face_decisions(self):
-        def handler(request: httpx.Request) -> httpx.Response:
-            return httpx.Response(
-                200,
-                json={
-                    "results": [
-                        {
-                            "url": "https://example.com/same-post",
-                            "img_src": "https://cdn.example.com/same.jpg",
-                            "engine": "test images",
-                        },
-                        {
-                            "url": "https://example.com/different-post",
-                            "img_src": "https://cdn.example.com/different.jpg",
-                            "engine": "test images",
-                        },
-                    ]
-                },
-            )
-
-        provider = SearXNGProvider(
-            "http://searxng:8080", transport=httpx.MockTransport(handler)
-        )
-        search_service = SearchService([provider])
-        client = TestClient(
-            create_app(
-                test_settings(),
-                FakeEncoder(),
-                search_service=search_service,
-                image_downloader=FakeImageDownloader(),
-                deepfake_analyzer=FakeDeepfakeAnalyzer(),
-            )
-        )
-        response = client.post(
-            "/v1/pipeline/search-and-filter",
-            data={
-                "query_text": "동의받은 비공개 테스트 검색어",
-                "web_monitoring_consent": "true",
-                "maximum_results": "2",
-            },
-            files=[
-                image_file("reference_images", "private-ref-1.jpg", b"ref-1"),
-                image_file("reference_images", "private-ref-2.jpg", b"ref-2"),
-                image_file("reference_images", "private-ref-3.jpg", b"ref-3"),
-            ],
-        )
-        self.assertEqual(response.status_code, 200, response.text)
-        body = response.json()
-        self.assertEqual(body["status"], "completed")
-        self.assertEqual(body["searched_candidate_count"], 2)
-        self.assertEqual(body["analyzed_candidate_count"], 2)
-        self.assertEqual(body["skipped_candidate_count"], 0)
-        self.assertEqual(body["retrieval_match_count"], 1)
-        self.assertEqual(body["identity_match_count"], 1)
-        self.assertEqual(body["deepfake_analyzed_candidate_count"], 1)
-        self.assertEqual(body["deepfake_suspected_candidate_count"], 1)
-        self.assertEqual(body["deepfake_failed_candidate_count"], 0)
-        self.assertEqual(
-            [item["status"] for item in body["candidates"]],
-            ["identity_match", "not_matched"],
-        )
-        self.assertEqual(body["candidates"][0]["matched_frame_count"], 1)
-        self.assertEqual(body["candidates"][0]["analyzed_frame_count"], 1)
-        self.assertIn("quality_summary", body["candidates"][0])
-        self.assertEqual(body["candidates"][0]["deepfake"]["deepfake_score"], 0.9)
-        self.assertEqual(body["candidates"][1]["deepfake"]["status"], "not_analyzed")
-        self.assertEqual(
-            body["candidates"][1]["deepfake"]["calibration_status"],
-            "not_analyzed",
-        )
-        self.assertEqual(body["config_version"], "search-arcface-deepfake-image-v1")
-        serialized = json.dumps(body, ensure_ascii=False)
-        self.assertNotIn("동의받은 비공개 테스트 검색어", serialized)
-        self.assertNotIn("private-ref", serialized)
-        self.assertNotIn("embedding", serialized)
-
-    def test_search_and_filter_checks_model_license_before_web_search(self):
-        calls = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            calls.append(request)
-            return httpx.Response(200, json={"results": []})
-
-        provider = SearXNGProvider(
-            "http://searxng:8080", transport=httpx.MockTransport(handler)
-        )
-        client = TestClient(
-            create_app(
-                test_settings(license_accepted=False),
-                FakeEncoder(),
-                search_service=SearchService([provider]),
-                image_downloader=FakeImageDownloader(),
-            )
-        )
-        response = client.post(
-            "/v1/pipeline/search-and-filter",
-            data={
-                "query_text": "외부로 나가면 안 되는 검색어",
-                "web_monitoring_consent": "true",
-            },
-            files=[image_file("reference_images", "ref.jpg", b"ref")],
-        )
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["error"]["code"], "MODEL_LICENSE_NOT_ACCEPTED")
-        self.assertEqual(calls, [])
-
-    def test_search_and_filter_validates_reference_face_before_web_search(self):
-        calls = []
-
-        def handler(request: httpx.Request) -> httpx.Response:
-            calls.append(request)
-            return httpx.Response(200, json={"results": []})
-
-        provider = SearXNGProvider(
-            "http://searxng:8080", transport=httpx.MockTransport(handler)
-        )
-        client = TestClient(
-            create_app(
-                test_settings(),
-                FakeEncoder(),
-                search_service=SearchService([provider]),
-                image_downloader=FakeImageDownloader(),
-            )
-        )
-        response = client.post(
-            "/v1/pipeline/search-and-filter",
-            data={
-                "query_text": "등록 사진 실패 시 전송하면 안 되는 검색어",
-                "web_monitoring_consent": "true",
-            },
-            files=[image_file("reference_images", "ref.jpg", b"no-face")],
-        )
-        self.assertEqual(response.status_code, 422)
-        self.assertEqual(response.json()["error"]["code"], "NO_FACE")
-        self.assertEqual(calls, [])
-
 
 if __name__ == "__main__":
     unittest.main()
