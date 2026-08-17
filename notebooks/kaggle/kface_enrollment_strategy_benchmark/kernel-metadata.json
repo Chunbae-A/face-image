@@ -1,0 +1,16 @@
+{
+  "id": "hywznn/k-face-enrollment-strategy-benchmark",
+  "title": "k-face-enrollment-strategy-benchmark",
+  "code_file": "notebook.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "dataset_sources": [
+    "hywznn/deepsogak-kface-arcface-private-2026-08-17"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
