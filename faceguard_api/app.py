@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import time
 from contextlib import asynccontextmanager
 from typing import Annotated, Any
 from uuid import uuid4
 
-from fastapi import FastAPI, File, Form, Header, Request, UploadFile
+from fastapi import FastAPI, File, Header, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from starlette.concurrency import run_in_threadpool
@@ -45,7 +44,6 @@ from .schemas import (
     HealthResponse,
     ImageQualityResponse,
     ModelCapabilityResponse,
-    SearchAndFilterResponse,
     SearchCandidateResponse,
     SearchCandidatesRequest,
     SearchCandidatesResponse,
@@ -57,7 +55,6 @@ from .schemas import (
 from .search import (
     SearchQuery,
     SearchService,
-    SearXNGProvider,
     SubmittedCandidate,
     UserSubmittedUrlProvider,
 )
@@ -77,10 +74,6 @@ RESEARCH_WARNING = (
 SEARCH_WARNING = (
     "현재 무료 모드는 사용자가 직접 넣은 공개 URL의 안전성 검사·정규화·중복 제거만 "
     "수행합니다. 인터넷 자동 검색이나 후보 발견을 완료했다는 뜻이 아닙니다."
-)
-SEARXNG_WARNING = (
-    "SearXNG은 검색어 기반 공개 후보 수집이며 얼굴 사진 역검색이 아닙니다. "
-    "후보가 본인인지와 딥페이크인지는 ArcFace·딥페이크 모델 단계에서 별도로 확인해야 합니다."
 )
 PIPELINE_WARNING = (
     "검색 후보를 ArcFace로 선별하고 넓은 후보 기준을 통과한 단일 얼굴 이미지만 ONNX로 "
@@ -380,19 +373,6 @@ def create_app(
     service = FaceGuardService(active_settings, active_encoder)
     if search_service is None:
         search_providers: list[Any] = [UserSubmittedUrlProvider()]
-        if active_settings.searxng_base_url:
-            search_providers.append(
-                SearXNGProvider(
-                    active_settings.searxng_base_url,
-                    request_timeout_seconds=(
-                        active_settings.searxng_request_timeout_seconds
-                    ),
-                    maximum_retries=active_settings.searxng_maximum_retries,
-                    retry_backoff_seconds=(
-                        active_settings.searxng_retry_backoff_seconds
-                    ),
-                )
-            )
         active_search_service = SearchService(
             search_providers,
             maximum_candidates=active_settings.maximum_search_candidates,
@@ -476,12 +456,10 @@ def create_app(
         del error
         if request.url.path == "/v1/search/candidates":
             message = "privacy_mode와 공개 후보 URL 목록을 JSON 형식으로 보내세요."
-        elif request.url.path == "/v1/pipeline/search-and-filter":
-            message = "등록 사진과 검색어를 multipart/form-data 형식으로 보내세요."
         elif request.url.path == "/v1/faceguard/enrollments":
             message = "등록 사진 1~5장을 multipart/form-data 형식으로 보내세요."
         elif request.url.path == "/v1/exposure-scans":
-            message = "enrollment_id와 검색 조건을 JSON 형식으로 보내세요."
+            message = "enrollment_id와 공개 후보 URL 목록을 JSON 형식으로 보내세요."
         elif request.url.path == "/v1/deepfake/analyze":
             message = "분석할 얼굴 이미지를 multipart/form-data 형식으로 보내세요."
         elif request.url.path == "/v1/deepfake/analyze-video":
@@ -698,11 +676,11 @@ def create_app(
             )
         query = SearchQuery(
             privacy_mode=payload.privacy_mode,
-            web_monitoring_consent=payload.web_monitoring_consent,
-            text_query=payload.query_text,
+            web_monitoring_consent=False,
+            text_query=None,
             categories=("images",),
-            language=payload.language,
-            safe_search=payload.safe_search,
+            language="ko-KR",
+            safe_search=2,
             maximum_results=payload.maximum_results,
             submitted_candidates=[
                 SubmittedCandidate(
@@ -1050,18 +1028,18 @@ def create_app(
             503: {"model": ErrorResponse},
         },
         tags=["공개 후보 검색"],
-        summary="공개 URL 제보 또는 SearXNG 검색어로 후보 수집·중복 제거",
+        summary="Google Vision 또는 사용자가 전달한 공개 URL 후보 정규화·중복 제거",
     )
     async def search_candidates(
         payload: SearchCandidatesRequest,
     ) -> SearchCandidatesResponse:
         query = SearchQuery(
             privacy_mode=payload.privacy_mode,
-            web_monitoring_consent=payload.web_monitoring_consent,
-            text_query=payload.query_text,
-            categories=tuple(payload.categories),
-            language=payload.language,
-            safe_search=payload.safe_search,
+            web_monitoring_consent=False,
+            text_query=None,
+            categories=("images",),
+            language="ko-KR",
+            safe_search=2,
             maximum_results=payload.maximum_results,
             submitted_candidates=[
                 SubmittedCandidate(
@@ -1107,166 +1085,7 @@ def create_app(
             duplicate_count=result.duplicate_count,
             truncated_count=result.truncated_count,
             processing_ms=result.processing_ms,
-            warning=(
-                SEARXNG_WARNING
-                if any(provider.provider == "searxng" for provider in result.providers)
-                else SEARCH_WARNING
-            ),
-        )
-
-    @application.post(
-        "/v1/pipeline/search-and-filter",
-        response_model=SearchAndFilterResponse,
-        responses={
-            413: {"model": ErrorResponse},
-            415: {"model": ErrorResponse},
-            422: {"model": ErrorResponse},
-            503: {"model": ErrorResponse},
-        },
-        tags=["통합 파이프라인"],
-        summary="SearXNG 후보를 ArcFace로 선별하고 ONNX 딥페이크 분석",
-    )
-    async def search_and_filter(
-        reference_images: Annotated[
-            list[UploadFile],
-            File(description="등록 얼굴 사진 1~5장, 3장 권장"),
-        ],
-        query_text: Annotated[
-            str,
-            Form(
-                min_length=1,
-                max_length=200,
-                description="공개 검색에 동의한 검색어",
-            ),
-        ],
-        web_monitoring_consent: Annotated[
-            bool,
-            Form(description="검색어 외부 전송에 대한 명시적 동의"),
-        ],
-        maximum_results: Annotated[
-            int,
-            Form(
-                ge=1,
-                le=10,
-                description="검색 후 얼굴 비교할 최대 후보 수",
-            ),
-        ] = 5,
-        language: Annotated[
-            str,
-            Form(
-                min_length=2,
-                max_length=6,
-                pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$",
-            ),
-        ] = "ko-KR",
-        safe_search: Annotated[int, Form(ge=1, le=2)] = 2,
-    ) -> SearchAndFilterResponse:
-        if not active_settings.accept_noncommercial_model_license:
-            raise FaceGuardError(
-                "MODEL_LICENSE_NOT_ACCEPTED",
-                "InsightFace 비상업 연구용 가중치 조건 확인이 필요합니다.",
-                503,
-            )
-        if not web_monitoring_consent:
-            raise FaceGuardError(
-                "WEB_MONITORING_CONSENT_REQUIRED",
-                "외부 웹 검색을 사용하려면 검색어 전송 동의가 필요합니다.",
-            )
-        if len(reference_images) < active_settings.minimum_reference_images:
-            raise FaceGuardError(
-                "TOO_FEW_REFERENCES",
-                f"등록 사진이 최소 {active_settings.minimum_reference_images}장 필요합니다.",
-            )
-        if len(reference_images) > active_settings.maximum_reference_images:
-            raise FaceGuardError(
-                "TOO_MANY_REFERENCES",
-                f"등록 사진은 최대 {active_settings.maximum_reference_images}장까지 사용할 수 있습니다.",
-            )
-        if maximum_results > active_settings.maximum_pipeline_candidates:
-            raise FaceGuardError(
-                "TOO_MANY_PIPELINE_CANDIDATES",
-                f"얼굴 비교 후보는 최대 {active_settings.maximum_pipeline_candidates}개까지 처리할 수 있습니다.",
-            )
-
-        started = time.perf_counter()
-        reference_payloads = [
-            await _read_upload(upload, active_settings) for upload in reference_images
-        ]
-        prepared_references = await candidate_filter_service.prepare_references(
-            reference_payloads
-        )
-        search_result = await active_search_service.search(
-            SearchQuery(
-                privacy_mode="web_monitoring",
-                web_monitoring_consent=True,
-                text_query=query_text,
-                categories=("images",),
-                language=language,
-                safe_search=safe_search,
-                maximum_results=maximum_results,
-                submitted_candidates=[],
-            )
-        )
-        filtered = await candidate_filter_service.filter_prepared(
-            prepared_references,
-            search_result.candidates,
-        )
-        status = (
-            "partial_failed"
-            if search_result.status == "partial_failed"
-            or filtered.skipped_candidate_count
-            or filtered.deepfake_failed_candidate_count
-            else "completed"
-        )
-        return SearchAndFilterResponse(
-            request_id=str(uuid4()),
-            status=status,
-            search_status=search_result.status,
-            searched_candidate_count=len(search_result.candidates),
-            analyzed_candidate_count=filtered.analyzed_candidate_count,
-            skipped_candidate_count=filtered.skipped_candidate_count,
-            retrieval_match_count=filtered.retrieval_match_count,
-            identity_match_count=filtered.identity_match_count,
-            deepfake_analyzed_candidate_count=(
-                filtered.deepfake_analyzed_candidate_count
-            ),
-            deepfake_suspected_candidate_count=(
-                filtered.deepfake_suspected_candidate_count
-            ),
-            deepfake_failed_candidate_count=filtered.deepfake_failed_candidate_count,
-            retrieval_threshold=active_settings.retrieval_similarity_threshold,
-            identity_threshold=active_settings.similarity_threshold,
-            threshold_status=active_settings.threshold_status,
-            retrieval_threshold_source=(
-                "데모 연결용 임시 후보수집 기준값이며 공개 웹 validation으로 보정되지 않음"
-            ),
-            identity_threshold_source=active_settings.threshold_source,
-            deepfake_threshold=active_settings.deepfake_threshold,
-            deepfake_threshold_status=active_settings.deepfake_threshold_status,
-            deepfake_threshold_source=active_settings.deepfake_threshold_source,
-            reference_count=filtered.reference_count,
-            candidates=[
-                _candidate_decision_response(item) for item in filtered.candidates
-            ],
-            providers=[
-                SearchProviderResponse(
-                    provider=provider.provider,
-                    status=provider.status,
-                    candidate_count=provider.candidate_count,
-                    processing_ms=provider.processing_ms,
-                    error_code=provider.error_code,
-                )
-                for provider in search_result.providers
-            ],
-            processing_ms=(time.perf_counter() - started) * 1000.0,
-            model_name=active_settings.model_name,
-            execution_provider=active_encoder.provider,
-            model_fingerprint=active_encoder.model_fingerprint,
-            deepfake_model_name=active_settings.deepfake_model_name,
-            deepfake_execution_provider=active_deepfake_analyzer.provider,
-            deepfake_model_fingerprint=active_deepfake_analyzer.model_fingerprint,
-            config_version="search-arcface-deepfake-image-v1",
-            warning=PIPELINE_WARNING,
+            warning=SEARCH_WARNING,
         )
 
     return application

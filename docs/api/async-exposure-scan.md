@@ -35,7 +35,6 @@ Swagger에서 `POST /v1/faceguard/enrollments`를 열고 `Try it out`을 누른�
 {
   "enrollment_id": "1단계에서 복사한 ID",
   "privacy_mode": "privacy_strict",
-  "web_monitoring_consent": false,
   "maximum_results": 5,
   "candidates": [
     {

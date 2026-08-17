@@ -56,16 +56,6 @@ class FaceguardDomainTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             Settings(search_provider_timeout_seconds=0.0)
         with self.assertRaises(ValueError):
-            Settings(searxng_base_url="file:///tmp/searxng")
-        with self.assertRaises(ValueError):
-            Settings(searxng_base_url="https://user:password@example.com")
-        with self.assertRaises(ValueError):
-            Settings(searxng_request_timeout_seconds=0.0)
-        with self.assertRaises(ValueError):
-            Settings(searxng_maximum_retries=-1)
-        with self.assertRaises(ValueError):
-            Settings(searxng_retry_backoff_seconds=-0.1)
-        with self.assertRaises(ValueError):
             Settings(maximum_pipeline_candidates=0)
         with self.assertRaises(ValueError):
             Settings(candidate_download_timeout_seconds=0.0)

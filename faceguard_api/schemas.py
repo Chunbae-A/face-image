@@ -186,23 +186,14 @@ class SubmittedSearchCandidate(BaseModel):
 
 
 class SearchCandidatesRequest(BaseModel):
-    privacy_mode: Literal["privacy_strict", "web_monitoring"] = "privacy_strict"
-    web_monitoring_consent: bool = False
-    query_text: str | None = Field(default=None, min_length=1, max_length=200)
-    categories: list[Literal["images", "videos"]] = Field(
-        default_factory=lambda: ["images"], min_length=1, max_length=2
-    )
-    language: str = Field(default="ko-KR", pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$")
-    safe_search: Literal[1, 2] = 2
+    privacy_mode: Literal["privacy_strict"] = "privacy_strict"
     maximum_results: int = Field(default=20, ge=1, le=50)
     candidates: list[SubmittedSearchCandidate] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_search_source(self) -> SearchCandidatesRequest:
-        if self.privacy_mode == "privacy_strict" and not self.candidates:
-            raise ValueError("privacy_strict 모드에는 사용자 제보 URL이 필요합니다.")
-        if self.privacy_mode == "web_monitoring" and not self.query_text:
-            raise ValueError("web_monitoring 모드에는 검색어가 필요합니다.")
+        if not self.candidates:
+            raise ValueError("Google Vision 또는 사용자가 수집한 공개 후보 URL이 필요합니다.")
         return self
 
 
@@ -274,40 +265,6 @@ class CandidateFaceDecisionResponse(BaseModel):
     processing_ms: float = Field(ge=0.0)
 
 
-class SearchAndFilterResponse(BaseModel):
-    request_id: str
-    status: Literal["completed", "partial_failed"]
-    search_status: Literal["completed", "partial_failed"]
-    searched_candidate_count: int = Field(ge=0)
-    analyzed_candidate_count: int = Field(ge=0)
-    skipped_candidate_count: int = Field(ge=0)
-    retrieval_match_count: int = Field(ge=0)
-    identity_match_count: int = Field(ge=0)
-    deepfake_analyzed_candidate_count: int = Field(ge=0)
-    deepfake_suspected_candidate_count: int = Field(ge=0)
-    deepfake_failed_candidate_count: int = Field(ge=0)
-    retrieval_threshold: float = Field(ge=-1.0, le=1.0)
-    identity_threshold: float = Field(ge=-1.0, le=1.0)
-    threshold_status: str
-    retrieval_threshold_source: str
-    identity_threshold_source: str
-    deepfake_threshold: float = Field(ge=0.0, le=1.0)
-    deepfake_threshold_status: str
-    deepfake_threshold_source: str
-    reference_count: int = Field(gt=0)
-    candidates: list[CandidateFaceDecisionResponse]
-    providers: list[SearchProviderResponse]
-    processing_ms: float = Field(ge=0.0)
-    model_name: str
-    execution_provider: str | None = None
-    model_fingerprint: str | None = None
-    deepfake_model_name: str
-    deepfake_execution_provider: str | None = None
-    deepfake_model_fingerprint: str | None = None
-    config_version: str
-    warning: str
-
-
 class FaceEnrollmentResponse(BaseModel):
     enrollment_id: str
     status: Literal["active"]
@@ -322,20 +279,14 @@ class FaceEnrollmentResponse(BaseModel):
 
 class ExposureScanRequest(BaseModel):
     enrollment_id: str = Field(min_length=1, max_length=64)
-    privacy_mode: Literal["privacy_strict", "web_monitoring"] = "privacy_strict"
-    web_monitoring_consent: bool = False
-    query_text: str | None = Field(default=None, min_length=1, max_length=200)
-    language: str = Field(default="ko-KR", pattern=r"^[A-Za-z]{2,3}(?:-[A-Za-z]{2})?$")
-    safe_search: Literal[1, 2] = 2
+    privacy_mode: Literal["privacy_strict"] = "privacy_strict"
     maximum_results: int = Field(default=5, ge=1, le=10)
     candidates: list[SubmittedSearchCandidate] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def validate_search_source(self) -> ExposureScanRequest:
-        if self.privacy_mode == "privacy_strict" and not self.candidates:
-            raise ValueError("privacy_strict 모드에는 사용자 제보 URL이 필요합니다.")
-        if self.privacy_mode == "web_monitoring" and not self.query_text:
-            raise ValueError("web_monitoring 모드에는 검색어가 필요합니다.")
+        if not self.candidates:
+            raise ValueError("Google Vision 또는 사용자가 수집한 공개 후보 URL이 필요합니다.")
         return self
 
 

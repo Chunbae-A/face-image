@@ -2,7 +2,7 @@
 
 사용자가 등록한 얼굴을 기준으로 **공개 웹 후보에서 같은 사람을 골라내고, 후보 영상의 딥페이크 위험을 수치와 근거로 보여주기 위한 모델링·API 프로젝트**다.
 
-> 현재 바로 실행할 수 있는 범위는 ArcFace 얼굴 동일인 비교, SearXNG 공개 이미지 후보 수집, 후보 이미지 ArcFace 선별, EfficientNet-B4 ONNX 이미지 분석, **짧은 영상 16프레임 분석 API**, **`scan_id`로 진행률을 조회하는 비동기 이미지 후보 API**다. 얼굴 사진 자체로 웹을 찾는 역이미지 검색과 검색 후보 영상의 자동 다운로드는 개발 중이며, 현재 모델은 운영·본인인증·자동 차단 용도로 승인되지 않았다.
+> 현재 바로 실행할 수 있는 범위는 ArcFace 얼굴 동일인 비교, Google Vision 또는 사용자가 전달한 후보 URL의 안전성 검사, 후보 이미지 ArcFace 선별, EfficientNet-B4 ONNX 이미지 분석, **짧은 영상 16프레임 분석 API**, **`scan_id`로 진행률을 조회하는 비동기 이미지 후보 API**다. Google Vision Web Detection 호출은 딥소각 서버 Draft PR #55에 연결되어 있으며 실제 키 E2E 검증과 검색 후보 영상의 자동 다운로드는 남아 있다. 현재 모델은 운영·본인인증·자동 차단 용도로 승인되지 않았다.
 
 ## 30초 요약
 
@@ -11,7 +11,7 @@
 ```text
 본인 얼굴 3장 등록
         ↓
-공개 웹에서 이미지·영상 후보 수집
+Google Cloud Vision으로 공개 이미지·발견 페이지 후보 수집
         ↓
 ArcFace: 정말 본인 얼굴과 비슷한 후보인지 선별
         ↓
@@ -29,19 +29,19 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 | 질문 | 답 |
 |---|---|
 | 왜 했나? | 웹 검색 결과에는 본인이 아닌 얼굴과 실제·조작 여부를 모르는 이미지가 함께 섞이므로, 검색 결과를 그대로 피해 후보로 보여줄 수 없기 때문이다. |
-| 어떻게 했나? | 검색 도구는 공개 후보 URL만 모으고, ArcFace가 등록 얼굴과 같은 사람 후보를 선별한 뒤, EfficientNet-B4 ONNX가 이미지·영상의 딥페이크 의심 원점수를 계산한다. |
+| 어떻게 했나? | Google Cloud Vision은 공개 후보 URL과 발견 페이지를 모으고, ArcFace가 등록 얼굴과 같은 사람 후보를 선별한 뒤, EfficientNet-B4 ONNX가 이미지·영상의 딥페이크 의심 원점수를 계산한다. |
 | 무엇을 해결했나? | 검색·동일인 선별·딥페이크 분석을 `scan_id` 작업 하나로 연결하고, 클라이언트가 확률로 오해하지 않는 화면용 API 응답을 만들었다. |
 | 어떻게 활용하나? | 딥소각 서버가 모델 API를 내부 호출하고, 앱에는 출처·얼굴 일치 단계·딥페이크 의심 신호·권장 행동만 전달한다. 사용자가 원문을 검토하고 신고자료를 만드는 근거로 쓴다. |
 
-아직 해결하지 않은 범위도 분명히 구분한다. 얼굴 사진 자체를 이용한 웹
-역검색, 검색된 영상 URL 자동 다운로드, 실제 웹·모바일 외부 데이터의 운영
-Gate는 남아 있다. 따라서 현재 응답은 자동 차단·자동 신고 명령이 아니다.
+아직 해결하지 않은 범위도 분명히 구분한다. Google Vision 실제 키 기반 E2E와
+검색된 영상 URL 자동 다운로드, 실제 웹·모바일 외부 데이터의 운영 Gate는 남아
+있다. 따라서 현재 응답은 자동 차단·자동 신고 명령이 아니다.
 
 ## 지금 어디까지 됐나요?
 
 | 기능 | 하는 일 | 현재 상태 |
 |---|---|---|
-| 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | **무료 URL 제보 + SearXNG 키워드 검색 구현, 얼굴 역검색 미연결** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
+| 공개 후보 검색 | 공개 웹에서 이미지 URL과 발견 페이지 수집 | **Google Vision 어댑터가 딥소각 Draft PR #55에 연결됨, 실제 키 Recall@10 검증 전** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
 | 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
 | 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 이미지·영상 16프레임 평균 API 구현, 운영 Gate 미통과** ([#25](https://github.com/Chunbae-A/face-image/issues/25)) |
 | 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **JPEG 조건부 결합 Validation 후보 선택, 외부 검증 전이라 API 미적용; SBI·Hard Negative·FTCN 실행 전** ([#35](https://github.com/Chunbae-A/face-image/issues/35)) |
@@ -246,7 +246,7 @@ Isotonic 보정의 숫자 정합성은 좋아졌지만 실제 영상 178개 중 
 
 ## 얼굴가드 API 실행
 
-현재 HTTP API는 **얼굴 동일인 후보 선별**, **공개 URL 정규화**, **SearXNG 후보 수집**, **단일 얼굴 딥페이크 ONNX 분석**, **짧은 영상 16프레임 평균 분석**, **검색 이미지 → ArcFace → ONNX 통합 경로**, **`scan_id` 기반 비동기 이미지 후보 처리**를 제공한다. 얼굴 역이미지 검색과 영상 URL을 직접 받는 비동기 경로는 아직 구현 전이다.
+현재 HTTP API는 **얼굴 동일인 후보 선별**, **Google Vision·사용자 후보 URL 정규화**, **단일 얼굴 딥페이크 ONNX 분석**, **짧은 영상 16프레임 평균 분석**, **후보 이미지 → ArcFace → ONNX 비동기 경로**, **`scan_id` 기반 진행 조회**를 제공한다. Google Vision 호출 자체는 딥소각 서버가 담당하며, 검색 후보 영상 URL을 직접 분석하는 비동기 경로는 아직 구현 전이다.
 
 ### Docker 권장 실행
 
@@ -271,12 +271,6 @@ FACEGUARD_ACCEPT_NONCOMMERCIAL_MODEL_LICENSE=true
 ```bash
 docker compose up --build --detach
 curl http://127.0.0.1:8000/health
-```
-
-무료 키워드 검색까지 함께 켜려면 기본 명령 대신 다음 결합 구성을 실행한다.
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --detach
 ```
 
 브라우저에서 [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)를 열고 `POST /v1/faceguard/verify`, `POST /v1/deepfake/analyze` 또는 `POST /v1/deepfake/analyze-video`를 시험한다.
@@ -305,19 +299,14 @@ docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build --
 
 공개 후보 경로는 같은 Swagger 화면의 `POST /v1/search/candidates`에서 시험한다.
 
-- `privacy_strict`: 사용자가 직접 넣은 공개 URL만 정리한다. 로컬·내부망 주소를 차단하고 추적 파라미터를 제거한 뒤 중복을 합친다.
-- `web_monitoring`: 명시적 동의 후 검색어를 로컬 SearXNG에 보내 공개 이미지·영상 후보를 찾는다. 얼굴 사진은 보내지 않는다.
-
-SearXNG은 **검색어 기반 메타검색**이다. 등록 얼굴 사진과 닮은 웹 사진을 자동으로 찾는 얼굴 역검색은 아니며, 찾은 후보가 본인인지와 딥페이크인지는 다음 ArcFace·ONNX 단계에서 별도로 검사해야 한다. 자세한 실행법은 [SearXNG 실행 가이드](docs/api/searxng.md)에 있다.
-
-검색부터 딥페이크 이미지 분석까지 한 번에 시험할 때는 `POST /v1/pipeline/search-and-filter`를 사용한다. 등록 사진은 로컬 ArcFace에만 입력되고, SearXNG에는 검색어만 전달된다. 넓은 얼굴 후보 기준을 통과한 이미지만 ONNX로 분석하며 후보별 `similarity_raw`, `deepfake.deepfake_score`, 판정 여부, 품질과 실패 코드를 반환한다.
+`privacy_strict` 모드에서 Google Vision 또는 사용자가 미리 수집한 공개 URL을 넣는다. 모델 API는 로컬·내부망 주소를 차단하고 추적 파라미터를 제거한 뒤 중복을 합친다. 인터넷 후보 발견은 딥소각 서버의 Google Vision 어댑터가 담당하고, 이 저장소의 모델 API는 전달받은 후보를 ArcFace와 ONNX로 분석한다.
 
 ### 비동기 노출 스캔 데모
 
 긴 검색 작업 동안 화면이 멈추지 않게 하려면 다음 API를 순서대로 사용한다.
 
 1. `POST /v1/faceguard/enrollments`: 본인 사진 3장을 임시 등록하고 `enrollment_id`를 받는다.
-2. `POST /v1/exposure-scans`: 공개 후보 URL 또는 동의한 검색어로 작업을 만들고 즉시 `scan_id`를 받는다.
+2. `POST /v1/exposure-scans`: Google Vision 또는 사용자가 수집한 공개 후보 URL로 작업을 만들고 즉시 `scan_id`를 받는다.
 3. `GET /v1/exposure-scans/{scan_id}`: `searching → identity_filtering → deepfake_analyzing → completed` 진행 단계와 개수를 확인한다.
 4. `GET /v1/exposure-scans/{scan_id}/client-candidates`: 딥소각 화면용 후보와 검토 행동값을 확인한다.
 5. `GET /v1/exposure-scans/{scan_id}/candidates`: 모델 개발자가 후보별 상세 판정 근거를 확인한다.

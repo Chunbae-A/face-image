@@ -60,14 +60,6 @@ cp .env.example .env
 docker compose up --build
 ```
 
-무료 SearXNG 키워드 검색도 함께 사용할 때는 다음 결합 구성을 실행한다.
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.searxng.yml up --build
-```
-
-SearXNG는 Docker 내부망에서만 열리고 호스트 포트를 공개하지 않는다. 검색어만 외부 검색엔진으로 전달하며 등록 얼굴 사진은 보내지 않는다.
-
 기본 Docker 이미지는 CPU용이다. Linux CUDA 서버에서는 `requirements-api-gpu.txt`의 `onnxruntime-gpu`를 사용하고 NVIDIA Container Runtime을 별도로 설정한다.
 
 영상 엔드포인트는 ASGI middleware에서 전체 요청을 기본 `91MiB`로 제한한다. 이는 영상 50MB, 등록 사진 5장×8MB와 multipart 여유 1MiB를 합친 값이며 `FACEGUARD_MAX_VIDEO_REQUEST_BYTES`로 조정한다. 인터넷에 배치할 때는 애플리케이션에 도달하기 전에 프록시에서도 같은 제한을 둔다. Nginx 예시는 다음과 같다.
@@ -99,8 +91,8 @@ curl http://127.0.0.1:8000/health
   "model_fingerprint": null,
   "license_accepted": true,
   "threshold_status": "research_only_unapproved",
-  "search_providers": ["user_url", "searxng"],
-  "web_search_enabled": true,
+  "search_providers": ["user_url"],
+  "web_search_enabled": false,
   "deepfake_model_name": "efficientnet_b4_celebdf_v2",
   "deepfake_model_loaded": false,
   "deepfake_execution_provider": null,
@@ -112,7 +104,7 @@ curl http://127.0.0.1:8000/health
 }
 ```
 
-`model_loaded`와 `deepfake_model_loaded`가 `false`인 것은 아직 첫 추론을 하지 않아 모델을 지연 로딩하는 상태다. 기본 Compose에서는 `search_providers`가 `["user_url"]`, SearXNG 결합 구성에서는 `["user_url", "searxng"]`이다.
+`model_loaded`와 `deepfake_model_loaded`가 `false`인 것은 아직 첫 추론을 하지 않아 모델을 지연 로딩하는 상태다. `search_providers=["user_url"]`은 모델 API가 Google Vision 또는 사용자가 전달한 후보 URL만 처리하며, 외부 검색 자체는 딥소각 서버가 담당한다는 뜻이다.
 
 ## 2. 동일인 확인 요청
 
@@ -282,7 +274,6 @@ curl -X POST http://127.0.0.1:8000/v1/search/candidates \
   -H 'Content-Type: application/json' \
   -d '{
     "privacy_mode": "privacy_strict",
-    "web_monitoring_consent": false,
     "candidates": [
       {
         "page_url": "https://example.com/public-post?utm_source=demo",
@@ -341,68 +332,46 @@ curl -X POST http://127.0.0.1:8000/v1/search/candidates \
 - 같은 미디어 URL을 SHA-256으로 비교하고, 제공된 콘텐츠 SHA-256 또는 64-bit pHash가 같으면 한 후보로 합친다.
 - 콘텐츠 hash는 중복 제거에만 쓰며 공개 API 응답에 다시 내보내지 않는다.
 
-`privacy_strict`에서는 외부 검색을 호출하지 않는다. `web_monitoring`은 사용자의 명시적 동의와 별도 외부 검색 제공자 설정이 모두 있을 때만 사용할 수 있다. 기본 Compose에는 외부 검색 제공자가 없으므로 `web_monitoring` 요청은 `SEARCH_PROVIDER_UNAVAILABLE`로 거절한다.
+모델 API는 외부 검색어 조회 기능을 제공하지 않는다. `privacy_strict`에서 딥소각 서버의 Google Vision 어댑터 또는 사용자가 수집한 후보 URL만 받는다.
 
-## 6. SearXNG 무료 키워드 검색
+## 6. Google Vision 후보 → ArcFace → 딥페이크 ONNX 통합
 
-SearXNG 결합 Compose를 켠 뒤 다음처럼 호출한다.
-
-```bash
-curl -X POST http://127.0.0.1:8000/v1/search/candidates \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "privacy_mode": "web_monitoring",
-    "web_monitoring_consent": true,
-    "query_text": "동의받은 검색어",
-    "categories": ["images", "videos"],
-    "language": "ko-KR",
-    "safe_search": 2,
-    "maximum_results": 20,
-    "candidates": []
-  }'
-```
-
-- `query_text`: 외부 공개 검색에 동의한 검색어, 최대 200자
-- `categories`: `images`, `videos` 중 하나 이상
-- `safe_search`: 보통 `2` 권장
-- `maximum_results`: 요청할 후보 수, 최대 50개
-- `source_engine`: SearXNG가 결과를 받은 실제 검색 엔진 이름
-
-API는 SearXNG의 결과 URL도 내부망·로컬 주소인지 다시 검사하고, 제공자 오류가 일부 발생하면 `partial_failed` 상태로 정상 후보만 반환한다. 입력 검색어는 API 응답에 되돌려 주지 않는다.
-
-중요한 한계가 있다. SearXNG는 **검색어 기반 후보 수집기**이므로 얼굴 사진 자체로 같은 얼굴을 찾아주는 역이미지 검색이 아니다. 이미지 후보의 다운로드·ArcFace 선별은 아래 통합 API로 연결됐지만 다중 얼굴 이미지와 영상 트랙은 Issue #14, 얼굴 역검색 제공자 비교는 Issue #13의 후속 범위다.
-
-## 7. 검색 이미지 → ArcFace → 딥페이크 ONNX 통합 API
-
-`POST /v1/pipeline/search-and-filter`는 한 요청에서 다음 순서로 처리한다.
+Google Vision 호출은 딥소각 서버가 담당한다. 모델 API는 전달받은 후보를 다음 순서로 처리한다.
 
 ```text
-등록 얼굴 먼저 로컬 검증
+딥소각 서버: 보호본을 Google Vision Web Detection으로 검색
         ↓
-검색어만 SearXNG로 전송
+딥소각 서버: 후보 이미지 URL과 발견 페이지 정규화
         ↓
-후보 URL의 DNS·리다이렉트·형식·크기 검사
+모델 API: 후보 URL의 DNS·리다이렉트·형식·크기 검사
         ↓
-후보 이미지를 메모리에서 ArcFace 비교
+모델 API: 후보 이미지를 메모리에서 ArcFace 비교
         ↓
 retrieval_match=true 후보만 단일 이미지 ONNX 분석
         ↓
-후보별 유사도·딥페이크 점수·품질·실패 코드 반환
+scan_id로 후보별 유사도·딥페이크 점수·품질·실패 코드 반환
 ```
 
-Swagger에서 등록 얼굴 사진과 폼 값을 입력하는 방법은 [API 빠른 실행](quickstart.md)에 있다. 명령줄 예시는 다음과 같다.
+모델 API에는 Google API 키를 넣지 않는다. 먼저 등록 API에서 `enrollment_id`를 받은 뒤 Google Vision 후보를 비동기 스캔에 전달한다.
 
 ```bash
-curl -X POST http://127.0.0.1:8000/v1/pipeline/search-and-filter \
-  -F "reference_images=@./samples/register-1.jpg" \
-  -F "reference_images=@./samples/register-2.jpg" \
-  -F "reference_images=@./samples/register-3.jpg" \
-  -F "query_text=동의받은 검색어" \
-  -F "web_monitoring_consent=true" \
-  -F "maximum_results=3"
+curl -X POST http://127.0.0.1:8000/v1/exposure-scans \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: google-vision-demo-001' \
+  -d '{
+    "enrollment_id": "등록-API에서-받은-ID",
+    "privacy_mode": "privacy_strict",
+    "maximum_results": 3,
+    "candidates": [
+      {
+        "page_url": "https://example.com/discovered-page",
+        "media_url": "https://example.com/discovered-image.jpg"
+      }
+    ]
+  }'
 ```
 
-판정값은 얼굴 두 단계와 딥페이크 한 단계다.
+판정값은 얼굴 두 단계와 딥페이크 한 단계다. 결과는 `GET /v1/exposure-scans/{scan_id}`와 `GET /v1/exposure-scans/{scan_id}/client-candidates`로 조회한다.
 
 - `retrieval_threshold=0.20`: 실제 본인 후보를 넓게 남기기 위한 **미보정 임시값**
 - `identity_threshold=0.2823836207389832`: Celeb-real 연구 기준값이며 운영 미승인

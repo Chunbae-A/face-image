@@ -13,7 +13,7 @@
 
 1. `GET /v1/capabilities`로 기능·모델·연구 기준 상태를 확인한다.
 2. `POST /v1/faceguard/enrollments`로 동의받은 본인 사진 1~5장을 임시 등록한다. 3장을 권장한다.
-3. `POST /v1/exposure-scans`로 공개 검색 작업을 시작하고 `scan_id`를 받는다.
+3. 딥소각 서버가 Google Vision으로 후보를 수집한 뒤 `POST /v1/exposure-scans`로 모델 작업을 시작하고 `scan_id`를 받는다.
 4. `GET /v1/exposure-scans/{scan_id}`를 1~2초 간격으로 호출해 진행 상태를 확인한다.
 5. 작업이 끝나면 `GET /v1/exposure-scans/{scan_id}/client-candidates`로 화면용 후보를 받는다.
 
@@ -37,17 +37,22 @@ curl -X POST http://127.0.0.1:8000/v1/faceguard/enrollments \
 
 응답의 `enrollment_id`를 다음 요청에 사용한다. 원본 사진은 처리 직후 버리고, 평균 얼굴 특징값과 품질 정보만 기본 30분 동안 메모리에 남는다.
 
-## 2. 공개 검색 시작
+## 2. Google Vision 후보 분석 시작
 
-사용자가 공개 웹 검색에 동의한 경우에만 `web_monitoring_consent`를 `true`로 보낸다.
+딥소각 서버가 Google Vision Web Detection으로 가져온 후보 URL을 모델 API에 전달한다. Google API 키와 검색 동의 처리는 딥소각 서버가 담당하며 모델 API에는 키를 전달하지 않는다.
 
 ```json
 {
   "enrollment_id": "1단계에서 받은 ID",
-  "privacy_mode": "web_monitoring",
-  "web_monitoring_consent": true,
-  "query_text": "검색할 이름 또는 공개 키워드",
-  "maximum_results": 5
+  "privacy_mode": "privacy_strict",
+  "maximum_results": 5,
+  "candidates": [
+    {
+      "page_url": "https://example.com/discovered-page",
+      "media_url": "https://example.com/discovered-image.jpg",
+      "thumbnail_url": "https://example.com/thumb.jpg"
+    }
+  ]
 }
 ```
 
@@ -85,7 +90,7 @@ curl -X POST http://127.0.0.1:8000/v1/faceguard/enrollments \
       "media_url": "https://example.com/image.jpg",
       "thumbnail_url": "https://example.com/thumb.jpg",
       "source_type": "image",
-      "source_engine": "searxng",
+      "source_engine": "google_vision_web_detection",
       "face_similarity": 0.65,
       "face_match_level": "matched",
       "deepfake_score": 0.81,
@@ -120,7 +125,8 @@ curl -X POST http://127.0.0.1:8000/v1/faceguard/enrollments \
 
 ## 현재 한계
 
-- SearXNG은 얼굴 역검색이 아니라 **이름·키워드 검색**이다. 검색된 공개 후보가 본인인지 ArcFace가 후속 확인한다.
+- Google Vision은 공개 후보를 찾는 단계다. 동일인 여부는 ArcFace, 딥페이크 신호는 ONNX 모델이 각각 후속 확인한다.
+- Google Vision 실제 키와 사용자 검색 동의는 딥소각 서버에서만 관리한다.
 - 현재 통합 스캔은 공개 이미지 후보를 처리한다. 공개 영상 자동 수집은 별도 개발이 필요하다.
 - 등록과 결과는 메모리 저장 방식이므로 서버 재시작 시 사라진다.
 - 모델 기준값은 연구용이다. 자동 신고·삭제 또는 피해 확정에 사용하지 않는다.

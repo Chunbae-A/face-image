@@ -78,11 +78,11 @@ def candidate(name: str, rank: int) -> SearchCandidate:
         page_url=f"https://example.com/{name}",
         media_url=f"https://cdn.example.com/{name}.jpg",
         thumbnail_url=None,
-        provider="searxng",
-        providers=("searxng",),
+        provider="google_vision",
+        providers=("google_vision",),
         rank=rank,
         retrieved_at=FIXED_TIME,
-        source_engine="test images",
+        source_engine="vision_web_detection",
     )
 
 

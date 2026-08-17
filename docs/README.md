@@ -17,7 +17,6 @@
 | [API 운영 가이드](api/operations.md) | 모든 엔드포인트·환경변수·오류 코드를 확인할 때 |
 | [비동기 노출 스캔](api/async-exposure-scan.md) | `scan_id` 기반 검색·얼굴 선별·딥페이크 분석을 시연할 때 |
 | [클라이언트용 공개 노출 모니터링](api/client-monitoring.md) | 딥소각 서버·후보 화면에 모델 결과를 연결할 때 |
-| [SearXNG 검색](api/searxng.md) | 무료 키워드 검색 어댑터를 함께 실행할 때 |
 
 ## 데모
 
