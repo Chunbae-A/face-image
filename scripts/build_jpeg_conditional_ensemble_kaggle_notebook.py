@@ -122,7 +122,10 @@ print({"kaggle": IN_KAGGLE, "selection_split": "validation", "official_test": "l
     ),
     code(
         """
-# 2. 모델 추론 의존성 — Kaggle의 torch/torchvision은 교체하지 않음
+# 2. 모델 추론 의존성 — Tesla T4를 지원하는 검증 조합으로 고정
+# 2026-08 Kaggle 기본 CUDA 12.8 개발판은 T4(sm_75) 커널이 빠져 실제 추론이
+# 실패한 사례가 있어, T4 커널을 포함한 PyTorch CUDA 12.4 공식 wheel을 사용한다.
+%pip install -q --no-cache-dir --index-url https://download.pytorch.org/whl/cu124 "torch==2.6.0" "torchvision==0.21.0"
 %pip install -q --no-cache-dir "timm==1.0.28" "Pillow==11.3.0"
 """
     ),
@@ -142,16 +145,23 @@ assert CONFIG["official_test_used_for_selection"] is False
 assert CONFIG["specialist_conditions"] == ["jpeg_q30"]
 
 cuda_available = torch.cuda.is_available()
+cuda_smoke_ok = False
+if cuda_available:
+    probe = torch.ones((1, 3, 16, 16), device="cuda")
+    probe = torch.nn.functional.silu(probe)
+    torch.cuda.synchronize()
+    cuda_smoke_ok = bool(probe.shape == (1, 3, 16, 16))
 print({
     "experiment": CONFIG["experiment_id"],
     "torch": torch.__version__,
     "torchvision": torchvision.__version__,
     "timm": timm.__version__,
     "cuda_available": cuda_available,
+    "cuda_smoke_ok": cuda_smoke_ok,
     "gpu": torch.cuda.get_device_name(0) if cuda_available else None,
 })
-if IN_KAGGLE and not cuda_available:
-    raise RuntimeError("Kaggle Settings에서 GPU를 선택하고 다시 시작하세요.")
+if IN_KAGGLE and not (cuda_available and cuda_smoke_ok):
+    raise RuntimeError("Kaggle GPU를 선택했는지와 T4 호환 PyTorch 설치를 확인하세요.")
 """
     ),
     code(

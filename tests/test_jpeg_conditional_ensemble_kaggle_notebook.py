@@ -89,6 +89,13 @@ class JpegConditionalEnsembleNotebookTests(unittest.TestCase):
         self.assertNotIn('"scripts/run_celebdf_deepfake.py", "train"', self.code_source)
         self.assertIn('"official_test": "locked"', self.code_source)
 
+    def test_pins_t4_compatible_torch_and_runs_cuda_smoke(self):
+        self.assertIn('"torch==2.6.0"', self.code_source)
+        self.assertIn('"torchvision==0.21.0"', self.code_source)
+        self.assertIn("https://download.pytorch.org/whl/cu124", self.code_source)
+        self.assertIn("torch.cuda.synchronize()", self.code_source)
+        self.assertIn('"cuda_smoke_ok": cuda_smoke_ok', self.code_source)
+
     def test_private_run_requires_explicit_builder_flag(self):
         default_source = "\n".join(
             "".join(cell["source"])

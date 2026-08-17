@@ -20,7 +20,7 @@
 
 두 파일에는 얼굴 crop 또는 모델 checkpoint가 있으므로 Kaggle Notebook과 Input을 모두 `Private`으로 유지한다. GitHub에 올리지 않는다.
 
-노트북은 두 파일이 `Add Input`으로 이미 연결돼 있으면 그대로 사용한다. 연결돼 있지 않으면 Kaggle 공식 `kagglehub.notebook_output_download`로 본인 소유 Output을 자동 연결한다. 따라서 큰 Output을 편집 화면에서 반복해서 붙일 필요가 없다.
+노트북은 두 파일이 `Add Input`으로 이미 연결돼 있으면 그대로 사용한다. CLI의 비대화형 실행에서는 `kernel-metadata.json`의 `kernel_sources`에 두 노트북을 미리 연결해야 한다. 실행 중 새 Input을 붙이는 방식은 Kaggle이 차단하므로 자동 다운로드는 대화형 편집 실행의 보조 경로로만 사용한다.
 
 ## 실행 순서
 
@@ -36,6 +36,8 @@ I_CONFIRM_PRIVATE_MODEL_OUTPUT_MAY_BE_USED = True
 ```
 
 6. `Save Version` → `Save & Run All`을 한 번만 누른다.
+
+노트북은 2026-08 Kaggle 기본 PyTorch와 Tesla T4의 호환 실패를 피하기 위해 T4 커널이 포함된 `torch 2.6.0 + torchvision 0.21.0 + CUDA 12.4` 공식 wheel을 설치한다. 본 추론 전에 작은 CUDA 연산을 실행하므로 GPU 이름만 보이고 실제 연산이 실패하는 상태를 즉시 발견한다.
 
 CLI 자동 실행은 사용자가 비공개 Output 사용을 승인한 경우에만 생성기의 `--confirm-private-inputs` 옵션을 사용한다. GitHub에 저장하는 기본 노트북은 두 확인값을 계속 `False`로 유지한다.
 
