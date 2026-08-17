@@ -43,18 +43,26 @@ histogram 근삿값이며 TAR·FAR도 같은 고해상도 구간 경계에서 �
 - 노트북 생성: `scripts/build_kface_full_kaggle_notebook.py`
 - Kaggle Notebook: `notebooks/kaggle/kface_full_verification/notebook.ipynb`
 
-## 현재 상태
+## 실행 결과
 
 - [x] 400명 전체 특징 추출 완료
 - [x] 전체 처리본 무결성 확인
 - [x] 추가 디스크 복사 없는 Kaggle 업로드 폴더 생성
 - [x] 반복 평가 코드와 합성 데이터 테스트 완료
 - [x] Private GPU Notebook 생성
-- [ ] Kaggle Private Dataset 업로드
-- [ ] Kaggle GPU 실행
-- [ ] 결과 회수 및 보고서 작성
-- [ ] API 기준값 적용 여부 결정
+- [x] Kaggle Private Dataset 업로드: 16.08GB, 8,801개 파일, Private 확인
+- [x] Kaggle GPU 실행: Tesla T4, CUDA, 400명 전체 완료
+- [x] 결과 회수 및 보고서 작성
+- [x] API 기준값 적용 여부 결정: Gate 미통과로 현재 값 유지
 
-Kaggle 결과가 Gate를 통과해도 즉시 운영 기준값으로 교체하지 않는다. 실제 공개
-웹 검색 이미지와 동의받은 모바일 촬영 이미지의 외부 검증을 통과한 뒤 API 변경
-여부를 결정한다.
+| 등록 수 | 저화질 최악 TAR | 중화질 최악 TAR | 최악 FAR | 판정 |
+|---:|---:|---:|---:|---|
+| 3장 | 69.65% | 88.88% | 0.1021% | 미통과 |
+| 5장 | 76.35% | 93.35% | 0.1073% | 미통과 |
+| 9장 | 80.36% | 95.22% | 0.1207% | 미통과 |
+
+9장 기준 연구 후보값은 `0.3862`지만 Gate를 통과하지 못했으므로 현재 API
+기준값을 교체하지 않는다. 상세 결과와 해석은
+[`reports/kface_full_verification/2026-08-17`](../../reports/kface_full_verification/2026-08-17)에
+있다. 실제 공개 웹 검색 이미지와 동의받은 모바일 촬영 이미지의 외부 검증을
+통과한 뒤 API 변경 여부를 다시 결정한다.
