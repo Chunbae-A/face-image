@@ -3,11 +3,11 @@
 
 from __future__ import annotations
 
+import argparse
 import base64
 import hashlib
 import json
 from pathlib import Path
-
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT = ROOT / "notebooks" / "celebdf_jpeg_conditional_ensemble_kaggle.ipynb"
@@ -98,7 +98,7 @@ CELLS = [
         """
 # 1. 사용자가 확인할 설정
 REPO_URL = "https://github.com/Chunbae-A/face-image.git"
-BRANCH = "agent/jpeg-conditional-ensemble"
+BRANCH = "exp/jpeg-conditional-ensemble"
 CODE_SOURCE = "embedded"  # 권한 문제를 피하려면 embedded 유지
 PREPROCESS_ARCHIVE_PATH = ""  # 비우면 Kaggle Input에서 자동 탐색
 PRIVATE_MODELS_ZIP_PATH = ""  # 비우면 Kaggle Input에서 자동 탐색
@@ -391,9 +391,26 @@ print({
 ]
 
 
-def build_notebook() -> dict[str, object]:
+def build_notebook(*, confirm_private_inputs: bool = False) -> dict[str, object]:
+    cells = json.loads(json.dumps(CELLS))
+    if confirm_private_inputs:
+        for cell in cells:
+            if cell["cell_type"] != "code":
+                continue
+            source = "".join(cell["source"])
+            if "I_CONFIRM_PRIVATE_PREPROCESS_OUTPUT_MAY_BE_USED" not in source:
+                continue
+            source = source.replace(
+                "I_CONFIRM_PRIVATE_PREPROCESS_OUTPUT_MAY_BE_USED = False",
+                "I_CONFIRM_PRIVATE_PREPROCESS_OUTPUT_MAY_BE_USED = True",
+            ).replace(
+                "I_CONFIRM_PRIVATE_MODEL_OUTPUT_MAY_BE_USED = False",
+                "I_CONFIRM_PRIVATE_MODEL_OUTPUT_MAY_BE_USED = True",
+            )
+            cell["source"] = source.splitlines(keepends=True)
+            break
     return {
-        "cells": CELLS,
+        "cells": cells,
         "metadata": {
             "accelerator": "GPU",
             "kaggle": {"name": OUTPUT.name, "is_private": True},
@@ -410,12 +427,20 @@ def build_notebook() -> dict[str, object]:
 
 
 def main() -> int:
-    OUTPUT.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT.write_text(
-        json.dumps(build_notebook(), ensure_ascii=False, indent=1),
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--output", type=Path, default=OUTPUT)
+    parser.add_argument("--confirm-private-inputs", action="store_true")
+    args = parser.parse_args()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(
+        json.dumps(
+            build_notebook(confirm_private_inputs=args.confirm_private_inputs),
+            ensure_ascii=False,
+            indent=1,
+        ),
         encoding="utf-8",
     )
-    print(OUTPUT)
+    print(args.output)
     return 0
 
 

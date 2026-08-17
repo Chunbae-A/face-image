@@ -12,9 +12,10 @@ import hashlib
 import json
 import math
 import os
+from collections.abc import Sequence
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 import numpy as np
 

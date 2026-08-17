@@ -2,10 +2,9 @@ import ast
 import base64
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 BUILDER = ROOT / "scripts" / "build_jpeg_conditional_ensemble_kaggle_notebook.py"
@@ -89,6 +88,32 @@ class JpegConditionalEnsembleNotebookTests(unittest.TestCase):
         self.assertIn('"--validation-only"', self.code_source)
         self.assertNotIn('"scripts/run_celebdf_deepfake.py", "train"', self.code_source)
         self.assertIn('"official_test": "locked"', self.code_source)
+
+    def test_private_run_requires_explicit_builder_flag(self):
+        default_source = "\n".join(
+            "".join(cell["source"])
+            for cell in self.builder.build_notebook()["cells"]
+            if cell["cell_type"] == "code"
+        )
+        confirmed_source = "\n".join(
+            "".join(cell["source"])
+            for cell in self.builder.build_notebook(
+                confirm_private_inputs=True
+            )["cells"]
+            if cell["cell_type"] == "code"
+        )
+        self.assertIn(
+            "I_CONFIRM_PRIVATE_PREPROCESS_OUTPUT_MAY_BE_USED = False",
+            default_source,
+        )
+        self.assertIn(
+            "I_CONFIRM_PRIVATE_PREPROCESS_OUTPUT_MAY_BE_USED = True",
+            confirmed_source,
+        )
+        self.assertIn(
+            "I_CONFIRM_PRIVATE_MODEL_OUTPUT_MAY_BE_USED = True",
+            confirmed_source,
+        )
 
     def test_private_artifacts_stay_in_temp_and_are_deleted(self):
         self.assertIn('WORK_ROOT = Path("/kaggle/temp/jpeg_conditional_ensemble")', self.code_source)

@@ -276,7 +276,7 @@ python3 scripts/build_effb4_xception_comparison_kaggle_notebook.py
 python3 scripts/build_jpeg_conditional_ensemble_kaggle_notebook.py
 ```
 
-[`optimize_deepfake_score_ensemble.py`](optimize_deepfake_score_ensemble.py)는 두 CSV의 영상·프레임 키와 라벨이 정확히 같고 split이 Validation일 때만 실행한다. EfficientNet-B4 단독, 항상 결합, JPEG 조건부 결합을 비교하고 식별자가 없는 집계 JSON만 저장한다. 실행 순서는 [`JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md`](../JPEG_CONDITIONAL_ENSEMBLE_KAGGLE_RUNBOOK.md)에 있다.
+[`optimize_deepfake_score_ensemble.py`](optimize_deepfake_score_ensemble.py)는 두 CSV의 영상·프레임 키와 라벨이 정확히 같고 split이 Validation일 때만 실행한다. EfficientNet-B4 단독, 항상 결합, JPEG 조건부 결합을 비교하고 식별자가 없는 집계 JSON만 저장한다. 실행 순서는 [JPEG 조건부 결합 실험](../docs/experiments/jpeg-conditional-ensemble.md)에 있다.
 
 ## 노트북 재생성
 

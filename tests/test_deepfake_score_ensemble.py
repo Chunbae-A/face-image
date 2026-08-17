@@ -1,9 +1,8 @@
 import importlib.util
 import json
-from pathlib import Path
 import sys
 import unittest
-
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "scripts" / "optimize_deepfake_score_ensemble.py"
