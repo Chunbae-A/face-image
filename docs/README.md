@@ -51,6 +51,7 @@ JPEG 조건부 두 모델 결합은 현재 [Issue #35](https://github.com/Chunba
 - [딥페이크 점수 보정 결과](../reports/deepfake_score_calibration/2026-08-08/README.md)
 - [얼굴가드 데모 연결 시험](../reports/faceguard_demo_smoke/2026-08-06/README.md)
 - [영상 딥페이크 API 연결 시험](../reports/video_deepfake_api_smoke/2026-08-08/README.md)
+- [K-FACE 저화질·중화질 파일럿](../reports/kface_resolution_pilot/2026-08-15/README.md)
 
 ## 개발자용 위치
 

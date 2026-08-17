@@ -1,5 +1,83 @@
 # FaceGuard 스크립트
 
+## K-FACE 저·중화질 로컬 파일럿
+
+Colab 세션에 의존하지 않고 승인받은 K-FACE 저화질·중화질 ZIP을 Mac에서
+인물별로 순차 처리한다. 원본 ZIP 내부에 인물별 ZIP이 들어 있는지 먼저 검사한 뒤,
+인물 한 명씩 ArcFace 임베딩을 만들고 완료 체크포인트를 남긴다. 원본 이미지,
+인물별 경로와 임베딩은 `data/` 아래에만 두며 Git에 올리지 않는다.
+
+```bash
+# 1. 구조·크기·이미지 수 검사(원본 경로를 결과에 기록하지 않음)
+.venv/bin/python scripts/kface_pilot.py inventory /private/Low_Resolution.zip \
+  --resolution low \
+  --inspect-subjects 3 \
+  --expected-bytes 10442596690 \
+  --output data/metadata/kface/low_inventory.json
+
+# 2. 초기 파일럿: 30명 × 15장. 중단 후 같은 명령을 실행하면 완료 인물은 건너뜀
+.venv/bin/python scripts/kface_pilot.py process /private/Low_Resolution.zip \
+  --resolution low \
+  --output-dir data/processed/kface/low \
+  --max-subjects 30 \
+  --images-per-subject 15 \
+  --expected-bytes 10442596690 \
+  --accept-noncommercial-model-license
+
+# 3. 저화질 완료 후 중화질도 별도 디렉터리에서 동일하게 처리
+.venv/bin/python scripts/kface_pilot.py process /private/Middle_Resolution.zip \
+  --resolution medium \
+  --output-dir data/processed/kface/medium \
+  --max-subjects 30 \
+  --images-per-subject 15 \
+  --expected-bytes 25001457787 \
+  --accept-noncommercial-model-license
+
+# 4. 얼굴 검출 성공률과 같은 인물 특징의 저·중화질 안정성을 집계 비교
+.venv/bin/python scripts/compare_kface_resolutions.py \
+  --low-dir data/processed/kface/low \
+  --medium-dir data/processed/kface/medium \
+  --output data/metadata/kface/low_medium_comparison.json
+```
+
+400명 전체 처리 후에는 중화질 등록 사진 3장·5장으로 나눠
+validation 인물에서 FAR 목표 기준값을 고르고, 완전히 다른 test
+인물에 고정 적용한다. 타인 점수는 같은 split 안의 다른 인물
+등록 중심과의 비교로 만든다.
+
+```bash
+.venv/bin/python scripts/evaluate_kface_verification.py \
+  --low-dir data/processed/kface/v3_400/low \
+  --medium-dir data/processed/kface/v3_400/medium \
+  --references 3 5 \
+  --target-far 0.001 \
+  --seed 20260815 \
+  --output data/metadata/kface/kface_v3_400_verification.json
+```
+
+공개 결과에는 집계 분포와 지표만 남고, 원본 경로·인물 식별자·개별
+점수·임베딩은 넣지 않는다. 이 기준값은 한국인 얼굴 연구 검증이며
+운영·본인인증 승인값이 아니다.
+
+전체 중화질 다운로드가 오래 걸리면 이미 완전히 내려받힌 인물별 ZIP 중 저화질
+표본과 같은 인물만 CRC 검증해 비공개 파일럿 ZIP을 만들 수 있다. 이 명령은 원본
+얼굴을 포함한 결과를 만들기 때문에 출력 경로는 반드시 Git에서 제외된 `data/`
+아래로 지정한다.
+
+```bash
+.venv/bin/python scripts/kface_partial_pilot.py \
+  /private/Middle_Resolution.zip.crdownload \
+  --reference-archive /private/Low_Resolution.zip \
+  --output data/interim/kface/medium-pilot-30.zip \
+  --max-subjects 30
+```
+
+`--accept-noncommercial-model-license`는 InsightFace 제공 사전학습 가중치의
+비상업 연구 조건을 확인했다는 실행 게이트다. 상용 서비스 모델로 승인한다는 뜻은
+아니다. `--expected-bytes`는 중단된 다운로드를 완성본으로 잘못 처리하지 않게
+막는다. 내부 ZIP은 한 번에 하나만 메모리에 올리고 정렬 얼굴은 저장하지 않으므로,
+저화질과 중화질을 동시에 풀어 두지 않아도 된다.
+
 ## 실험 사전 검사
 
 ```bash

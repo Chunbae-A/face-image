@@ -1,0 +1,16 @@
+{
+  "dataset": "K-FACE",
+  "resolution": "medium",
+  "pipeline_version": "kface-pilot-v1",
+  "archive_bytes": 25001457787,
+  "archive_sha256": "875cfc7095dbb4bc47a67880b2f38e7205491cad46f1b620622180c483d175c9",
+  "subject_archive_count": 400,
+  "inspected_subject_count": 3,
+  "inspected_image_count": 32400,
+  "minimum_images_per_inspected_subject": 10800,
+  "maximum_images_per_inspected_subject": 10800,
+  "nested_zip_bytes_inspected": 184535887,
+  "contains_raw_paths": false,
+  "contains_face_images": false,
+  "contains_embeddings": false
+}

@@ -32,7 +32,7 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 | 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
 | 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 이미지·영상 16프레임 평균 API 구현, 운영 Gate 미통과** ([#25](https://github.com/Chunbae-A/face-image/issues/25)) |
 | 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **EfficientNet-B4/Xception 공정 비교 코드·Kaggle 노트북 준비, GPU 결과 대기; SBI·Hard Negative·FTCN 실행 전** ([#29](https://github.com/Chunbae-A/face-image/issues/29)) |
-| 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | **딥페이크 보정 실험·API 완료, FPR Gate 미통과로 확률 표시 보류; 얼굴 보정 데이터 미확보** ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
+| 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | **K-FACE 400명 얼굴 검증·딥페이크 보정 실험 완료, 두 Gate 모두 미통과로 확률 표시 보류** ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | **임시 등록·`scan_id`·진행 조회·이미지 후보 결과 완료, 영상 URL·영구 큐는 미연결** ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
 
 외부 서버 배포는 현재 필수 범위가 아니다. 데모는 로컬 Docker API와 Swagger 화면으로 실행한다.
@@ -70,6 +70,26 @@ EfficientNet-B4: 후보 영상이 딥페이크인지 분석
 연구 목표 FAR은 `0.001`, 즉 다른 사람 10,000번 비교 중 최대 10번의 오통과였다. 관측값은 약 13.8번 수준이므로 **Celeb-real 내부 결과가 좋아도 운영 본인인증 기준은 통과하지 못했다.** 연구 판정 기준값은 `0.2823836207389832`이며 API 응답에도 `research_only_unapproved`로 표시한다.
 
 전체 45조건과 신뢰구간은 [`reports/celebdf_baseline_audit/2026-08-06`](reports/celebdf_baseline_audit/2026-08-06), 촬영 열화 6조건 결과는 [`reports/celebdf_robustness/2026-08-06`](reports/celebdf_robustness/2026-08-06)에 있다.
+
+### K-FACE 400명 한국인 저·중화질 검증
+
+AI-Hub 승인 K-FACE 400명에서 인물당 저화질 15장·중화질
+15장, 총 12,000장을 처리했다. 중화질 등록 3장·5장을 비교하고,
+400명을 validation 200명과 test 200명으로 완전히 나눠 기준값 누수를
+막았다.
+
+| Test 조건 | TAR | FAR | 판정 |
+|---|---:|---:|---|
+| 3장 등록·저화질 질의 | 84.44% | 0.1109% | Gate 미통과 |
+| 3장 등록·중화질 질의 | 92.15% | 0.1090% | Gate 미통과 |
+| 5장 등록·저화질 질의 | **87.74%** | 0.1201% | Gate 미통과 |
+| 5장 등록·중화질 질의 | **95.58%** | 0.1132% | Gate 미통과 |
+
+5장 등록은 3장보다 본인 통과율을 높였으므로 시연에서 권장한다.
+그러나 연구 Gate인 `TAR ≥ 90%`, `FAR ≤ 0.1%`를 모든 화질에서 동시에
+만족하지 못했다. K-FACE 기준값은 API 운영값으로 교체하지 않고
+`research_only_unapproved`를 유지한다. 전체 프로토콜·점수 분포·한계는
+[`reports/kface_v3_400_evaluation/2026-08-15`](reports/kface_v3_400_evaluation/2026-08-15)에 있다.
 
 ## 2. 딥페이크 영상 판별 결과
 
@@ -237,16 +257,18 @@ python scripts/check_repository_hygiene.py
 - 원본 사진과 얼굴 특징은 API 요청 처리 후 영구 저장하지 않는다.
 - InsightFace 코드와 제공 사전학습 가중치의 사용 조건은 다르다.
 - 현재 `buffalo_l`와 얼굴 검출 가중치는 비상업 연구 범위로만 사용한다.
-- 현재 얼굴 기준값과 딥페이크 기준값은 모두 연구용이며 한국인·최신 생성 방식·실제 웹 재압축 영상의 운영 성능을 보장하지 않는다.
+- 현재 얼굴 기준값과 딥페이크 기준값은 모두 연구용이다. K-FACE로 한국인 저·중화질 통제 조건은 검증했지만, 실제 웹 재압축·최신 생성 방식의 운영 성능을 보장하지 않는다.
 
 ## 다음 작업 순서
 
-모델링은 아래 순서로 진행한다. 새 모델의 성능 수치는 아직 실행 전이며, 각 단계는 같은 분할과 같은 지표로 비교한다.
+모델링은 아래 순서로 진행한다. 새 모델의 성능 수치는 실제 실행
+후에만 기록하고, 각 단계는 같은 분할과 같은 지표로 비교한다.
 
-1. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
-2. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
-3. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
-4. 결승 후보에 FTCN 시간 정보와 앙상블 추가 효과 검증 ([#32](https://github.com/Chunbae-A/face-image/issues/32))
+1. K-FACE 인물 bootstrap 신뢰구간·반복 seed와 저화질 검출 실패 개선
+2. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
+3. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
+4. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
+5. 결승 후보에 FTCN 시간 정보와 앙상블 추가 효과 검증 ([#32](https://github.com/Chunbae-A/face-image/issues/32))
 
 제품 파이프라인은 모델링과 병행해 다음 순서로 이어간다.
 
