@@ -38,6 +38,34 @@ class HealthResponse(BaseModel):
     deepfake_video_calibration_version: str | None = None
 
 
+class ModelCapabilityResponse(BaseModel):
+    """클라이언트 서버가 기능 노출 여부를 결정할 때 쓰는 모델 상태."""
+
+    component_id: Literal["face_verification", "deepfake_image", "deepfake_video"]
+    role: str
+    model_name: str
+    load_state: Literal["loaded", "lazy", "unavailable", "blocked"]
+    decision_status: str
+    score_semantics: Literal["cosine_similarity", "raw_model_score"]
+    default_enabled: bool
+
+
+class ApiCapabilitiesResponse(BaseModel):
+    """딥소각 서버에 공개하는 안정적인 연구 API 기능 계약."""
+
+    api_version: str
+    deployment_mode: Literal["research_demo"]
+    workflows: list[str]
+    models: list[ModelCapabilityResponse]
+    search_providers: list[str]
+    web_search_enabled: bool
+    scores_are_probabilities: Literal[False]
+    automatic_enforcement_allowed: Literal[False]
+    original_media_persisted: Literal[False]
+    state_storage: Literal["process_memory_ttl"]
+    warning: str
+
+
 class ImageQualityResponse(BaseModel):
     detection_score: float = Field(ge=0.0, le=1.0)
     face_area_ratio: float = Field(gt=0.0, le=1.0)

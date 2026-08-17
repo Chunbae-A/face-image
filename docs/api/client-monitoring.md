@@ -11,10 +11,18 @@
 
 ## 전체 호출 순서
 
-1. `POST /v1/faceguard/enrollments`로 동의받은 본인 사진 1~5장을 임시 등록한다. 3장을 권장한다.
-2. `POST /v1/exposure-scans`로 공개 검색 작업을 시작하고 `scan_id`를 받는다.
-3. `GET /v1/exposure-scans/{scan_id}`를 1~2초 간격으로 호출해 진행 상태를 확인한다.
-4. 작업이 끝나면 `GET /v1/exposure-scans/{scan_id}/client-candidates`로 화면용 후보를 받는다.
+1. `GET /v1/capabilities`로 기능·모델·연구 기준 상태를 확인한다.
+2. `POST /v1/faceguard/enrollments`로 동의받은 본인 사진 1~5장을 임시 등록한다. 3장을 권장한다.
+3. `POST /v1/exposure-scans`로 공개 검색 작업을 시작하고 `scan_id`를 받는다.
+4. `GET /v1/exposure-scans/{scan_id}`를 1~2초 간격으로 호출해 진행 상태를 확인한다.
+5. 작업이 끝나면 `GET /v1/exposure-scans/{scan_id}/client-candidates`로 화면용 후보를 받는다.
+
+## 0. 기능과 모델 상태 확인
+
+`GET /v1/capabilities`는 클라이언트 서버가 어떤 버튼을 노출할지 결정하는
+안정적인 계약이다. `load_state=unavailable`인 기능은 비활성화하고,
+`decision_status`가 `research_only...`인 결과는 확률이나 확정 판정으로
+표시하지 않는다. `automatic_enforcement_allowed`는 현재 항상 `false`다.
 
 ## 1. 얼굴 임시 등록
 

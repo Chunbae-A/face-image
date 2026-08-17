@@ -26,6 +26,7 @@ from .exposure import (
 )
 from .media import PublicImageDownloader
 from .schemas import (
+    ApiCapabilitiesResponse,
     CandidateDeepfakeDecisionResponse,
     CandidateFaceDecisionResponse,
     ClientExposureCandidateResponse,
@@ -43,6 +44,7 @@ from .schemas import (
     FaceEnrollmentResponse,
     HealthResponse,
     ImageQualityResponse,
+    ModelCapabilityResponse,
     SearchAndFilterResponse,
     SearchCandidateResponse,
     SearchCandidatesRequest,
@@ -531,6 +533,80 @@ def create_app(
                 if active_video_score_calibration is not None
                 else None
             ),
+        )
+
+    @application.get(
+        "/v1/capabilities",
+        response_model=ApiCapabilitiesResponse,
+        tags=["운영"],
+        summary="클라이언트 서버용 얼굴가드 기능·모델 상태 확인",
+    )
+    async def capabilities() -> ApiCapabilitiesResponse:
+        license_accepted = active_settings.accept_noncommercial_model_license
+        providers = list(getattr(active_search_service, "providers", ()))
+        face_state = (
+            "blocked"
+            if not license_accepted
+            else "loaded"
+            if active_encoder.loaded
+            else "lazy"
+        )
+        deepfake_state = (
+            "blocked"
+            if not license_accepted
+            else "loaded"
+            if active_deepfake_analyzer.loaded
+            else "lazy"
+            if active_settings.deepfake_model_path.is_file()
+            else "unavailable"
+        )
+        return ApiCapabilitiesResponse(
+            api_version=active_settings.api_version,
+            deployment_mode="research_demo",
+            workflows=[
+                "face_verification",
+                "deepfake_image_analysis",
+                "deepfake_video_analysis",
+                "public_exposure_scan",
+            ],
+            models=[
+                ModelCapabilityResponse(
+                    component_id="face_verification",
+                    role="등록 얼굴과 공개 후보의 동일인 가능성 선별",
+                    model_name=active_settings.model_name,
+                    load_state=face_state,
+                    decision_status=active_settings.threshold_status,
+                    score_semantics="cosine_similarity",
+                    default_enabled=license_accepted,
+                ),
+                ModelCapabilityResponse(
+                    component_id="deepfake_image",
+                    role="단일 얼굴 이미지의 딥페이크 의심 신호 분석",
+                    model_name=active_settings.deepfake_model_name,
+                    load_state=deepfake_state,
+                    decision_status=active_settings.deepfake_threshold_status,
+                    score_semantics="raw_model_score",
+                    default_enabled=deepfake_state in {"loaded", "lazy"},
+                ),
+                ModelCapabilityResponse(
+                    component_id="deepfake_video",
+                    role="영상 대표 얼굴 프레임 16개의 평균 의심 신호 분석",
+                    model_name=active_settings.deepfake_model_name,
+                    load_state=deepfake_state,
+                    decision_status=active_settings.deepfake_video_threshold_status,
+                    score_semantics="raw_model_score",
+                    default_enabled=deepfake_state in {"loaded", "lazy"},
+                ),
+            ],
+            search_providers=[provider.name for provider in providers],
+            web_search_enabled=any(
+                provider.accesses_external_network for provider in providers
+            ),
+            scores_are_probabilities=False,
+            automatic_enforcement_allowed=False,
+            original_media_persisted=False,
+            state_storage="process_memory_ttl",
+            warning=PIPELINE_WARNING,
         )
 
     @application.post(
