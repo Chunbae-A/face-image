@@ -37,7 +37,12 @@ class FakeDownloader:
     async def download(self, url: str) -> DownloadedImage:
         if "download-fail" in url:
             raise CandidateDownloadError("CANDIDATE_DOWNLOAD_FAILED")
-        payload = b"different" if "different" in url else b"same"
+        if "different" in url:
+            payload = b"different"
+        elif "broad" in url:
+            payload = b"broad"
+        else:
+            payload = b"same"
         return DownloadedImage(payload, url, "image/jpeg")
 
 
@@ -136,6 +141,10 @@ class ExposureScanHttpTests(unittest.TestCase):
             self.assertEqual(scan.status_code, 202, scan.text)
             created = scan.json()
             self.assertFalse(created["reused"])
+            self.assertEqual(
+                created["client_candidates_url"],
+                f"/v1/exposure-scans/{created['scan_id']}/client-candidates",
+            )
 
             status = self.wait_for_final(client, created["status_url"])
             self.assertEqual(status["status"], "completed")
@@ -163,6 +172,27 @@ class ExposureScanHttpTests(unittest.TestCase):
             self.assertEqual(detail.status_code, 200, detail.text)
             self.assertEqual(detail.json()["candidate_id"], first["candidate_id"])
 
+            client_candidates = client.get(created["client_candidates_url"])
+            self.assertEqual(
+                client_candidates.status_code, 200, client_candidates.text
+            )
+            client_body = client_candidates.json()
+            self.assertEqual(client_body["candidate_count"], 2)
+            self.assertEqual(client_body["identity_match_count"], 1)
+            self.assertEqual(client_body["review_candidate_count"], 1)
+            self.assertEqual(
+                client_body["candidates"][0]["recommended_action"],
+                "review_required",
+            )
+            self.assertEqual(
+                client_body["candidates"][0]["deepfake_signal"], "suspected"
+            )
+            self.assertEqual(
+                client_body["candidates"][1]["recommended_action"],
+                "exclude_recommended",
+            )
+            self.assertNotIn("probability", json.dumps(client_body))
+
             serialized = json.dumps(
                 {
                     "enrollment": enrollment_body,
@@ -178,6 +208,35 @@ class ExposureScanHttpTests(unittest.TestCase):
             ]
             self.assertEqual(internal_record.query.submitted_candidates, ())
             self.assertNotEqual(internal_record.idempotency_key, "demo-scan-0001")
+
+    def test_client_candidates_marks_broad_face_match_for_identity_review(self):
+        with TestClient(self.make_app()) as client:
+            enrollment_id = client.post(
+                "/v1/faceguard/enrollments",
+                files=[image_file("reference_images", "ref.jpg", b"ref")],
+            ).json()["enrollment_id"]
+            created = client.post(
+                "/v1/exposure-scans",
+                json={
+                    "enrollment_id": enrollment_id,
+                    "candidates": [
+                        {
+                            "page_url": "https://example.com/broad-post",
+                            "media_url": "https://cdn.example.com/broad.jpg",
+                        }
+                    ],
+                },
+            ).json()
+            self.wait_for_final(client, created["status_url"])
+
+            body = client.get(created["client_candidates_url"]).json()
+            candidate = body["candidates"][0]
+            self.assertEqual(candidate["face_match_level"], "review")
+            self.assertEqual(
+                candidate["recommended_action"], "identity_review_required"
+            )
+            self.assertEqual(body["identity_match_count"], 0)
+            self.assertEqual(body["review_candidate_count"], 1)
 
     def test_idempotency_reuses_same_scan_and_rejects_different_request(self):
         with TestClient(self.make_app()) as client:

@@ -186,6 +186,41 @@ class FaceguardHttpTests(unittest.TestCase):
         )
         self.assertIsNone(response.json()["deepfake_video_calibration_version"])
 
+    def test_capabilities_explain_safe_client_contract(self):
+        response = self.client.get("/v1/capabilities")
+        self.assertEqual(response.status_code, 200, response.text)
+        body = response.json()
+        self.assertEqual(body["api_version"], "0.9.0")
+        self.assertEqual(body["deployment_mode"], "research_demo")
+        self.assertIn("public_exposure_scan", body["workflows"])
+        self.assertFalse(body["scores_are_probabilities"])
+        self.assertFalse(body["automatic_enforcement_allowed"])
+        self.assertFalse(body["original_media_persisted"])
+        self.assertEqual(body["state_storage"], "process_memory_ttl")
+        by_id = {item["component_id"]: item for item in body["models"]}
+        self.assertEqual(
+            by_id["face_verification"]["score_semantics"],
+            "cosine_similarity",
+        )
+        self.assertEqual(by_id["face_verification"]["load_state"], "loaded")
+        self.assertEqual(by_id["deepfake_image"]["load_state"], "loaded")
+        self.assertEqual(
+            by_id["deepfake_video"]["decision_status"],
+            "research_only_unapproved",
+        )
+
+    def test_capabilities_block_models_until_license_is_confirmed(self):
+        client = TestClient(
+            create_app(
+                test_settings(license_accepted=False),
+                FakeEncoder(),
+                deepfake_analyzer=FakeDeepfakeAnalyzer(),
+            )
+        )
+        body = client.get("/v1/capabilities").json()
+        self.assertTrue(all(item["load_state"] == "blocked" for item in body["models"]))
+        self.assertTrue(all(not item["default_enabled"] for item in body["models"]))
+
     def test_deepfake_image_endpoint_returns_score_without_filename(self):
         response = self.client.post(
             "/v1/deepfake/analyze",

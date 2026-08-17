@@ -38,6 +38,34 @@ class HealthResponse(BaseModel):
     deepfake_video_calibration_version: str | None = None
 
 
+class ModelCapabilityResponse(BaseModel):
+    """클라이언트 서버가 기능 노출 여부를 결정할 때 쓰는 모델 상태."""
+
+    component_id: Literal["face_verification", "deepfake_image", "deepfake_video"]
+    role: str
+    model_name: str
+    load_state: Literal["loaded", "lazy", "unavailable", "blocked"]
+    decision_status: str
+    score_semantics: Literal["cosine_similarity", "raw_model_score"]
+    default_enabled: bool
+
+
+class ApiCapabilitiesResponse(BaseModel):
+    """딥소각 서버에 공개하는 안정적인 연구 API 기능 계약."""
+
+    api_version: str
+    deployment_mode: Literal["research_demo"]
+    workflows: list[str]
+    models: list[ModelCapabilityResponse]
+    search_providers: list[str]
+    web_search_enabled: bool
+    scores_are_probabilities: Literal[False]
+    automatic_enforcement_allowed: Literal[False]
+    original_media_persisted: Literal[False]
+    state_storage: Literal["process_memory_ttl"]
+    warning: str
+
+
 class ImageQualityResponse(BaseModel):
     detection_score: float = Field(ge=0.0, le=1.0)
     face_area_ratio: float = Field(gt=0.0, le=1.0)
@@ -325,6 +353,7 @@ class ExposureScanCreatedResponse(BaseModel):
     reused: bool
     status_url: str
     candidates_url: str
+    client_candidates_url: str
     created_at: datetime
     expires_at: datetime
     warning: str
@@ -383,4 +412,50 @@ class ExposureCandidatesResponse(BaseModel):
     ]
     candidate_count: int = Field(ge=0)
     candidates: list[ExposureCandidateResponse]
+    warning: str
+
+
+class ClientExposureCandidateResponse(BaseModel):
+    """딥소각 화면에서 모델 내부 구조를 몰라도 사용할 수 있는 후보 응답."""
+
+    candidate_id: str
+    source_url: str
+    media_url: str | None = None
+    thumbnail_url: str | None = None
+    source_type: str
+    source_engine: str | None = None
+    face_similarity: float | None = Field(default=None, ge=-1.0, le=1.0)
+    face_match_level: Literal["matched", "review", "not_matched", "unavailable"]
+    deepfake_score: float | None = Field(default=None, ge=0.0, le=1.0)
+    deepfake_signal: Literal[
+        "suspected", "not_suspected", "not_analyzed", "unavailable"
+    ]
+    recommended_action: Literal[
+        "review_required",
+        "identity_review_required",
+        "monitor",
+        "exclude_recommended",
+        "analysis_unavailable",
+    ]
+    analysis_status: Literal["completed", "partial_failed", "unavailable"]
+    warning: str
+
+
+class ClientExposureCandidatesResponse(BaseModel):
+    """화면 목록과 요약 카드에 필요한 최소 노출 후보 묶음."""
+
+    scan_id: str
+    status: Literal[
+        "queued",
+        "searching",
+        "identity_filtering",
+        "deepfake_analyzing",
+        "completed",
+        "partial_failed",
+        "failed",
+    ]
+    candidate_count: int = Field(ge=0)
+    identity_match_count: int = Field(ge=0)
+    review_candidate_count: int = Field(ge=0)
+    candidates: list[ClientExposureCandidateResponse]
     warning: str

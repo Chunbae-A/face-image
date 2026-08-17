@@ -26,8 +26,11 @@ from .exposure import (
 )
 from .media import PublicImageDownloader
 from .schemas import (
+    ApiCapabilitiesResponse,
     CandidateDeepfakeDecisionResponse,
     CandidateFaceDecisionResponse,
+    ClientExposureCandidateResponse,
+    ClientExposureCandidatesResponse,
     DeepfakeAnalysisResponse,
     DeepfakeVideoAnalysisResponse,
     ErrorBody,
@@ -41,6 +44,7 @@ from .schemas import (
     FaceEnrollmentResponse,
     HealthResponse,
     ImageQualityResponse,
+    ModelCapabilityResponse,
     SearchAndFilterResponse,
     SearchCandidateResponse,
     SearchCandidatesRequest,
@@ -216,6 +220,68 @@ def _exposure_candidate_response(
         candidate_id=candidate.candidate_id,
         scan_id=scan_id,
         result=_candidate_decision_response(candidate.decision),
+        warning=PIPELINE_WARNING,
+    )
+
+
+def _client_exposure_candidate_response(
+    candidate: ExposureCandidate,
+) -> ClientExposureCandidateResponse:
+    """연구 원점수를 확률로 오해하지 않는 화면용 후보로 변환한다."""
+
+    decision = candidate.decision
+    if decision.status == "identity_match":
+        face_match_level = "matched"
+    elif decision.status == "retrieval_match":
+        face_match_level = "review"
+    elif decision.status == "not_matched":
+        face_match_level = "not_matched"
+    else:
+        face_match_level = "unavailable"
+
+    if decision.deepfake.status == "analyzed":
+        deepfake_signal = (
+            "suspected"
+            if decision.deepfake.is_suspected_deepfake is True
+            else "not_suspected"
+        )
+    elif decision.deepfake.status == "not_analyzed":
+        deepfake_signal = "not_analyzed"
+    else:
+        deepfake_signal = "unavailable"
+
+    if face_match_level == "not_matched":
+        recommended_action = "exclude_recommended"
+        analysis_status = "completed"
+    elif face_match_level == "unavailable":
+        recommended_action = "analysis_unavailable"
+        analysis_status = "unavailable"
+    elif decision.deepfake.status in {"failed", "unavailable"}:
+        recommended_action = "analysis_unavailable"
+        analysis_status = "partial_failed"
+    elif face_match_level == "review":
+        recommended_action = "identity_review_required"
+        analysis_status = "completed"
+    elif deepfake_signal == "suspected":
+        recommended_action = "review_required"
+        analysis_status = "completed"
+    else:
+        recommended_action = "monitor"
+        analysis_status = "completed"
+
+    return ClientExposureCandidateResponse(
+        candidate_id=candidate.candidate_id,
+        source_url=decision.page_url,
+        media_url=decision.media_url,
+        thumbnail_url=decision.thumbnail_url,
+        source_type=decision.provider,
+        source_engine=decision.source_engine,
+        face_similarity=decision.similarity_raw,
+        face_match_level=face_match_level,
+        deepfake_score=decision.deepfake.deepfake_score,
+        deepfake_signal=deepfake_signal,
+        recommended_action=recommended_action,
+        analysis_status=analysis_status,
         warning=PIPELINE_WARNING,
     )
 
@@ -469,6 +535,80 @@ def create_app(
             ),
         )
 
+    @application.get(
+        "/v1/capabilities",
+        response_model=ApiCapabilitiesResponse,
+        tags=["운영"],
+        summary="클라이언트 서버용 얼굴가드 기능·모델 상태 확인",
+    )
+    async def capabilities() -> ApiCapabilitiesResponse:
+        license_accepted = active_settings.accept_noncommercial_model_license
+        providers = list(getattr(active_search_service, "providers", ()))
+        face_state = (
+            "blocked"
+            if not license_accepted
+            else "loaded"
+            if active_encoder.loaded
+            else "lazy"
+        )
+        deepfake_state = (
+            "blocked"
+            if not license_accepted
+            else "loaded"
+            if active_deepfake_analyzer.loaded
+            else "lazy"
+            if active_settings.deepfake_model_path.is_file()
+            else "unavailable"
+        )
+        return ApiCapabilitiesResponse(
+            api_version=active_settings.api_version,
+            deployment_mode="research_demo",
+            workflows=[
+                "face_verification",
+                "deepfake_image_analysis",
+                "deepfake_video_analysis",
+                "public_exposure_scan",
+            ],
+            models=[
+                ModelCapabilityResponse(
+                    component_id="face_verification",
+                    role="등록 얼굴과 공개 후보의 동일인 가능성 선별",
+                    model_name=active_settings.model_name,
+                    load_state=face_state,
+                    decision_status=active_settings.threshold_status,
+                    score_semantics="cosine_similarity",
+                    default_enabled=license_accepted,
+                ),
+                ModelCapabilityResponse(
+                    component_id="deepfake_image",
+                    role="단일 얼굴 이미지의 딥페이크 의심 신호 분석",
+                    model_name=active_settings.deepfake_model_name,
+                    load_state=deepfake_state,
+                    decision_status=active_settings.deepfake_threshold_status,
+                    score_semantics="raw_model_score",
+                    default_enabled=deepfake_state in {"loaded", "lazy"},
+                ),
+                ModelCapabilityResponse(
+                    component_id="deepfake_video",
+                    role="영상 대표 얼굴 프레임 16개의 평균 의심 신호 분석",
+                    model_name=active_settings.deepfake_model_name,
+                    load_state=deepfake_state,
+                    decision_status=active_settings.deepfake_video_threshold_status,
+                    score_semantics="raw_model_score",
+                    default_enabled=deepfake_state in {"loaded", "lazy"},
+                ),
+            ],
+            search_providers=[provider.name for provider in providers],
+            web_search_enabled=any(
+                provider.accesses_external_network for provider in providers
+            ),
+            scores_are_probabilities=False,
+            automatic_enforcement_allowed=False,
+            original_media_persisted=False,
+            state_storage="process_memory_ttl",
+            warning=PIPELINE_WARNING,
+        )
+
     @application.post(
         "/v1/faceguard/enrollments",
         response_model=FaceEnrollmentResponse,
@@ -586,6 +726,9 @@ def create_app(
             reused=reused,
             status_url=f"/v1/exposure-scans/{record.scan_id}",
             candidates_url=f"/v1/exposure-scans/{record.scan_id}/candidates",
+            client_candidates_url=(
+                f"/v1/exposure-scans/{record.scan_id}/client-candidates"
+            ),
             created_at=record.created_at,
             expires_at=record.expires_at,
             warning=EXPOSURE_WARNING,
@@ -619,6 +762,37 @@ def create_app(
                 _exposure_candidate_response(record.scan_id, candidate)
                 for candidate in record.candidates
             ],
+            warning=EXPOSURE_WARNING,
+        )
+
+    @application.get(
+        "/v1/exposure-scans/{scan_id}/client-candidates",
+        response_model=ClientExposureCandidatesResponse,
+        responses={404: {"model": ErrorResponse}, 410: {"model": ErrorResponse}},
+        tags=["비동기 노출 스캔"],
+        summary="딥소각 후보 화면용 얼굴·딥페이크 결과 확인",
+    )
+    async def get_client_exposure_candidates(
+        scan_id: str,
+    ) -> ClientExposureCandidatesResponse:
+        record = await active_exposure_scan_manager.get_scan(scan_id)
+        candidates = [
+            _client_exposure_candidate_response(candidate)
+            for candidate in record.candidates
+        ]
+        return ClientExposureCandidatesResponse(
+            scan_id=record.scan_id,
+            status=record.status,
+            candidate_count=len(candidates),
+            identity_match_count=sum(
+                item.face_match_level == "matched" for item in candidates
+            ),
+            review_candidate_count=sum(
+                item.recommended_action
+                in {"review_required", "identity_review_required"}
+                for item in candidates
+            ),
+            candidates=candidates,
             warning=EXPOSURE_WARNING,
         )
 

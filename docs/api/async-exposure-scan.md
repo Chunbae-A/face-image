@@ -55,7 +55,8 @@ Swagger에서 `POST /v1/faceguard/enrollments`를 열고 `Try it out`을 누른�
   "scan_id": "발급된-스캔-ID",
   "status": "queued",
   "status_url": "/v1/exposure-scans/발급된-스캔-ID",
-  "candidates_url": "/v1/exposure-scans/발급된-스캔-ID/candidates"
+  "candidates_url": "/v1/exposure-scans/발급된-스캔-ID/candidates",
+  "client_candidates_url": "/v1/exposure-scans/발급된-스캔-ID/client-candidates"
 }
 ```
 
@@ -84,6 +85,8 @@ Swagger에서 `POST /v1/faceguard/enrollments`를 열고 `Try it out`을 누른�
 - `error_code`: 해당 후보만 실패한 이유
 
 `similarity_raw`와 `deepfake_score`는 확률이 아니다. `calibrated_probability` 값이 `null`이면 화면에 `89% 확률`처럼 표시하지 말고 `원점수·사람 검토 필요`로 보여준다.
+
+딥소각 후보 화면에서는 모델 내부 응답 대신 `GET /v1/exposure-scans/{scan_id}/client-candidates`를 사용한다. 이 API는 원점수와 함께 `review_required`, `monitor`, `exclude_recommended` 같은 안전한 행동값을 반환한다. 필드별 뜻과 화면 문구는 [클라이언트용 공개 노출 모니터링 API](client-monitoring.md)에 있다.
 
 ## 현재 제한
 
