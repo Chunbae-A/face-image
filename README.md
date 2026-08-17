@@ -349,7 +349,7 @@ python scripts/check_repository_hygiene.py
 후에만 기록하고, 각 단계는 같은 분할과 같은 지표로 비교한다.
 
 1. K-FACE 저화질→중화질 임베딩 보정 어댑터 비교 완료·미채택 ([#44](https://github.com/Chunbae-A/face-image/issues/44))
-2. 저해상도 얼굴 crop 기반 인식 미세 조정과 새로운 외부 잠긴 Test 설계
+2. 저해상도 얼굴 crop 기반 인식 미세 조정과 새로운 외부 잠긴 Test 설계 ([#47](https://github.com/Chunbae-A/face-image/issues/47))
 3. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
 4. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
 5. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
