@@ -1,0 +1,16 @@
+{
+  "id": "hywznn/k-face-400",
+  "title": "딥소각 K-FACE 400명 전체 얼굴가드 반복 검증",
+  "code_file": "notebook.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": true,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "dataset_sources": [
+    "hywznn/deepsogak-kface-arcface-private-2026-08-17"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
