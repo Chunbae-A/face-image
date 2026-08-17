@@ -160,6 +160,21 @@ validation FAR 안전 여유를 0.08%로 높이면 test FAR은 `0.0963%`로
 [`reports/kface_enrollment_strategy_benchmark/2026-08-17`](reports/kface_enrollment_strategy_benchmark/2026-08-17)에
 있다.
 
+#### K-FACE v3.5 저화질 임베딩 보정 모델
+
+400명을 Train 240명·Validation 80명·잠긴 Test 80명으로 인물 단위
+분리하고, 저화질 ArcFace 특징을 중화질 특징에 가깝게 바꾸는
+`512→128→512` residual MLP를 학습했다. Validation에서 선택된
+대조 학습 후보를 잠긴 Test에서 한 번 평가했지만 저화질 TAR은
+`79.01% → 78.05%`, 중화질 TAR은 `94.61% → 92.34%`로 낮아졌고
+최악 FAR은 `0.1065% → 0.1250%`로 높아졌다.
+
+다른 사람 평균 유사도가 같은 사람보다 더 크게 올라 인물 구분력이
+나빠진 것이 원인이다. 사전 개선 Gate를 통과하지 못해 ONNX를 만들지
+않았고 API도 변경하지 않았다. 전체 결과는
+[`reports/kface_lowres_embedding_adapter/2026-08-17`](reports/kface_lowres_embedding_adapter/2026-08-17)에
+있다.
+
 ## 2. 딥페이크 영상 판별 결과
 
 전체 Celeb-DF-v2를 사용했다.
@@ -333,11 +348,12 @@ python scripts/check_repository_hygiene.py
 모델링은 아래 순서로 진행한다. 새 모델의 성능 수치는 실제 실행
 후에만 기록하고, 각 단계는 같은 분할과 같은 지표로 비교한다.
 
-1. K-FACE 저화질→중화질 임베딩 보정 어댑터 학습·원본 ArcFace 비교
-2. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
-3. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
-4. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
-5. 결승 후보에 FTCN 시간 정보와 앙상블 추가 효과 검증 ([#32](https://github.com/Chunbae-A/face-image/issues/32))
+1. K-FACE 저화질→중화질 임베딩 보정 어댑터 비교 완료·미채택 ([#44](https://github.com/Chunbae-A/face-image/issues/44))
+2. 저해상도 얼굴 crop 기반 인식 미세 조정과 새로운 외부 잠긴 Test 설계
+3. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
+4. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
+5. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
+6. 결승 후보에 FTCN 시간 정보와 앙상블 추가 효과 검증 ([#32](https://github.com/Chunbae-A/face-image/issues/32))
 
 제품 파이프라인은 모델링과 병행해 다음 순서로 이어간다.
 

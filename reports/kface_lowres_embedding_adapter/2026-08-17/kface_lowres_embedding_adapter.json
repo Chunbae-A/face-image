@@ -1,0 +1,434 @@
+{
+  "dataset": "K-FACE",
+  "protocol": "subject_disjoint_lowres_embedding_adapter_v1",
+  "pipeline_version": "kface-full-paired-v2",
+  "input_subjects": 400,
+  "split": {
+    "seed": 20260817,
+    "counts": {
+      "train": 240,
+      "validation": 80,
+      "test": 80
+    },
+    "fingerprints": {
+      "train": "20819bdd69ef20af5357a911c8af301cf3aea14fb158ae2c1aa2a47e5addb5f2",
+      "validation": "55bdf11f61662b741e5adf298d41f5823abd8aabcfa1fd1746bfa5936ba080dd",
+      "test": "e87a80757aa18bf53ab36b02983c2d060ef93e09db94570512a5b57ca1e5f52e"
+    },
+    "subject_overlap_count": 0,
+    "test_used_for_training_or_candidate_selection": false,
+    "locked_test_evaluations": 1
+  },
+  "reference_count": 5,
+  "minimum_detection_score": 0.6,
+  "calibration_far": 0.0008,
+  "target_far": 0.001,
+  "histogram_bins": 40000,
+  "architecture": {
+    "type": "residual_mlp",
+    "input_dimensions": 512,
+    "hidden_dimensions": 128,
+    "output_dimensions": 512,
+    "residual_scale": 0.25,
+    "output_l2_normalized": true
+  },
+  "training": {
+    "epochs": 1,
+    "batch_count": 8792,
+    "pair_count": 1848767,
+    "group_subjects": 32,
+    "samples_per_subject_per_batch": 8,
+    "learning_rate": 0.001,
+    "weight_decay": 0.0001,
+    "training_seconds": 147.70918802300002,
+    "device": "cuda"
+  },
+  "models": {
+    "paired_cosine": {
+      "candidate": {
+        "name": "paired_cosine",
+        "paired_cosine_weight": 1.0,
+        "supervised_contrastive_weight": 0.0,
+        "identity_preservation_weight": 0.05,
+        "temperature": 0.07
+      },
+      "parameter_count": 132736,
+      "state_sha256": "733a352237fe3a1565e1abe05f4f485049cc5fe812e1644f70fa24a5de19da6b",
+      "training_loss": {
+        "mean_loss": 0.20540687226070883,
+        "mean_paired_cosine_loss": 0.20288227215829602,
+        "mean_supervised_contrastive_loss": 0.0,
+        "mean_identity_preservation_loss": 0.050492002353197375
+      }
+    },
+    "paired_plus_identity_contrastive": {
+      "candidate": {
+        "name": "paired_plus_identity_contrastive",
+        "paired_cosine_weight": 0.5,
+        "supervised_contrastive_weight": 0.5,
+        "identity_preservation_weight": 0.05,
+        "temperature": 0.07
+      },
+      "parameter_count": 132736,
+      "state_sha256": "6f880ec3090e98d27cce13c32e5078a3965e12672fbccd96c12a85c3b7cc5d6a",
+      "training_loss": {
+        "mean_loss": 0.11929858561767921,
+        "mean_paired_cosine_loss": 0.20853507098444382,
+        "mean_supervised_contrastive_loss": 0.02575944065580524,
+        "mean_identity_preservation_loss": 0.04302659678072487
+      }
+    }
+  },
+  "validation": {
+    "baseline_raw_arcface": {
+      "validation_threshold_candidates": {
+        "low": 0.35785,
+        "medium": 0.36545000000000005
+      },
+      "operating_threshold": 0.36545000000000005,
+      "conditions": {
+        "low": {
+          "threshold": 0.36545000000000005,
+          "roc_auc_approx": 0.9920125293091758,
+          "eer_approx": 0.040055450661011766,
+          "eer_threshold_approx": 0.22560000000000002,
+          "tar": 0.79009688533159,
+          "frr": 0.20990311466841005,
+          "far": 0.0006008872212280382,
+          "genuine": {
+            "count": 617947,
+            "minimum_approx": -0.11012499999999997,
+            "p05_approx": 0.24177500000000007,
+            "median_approx": 0.4721750000000001,
+            "mean_approx": 0.4614159267299624,
+            "p95_approx": 0.6418750000000001,
+            "maximum_approx": 0.8505750000000001
+          },
+          "impostor": {
+            "count": 48817813,
+            "minimum_approx": -0.31177499999999997,
+            "p05_approx": -0.045274999999999954,
+            "median_approx": 0.07497500000000001,
+            "mean_approx": 0.0787492733272382,
+            "p95_approx": 0.21582500000000004,
+            "maximum_approx": 0.583825
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        },
+        "medium": {
+          "threshold": 0.36545000000000005,
+          "roc_auc_approx": 0.9989978808248341,
+          "eer_approx": 0.012881466033720125,
+          "eer_threshold_approx": 0.27564999999999995,
+          "tar": 0.9452331672457347,
+          "frr": 0.054766832754265304,
+          "far": 0.0007998514804421902,
+          "genuine": {
+            "count": 617947,
+            "minimum_approx": -0.07402499999999995,
+            "p05_approx": 0.3592750000000001,
+            "median_approx": 0.5624750000000001,
+            "mean_approx": 0.5521517115950074,
+            "p95_approx": 0.708775,
+            "maximum_approx": 0.894225
+          },
+          "impostor": {
+            "count": 48817813,
+            "minimum_approx": -0.330475,
+            "p05_approx": -0.04702499999999993,
+            "median_approx": 0.07532500000000009,
+            "mean_approx": 0.07932984081394638,
+            "p95_approx": 0.2193750000000001,
+            "maximum_approx": 0.556625
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        }
+      }
+    },
+    "paired_cosine": {
+      "validation_threshold_candidates": {
+        "low": 0.3911,
+        "medium": 0.36545000000000005
+      },
+      "operating_threshold": 0.3911,
+      "conditions": {
+        "low": {
+          "threshold": 0.3911,
+          "roc_auc_approx": 0.9924703814935951,
+          "eer_approx": 0.040815511338043786,
+          "eer_threshold_approx": 0.2633000000000001,
+          "tar": 0.7738867572785368,
+          "frr": 0.22611324272146316,
+          "far": 0.0007997080901596308,
+          "genuine": {
+            "count": 617947,
+            "minimum_approx": -0.07417499999999994,
+            "p05_approx": 0.27607500000000007,
+            "median_approx": 0.47877500000000006,
+            "mean_approx": 0.46976440621121235,
+            "p95_approx": 0.6314250000000001,
+            "maximum_approx": 0.8425750000000001
+          },
+          "impostor": {
+            "count": 48817813,
+            "minimum_approx": -0.284175,
+            "p05_approx": -0.017924999999999913,
+            "median_approx": 0.1094250000000001,
+            "mean_approx": 0.11265884268361229,
+            "p95_approx": 0.254425,
+            "maximum_approx": 0.5732250000000001
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        },
+        "medium": {
+          "threshold": 0.3911,
+          "roc_auc_approx": 0.9989978808248341,
+          "eer_approx": 0.012881466033720125,
+          "eer_threshold_approx": 0.27564999999999995,
+          "tar": 0.9209511495322414,
+          "frr": 0.07904885046775856,
+          "far": 0.0002978216168757908,
+          "genuine": {
+            "count": 617947,
+            "minimum_approx": -0.07402499999999995,
+            "p05_approx": 0.3592750000000001,
+            "median_approx": 0.5624750000000001,
+            "mean_approx": 0.5521517115950074,
+            "p95_approx": 0.708775,
+            "maximum_approx": 0.894225
+          },
+          "impostor": {
+            "count": 48817813,
+            "minimum_approx": -0.330475,
+            "p05_approx": -0.04702499999999993,
+            "median_approx": 0.07532500000000009,
+            "mean_approx": 0.07932984081394638,
+            "p95_approx": 0.2193750000000001,
+            "maximum_approx": 0.556625
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        }
+      }
+    },
+    "paired_plus_identity_contrastive": {
+      "validation_threshold_candidates": {
+        "low": 0.3900000000000001,
+        "medium": 0.36545000000000005
+      },
+      "operating_threshold": 0.3900000000000001,
+      "conditions": {
+        "low": {
+          "threshold": 0.3900000000000001,
+          "roc_auc_approx": 0.9901288922588503,
+          "eer_approx": 0.04306377878910718,
+          "eer_threshold_approx": 0.25975000000000015,
+          "tar": 0.7861305257570633,
+          "frr": 0.21386947424293667,
+          "far": 0.000798786295486035,
+          "genuine": {
+            "count": 617947,
+            "minimum_approx": -0.08792499999999998,
+            "p05_approx": 0.27037500000000003,
+            "median_approx": 0.48592500000000005,
+            "mean_approx": 0.4748334573596118,
+            "p95_approx": 0.6397250000000001,
+            "maximum_approx": 0.8376750000000001
+          },
+          "impostor": {
+            "count": 48817813,
+            "minimum_approx": -0.2749249999999999,
+            "p05_approx": -0.015724999999999933,
+            "median_approx": 0.10982500000000006,
+            "mean_approx": 0.11308884287841821,
+            "p95_approx": 0.25322500000000003,
+            "maximum_approx": 0.577825
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        },
+        "medium": {
+          "threshold": 0.3900000000000001,
+          "roc_auc_approx": 0.9989978808248341,
+          "eer_approx": 0.012881466033720125,
+          "eer_threshold_approx": 0.27564999999999995,
+          "tar": 0.9221065884291048,
+          "frr": 0.07789341157089524,
+          "far": 0.00031121836613205104,
+          "genuine": {
+            "count": 617947,
+            "minimum_approx": -0.07402499999999995,
+            "p05_approx": 0.3592750000000001,
+            "median_approx": 0.5624750000000001,
+            "mean_approx": 0.5521517115950074,
+            "p95_approx": 0.708775,
+            "maximum_approx": 0.894225
+          },
+          "impostor": {
+            "count": 48817813,
+            "minimum_approx": -0.330475,
+            "p05_approx": -0.04702499999999993,
+            "median_approx": 0.07532500000000009,
+            "mean_approx": 0.07932984081394638,
+            "p95_approx": 0.2193750000000001,
+            "maximum_approx": 0.556625
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        }
+      }
+    }
+  },
+  "selection": {
+    "selected_candidate": "paired_plus_identity_contrastive",
+    "criterion": "highest validation low-resolution TAR, then FAR and ROC-AUC",
+    "test_metrics_were_unavailable_during_selection": true
+  },
+  "locked_test": {
+    "baseline_raw_arcface": {
+      "operating_threshold_from_validation": 0.36545000000000005,
+      "conditions": {
+        "low": {
+          "threshold": 0.36545000000000005,
+          "roc_auc_approx": 0.9907530488165857,
+          "eer_approx": 0.043952562156525904,
+          "eer_threshold_approx": 0.23285,
+          "tar": 0.7900662445012522,
+          "frr": 0.20993375549874782,
+          "far": 0.0008658664446334144,
+          "genuine": {
+            "count": 616504,
+            "minimum_approx": -0.10492499999999999,
+            "p05_approx": 0.242375,
+            "median_approx": 0.46767500000000006,
+            "mean_approx": 0.4562342304348391,
+            "p95_approx": 0.629125,
+            "maximum_approx": 0.8050750000000001
+          },
+          "impostor": {
+            "count": 48703816,
+            "minimum_approx": -0.281375,
+            "p05_approx": -0.03992499999999993,
+            "median_approx": 0.08252500000000007,
+            "mean_approx": 0.08657152063095021,
+            "p95_approx": 0.22707500000000003,
+            "maximum_approx": 0.551475
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        },
+        "medium": {
+          "threshold": 0.36545000000000005,
+          "roc_auc_approx": 0.9987881439007412,
+          "eer_approx": 0.014370506409600418,
+          "eer_threshold_approx": 0.2825500000000001,
+          "tar": 0.9460749646393211,
+          "frr": 0.05392503536067894,
+          "far": 0.0010645572412642163,
+          "genuine": {
+            "count": 616504,
+            "minimum_approx": -0.03447499999999998,
+            "p05_approx": 0.3603250000000001,
+            "median_approx": 0.5568750000000001,
+            "mean_approx": 0.5461329778071189,
+            "p95_approx": 0.6940250000000001,
+            "maximum_approx": 0.8394250000000001
+          },
+          "impostor": {
+            "count": 48703816,
+            "minimum_approx": -0.31077499999999997,
+            "p05_approx": -0.039724999999999955,
+            "median_approx": 0.08342500000000008,
+            "mean_approx": 0.08788269778080637,
+            "p95_approx": 0.23072500000000007,
+            "maximum_approx": 0.5468750000000001
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        }
+      }
+    },
+    "paired_plus_identity_contrastive": {
+      "operating_threshold_from_validation": 0.3900000000000001,
+      "conditions": {
+        "low": {
+          "threshold": 0.3900000000000001,
+          "roc_auc_approx": 0.9889803879555122,
+          "eer_approx": 0.04724716026358182,
+          "eer_threshold_approx": 0.2664500000000001,
+          "tar": 0.7804718217562254,
+          "frr": 0.21952817824377457,
+          "far": 0.0012503948355915273,
+          "genuine": {
+            "count": 616504,
+            "minimum_approx": -0.14637499999999998,
+            "p05_approx": 0.270525,
+            "median_approx": 0.47987500000000005,
+            "mean_approx": 0.46949039008668236,
+            "p95_approx": 0.632225,
+            "maximum_approx": 0.8066750000000001
+          },
+          "impostor": {
+            "count": 48703816,
+            "minimum_approx": -0.2759749999999999,
+            "p05_approx": -0.01017499999999999,
+            "median_approx": 0.11632500000000001,
+            "mean_approx": 0.12016447776699883,
+            "p95_approx": 0.2638750000000001,
+            "maximum_approx": 0.5836250000000001
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        },
+        "medium": {
+          "threshold": 0.3900000000000001,
+          "roc_auc_approx": 0.9987881439007412,
+          "eer_approx": 0.014370506409600418,
+          "eer_threshold_approx": 0.2825500000000001,
+          "tar": 0.9233873583950793,
+          "frr": 0.07661264160492065,
+          "far": 0.0004096393596756361,
+          "genuine": {
+            "count": 616504,
+            "minimum_approx": -0.03447499999999998,
+            "p05_approx": 0.3603250000000001,
+            "median_approx": 0.5568750000000001,
+            "mean_approx": 0.5461329778071189,
+            "p95_approx": 0.6940250000000001,
+            "maximum_approx": 0.8394250000000001
+          },
+          "impostor": {
+            "count": 48703816,
+            "minimum_approx": -0.31077499999999997,
+            "p05_approx": -0.039724999999999955,
+            "median_approx": 0.08342500000000008,
+            "mean_approx": 0.08788269778080637,
+            "p95_approx": 0.23072500000000007,
+            "maximum_approx": 0.5468750000000001
+          },
+          "histogram_method": "streaming_uniform_40000_bins_by_default"
+        }
+      }
+    }
+  },
+  "gates": {
+    "minimum_low_tar_improvement": 0.02,
+    "observed_low_tar_improvement": -0.009594422745026754,
+    "maximum_medium_tar_drop": 0.01,
+    "observed_medium_tar_drop": 0.02268760624424171,
+    "target_maximum_far": 0.001,
+    "observed_maximum_far": 0.0012503948355915273,
+    "improvement_gate_passed": false,
+    "identity_operating_gate": {
+      "minimum_tar": 0.9,
+      "maximum_far": 0.001,
+      "passed": false
+    }
+  },
+  "onnx_artifact": null,
+  "api_decision": "do_not_change_api",
+  "processing_seconds": 245.7956915489999,
+  "contains_raw_paths": false,
+  "contains_subject_identifiers": false,
+  "contains_face_images": false,
+  "contains_embeddings": false,
+  "individual_scores_persisted": false,
+  "model_weights_persisted": false,
+  "model_may_encode_private_training_data": true,
+  "threshold_status": "research_only_unapproved",
+  "note": "Private K-FACE 특짓값으로 학습한 연구다. 내부 Gate를 통과해도 실제 웹·모바일 외부 검증과 데이터·모델 이용 조건 검토 전에는 API 기본값을 변경하지 않는다."
+}
