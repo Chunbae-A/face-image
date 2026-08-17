@@ -129,6 +129,21 @@ caffeinate -dimsu .venv/bin/python scripts/kface_full_paired.py \
 저장하고, 찾지 못한 쌍도 누락시키지 않고 거절 사유와 개수를 체크포인트에 남긴다.
 원본 이미지·정렬 얼굴·원본 인물명은 결과 폴더에 저장하지 않는다.
 
+전체 특징값으로 검출점수·실제 얼굴 픽셀 크기·밝기 Gate 11개를
+비교할 때는 아래 생성기로 Private Kaggle GPU 노트북을 만든다.
+원본·임베딩·개별 점수는 Output에 남기지 않고 집계 결과만 저장한다.
+
+```bash
+.venv/bin/python scripts/build_kface_quality_gate_kaggle_notebook.py
+.venv/bin/kaggle kernels push \
+  -p notebooks/kaggle/kface_quality_gate_analysis \
+  --accelerator NvidiaTeslaT4
+```
+
+실제 400명·5 seed 결과와 API 적용 판단은
+[`reports/kface_quality_gate_analysis/2026-08-17`](../reports/kface_quality_gate_analysis/2026-08-17)에
+있다.
+
 전체 중화질 다운로드가 오래 걸리면 이미 완전히 내려받힌 인물별 ZIP 중 저화질
 표본과 같은 인물만 CRC 검증해 비공개 파일럿 ZIP을 만들 수 있다. 이 명령은 원본
 얼굴을 포함한 결과를 만들기 때문에 출력 경로는 반드시 Git에서 제외된 `data/`

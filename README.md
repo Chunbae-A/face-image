@@ -131,6 +131,20 @@ Mac에서 기존 실패 이미지만 SCRFD 입력 크기 `960 → 1280`으로 �
 [`reports/kface_full_verification/2026-08-17`](reports/kface_full_verification/2026-08-17)에
 있다.
 
+#### K-FACE v3.3 실제 얼굴 픽셀 크기·밝기 Gate 탐색
+
+전체 864만 장 특징값에서 검출점수, 실제 얼굴 픽셀 크기와
+밝기를 조합한 11개 품질 Gate를 5개 인물 분할로 비교했다. 가장
+균형이 좋은 `검출 0.70 + 얼굴 42px + 밝기 35` 조건은 최악
+TAR `94.17%`를 달성했지만 FAR이 `0.1074%`로 목표를 넘었고,
+자동 처리 coverage도 최소 `30.62%`에 그쳤다.
+
+따라서 품질 거절만 강제하는 API 변경은 하지 않는다. 다음에는
+품질 가중 등록·다중 등록 중심·더 엄격한 validation 안전 여유를
+비교한다. 전체 결과는
+[`reports/kface_quality_gate_analysis/2026-08-17`](reports/kface_quality_gate_analysis/2026-08-17)에
+있다.
+
 ## 2. 딥페이크 영상 판별 결과
 
 전체 Celeb-DF-v2를 사용했다.
@@ -304,7 +318,7 @@ python scripts/check_repository_hygiene.py
 모델링은 아래 순서로 진행한다. 새 모델의 성능 수치는 실제 실행
 후에만 기록하고, 각 단계는 같은 분할과 같은 지표로 비교한다.
 
-1. K-FACE 인물 bootstrap 신뢰구간·반복 seed와 저화질 검출 실패 개선
+1. K-FACE 품질 가중 등록·다중 등록 중심·기준값 안전 여유 비교
 2. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
 3. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
 4. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
