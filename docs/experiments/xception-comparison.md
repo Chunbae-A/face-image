@@ -1,8 +1,18 @@
 # EfficientNet-B4와 Xception Kaggle 비교 실행 안내
 
-## 지금 무엇이 준비됐나요?
+## 최종 결과
 
-두 모델을 같은 조건에서 비교하는 코드와 Kaggle 노트북이 준비됐다. **학습 결과는 아직 실행 전**이다.
+두 모델을 같은 조건에서 실제 비교했고 기본 모델은 **EfficientNet-B4를 유지**했다. Xception은 JPEG q30에서만 더 좋았지만 전체 열화 성능과 속도는 EfficientNet-B4가 우세했다.
+
+| Validation 지표 | EfficientNet-B4 | Xception |
+|---|---:|---:|
+| clean ROC-AUC | **0.9999873** | 0.99996184 |
+| 열화 5조건 macro ROC-AUC | **0.99862955** | 0.99839426 |
+| p95 추론시간 | **69.35ms** | 94.22ms |
+
+고정한 EfficientNet-B4의 공식 Test ROC-AUC는 `0.99955387`이었지만 실제 영상 FPR은 `1.6854%`로 내부 목표 `1%`를 넘었다. 따라서 모델 교체나 운영 자동 차단은 승인하지 않았다. Xception의 JPEG 장점만 조건부로 결합하는 후속 검증은 [Issue #35](https://github.com/Chunbae-A/face-image/issues/35)에서 진행한다.
+
+## 재현 파일
 
 - 실행 노트북: [`notebooks/celebdf_effb4_xception_compare_kaggle.ipynb`](../../notebooks/celebdf_effb4_xception_compare_kaggle.ipynb)
 - 고정 설정: [`configs/deepfake/effb4_xception_comparison.json`](../../configs/deepfake/effb4_xception_comparison.json)
@@ -70,7 +80,7 @@ Kaggle 오른쪽 `Settings`에서 다음을 설정한다.
 - Internet: `On`
 - Notebook visibility: `Private`
 
-Internet은 `timm`과 ImageNet 사전학습 가중치를 받는 데 필요하다. 노트북은 Kaggle 기본 `torch/torchvision`을 교체하지 않는다.
+Internet은 `timm`과 ImageNet 사전학습 가중치를 받는 데 필요하다. 아래 내용은 결과를 다시 검증할 때 사용하는 재현 절차다.
 
 ### 4. 확인값 한 개 변경
 
