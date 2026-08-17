@@ -6,6 +6,18 @@
 
 두 모델을 처음부터 다시 학습하지 않는다. 기존 두 checkpoint로 같은 Validation 프레임을 다시 채점하고, 점수 결합 비율만 비교한다. 따라서 이전 두 모델 학습보다 훨씬 가볍다.
 
+## 실제 실행 결론
+
+Kaggle Version 4에서 실행을 완료했고 `conditional_primary_weight_0_25`가 Validation 후보로 선택됐다.
+
+- JPEG ROC-AUC: `0.999122 → 0.999606`
+- clean 기준값 고정 Recall: `74.31% → 78.85%`
+- JPEG p95 추론시간: `41.30ms → 92.24ms`
+- 공식 Test 사용: 0건
+- 운영 승인: `false`
+
+따라서 “연구 후보 선택”이지 “API 배포 완료”가 아니다. 실제 웹 JPEG 품질 Gate와 외부 영상 검증 전에는 EfficientNet-B4 단독 API를 유지한다. 전체 결과는 [`reports/celebdf_jpeg_conditional_ensemble/2026-08-17`](../../reports/celebdf_jpeg_conditional_ensemble/2026-08-17)에 있다.
+
 ## 준비된 파일
 
 - 실행 노트북: [`notebooks/celebdf_jpeg_conditional_ensemble_kaggle.ipynb`](../../notebooks/celebdf_jpeg_conditional_ensemble_kaggle.ipynb)
