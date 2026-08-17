@@ -159,6 +159,23 @@ caffeinate -dimsu .venv/bin/python scripts/kface_full_paired.py \
 [`reports/kface_enrollment_strategy_benchmark/2026-08-17`](../reports/kface_enrollment_strategy_benchmark/2026-08-17)에
 있다. 최종행 전략이 없어 API 등록 방식은 변경하지 않았다.
 
+저화질 ArcFace 특징을 중화질 특징에 가깝게 보정하는 residual MLP와
+인물 구분 대조 손실 후보는 아래 Private Kaggle Notebook으로 학습·평가한다.
+400명을 Train·Validation·잠긴 Test 인물로 완전히 분리하고 Test는 후보
+선택 뒤 한 번만 연다. 세 개선 Gate를 통과할 때만 비공개 ONNX를 만든다.
+
+```bash
+.venv/bin/python scripts/build_kface_lowres_adapter_kaggle_notebook.py
+.venv/bin/kaggle kernels push \
+  -p notebooks/kaggle/kface_lowres_embedding_adapter \
+  --accelerator NvidiaTeslaT4
+```
+
+실제 결과에서는 저화질 TAR과 FAR이 모두 나빠져 모델을 채택하지 않았고
+API도 변경하지 않았다. 자세한 수치는
+[`reports/kface_lowres_embedding_adapter/2026-08-17`](../reports/kface_lowres_embedding_adapter/2026-08-17)에
+있다.
+
 전체 중화질 다운로드가 오래 걸리면 이미 완전히 내려받힌 인물별 ZIP 중 저화질
 표본과 같은 인물만 CRC 검증해 비공개 파일럿 ZIP을 만들 수 있다. 이 명령은 원본
 얼굴을 포함한 결과를 만들기 때문에 출력 경로는 반드시 Git에서 제외된 `data/`
