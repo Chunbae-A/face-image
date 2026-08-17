@@ -103,6 +103,50 @@ class EvaluateKFaceVerificationTests(unittest.TestCase):
             self.assertTrue(image_path.is_file())
             self.assertGreater(image_path.stat().st_size, 1_000)
 
+    def test_quality_gate_and_calibration_margin_are_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            low = root / "low"
+            medium = root / "medium"
+            _write_resolution(low, noise=0.005, subjects=10)
+            _write_resolution(medium, noise=0.003, subjects=10)
+
+            result = evaluate_module.evaluate(
+                low,
+                medium,
+                references=(5,),
+                seed=20260815,
+                target_far=0.001,
+                calibration_far=0.0009,
+                minimum_enrollment_detection_score=0.60,
+                minimum_query_detection_score=0.60,
+            )
+
+            self.assertEqual(result["calibration_far"], 0.0009)
+            self.assertEqual(result["minimum_enrollment_detection_score"], 0.60)
+            self.assertEqual(result["minimum_query_detection_score"], 0.60)
+            protocol = result["protocols"]["references_5"]
+            self.assertEqual(protocol["target_far"], 0.001)
+            self.assertEqual(protocol["calibration_far"], 0.0009)
+
+    def test_calibration_margin_cannot_exceed_target_far(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            low = root / "low"
+            medium = root / "medium"
+            _write_resolution(low, noise=0.005)
+            _write_resolution(medium, noise=0.003)
+
+            with self.assertRaisesRegex(ValueError, "calibration FAR"):
+                evaluate_module.evaluate(
+                    low,
+                    medium,
+                    references=(3,),
+                    seed=20260815,
+                    target_far=0.001,
+                    calibration_far=0.002,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

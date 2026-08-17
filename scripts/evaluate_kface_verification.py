@@ -47,13 +47,17 @@ def _load_subjects(directory: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     for path in sorted((directory / "embeddings").glob("subject_*.npz")):
         with np.load(path, allow_pickle=False) as payload:
             embeddings = _unit_rows(payload["embeddings"])
+            quality = np.asarray(payload["quality"], dtype=np.float32)
             selected_indices = np.asarray(payload["selected_indices"], dtype=np.int32)
+        if quality.shape != (len(embeddings), 6) or not np.all(np.isfinite(quality)):
+            raise ValueError(f"품질값 형식이 다릅니다: {path.name}")
         if selected_indices.shape != (len(embeddings),):
             raise ValueError(f"선택 인덱스 형식이 다릅니다: {path.name}")
         if len(np.unique(selected_indices)) != len(selected_indices):
             raise ValueError(f"중복된 선택 인덱스가 있습니다: {path.name}")
         subjects[path.stem] = {
             "embeddings": embeddings,
+            "quality": quality,
             "selected_indices": selected_indices,
         }
     return summary, subjects
@@ -70,21 +74,46 @@ def _even_positions(length: int, count: int) -> np.ndarray:
     )
 
 
-def _enrollment(subject: dict[str, Any], references: int) -> tuple[np.ndarray, set[int]]:
-    embeddings = subject["embeddings"]
-    selected_indices = subject["selected_indices"]
+def _quality_filtered(
+    subject: dict[str, Any], minimum_detection_score: float | None
+) -> dict[str, Any]:
+    if minimum_detection_score is None:
+        return subject
+    mask = subject["quality"][:, 0] >= minimum_detection_score
+    return {
+        "embeddings": subject["embeddings"][mask],
+        "quality": subject["quality"][mask],
+        "selected_indices": subject["selected_indices"][mask],
+    }
+
+
+def _enrollment(
+    subject: dict[str, Any],
+    references: int,
+    *,
+    minimum_detection_score: float | None = None,
+) -> tuple[np.ndarray, set[int]]:
+    filtered = _quality_filtered(subject, minimum_detection_score)
+    embeddings = filtered["embeddings"]
+    selected_indices = filtered["selected_indices"]
     positions = _even_positions(len(embeddings), references)
     center = _unit_vector(np.mean(embeddings[positions], axis=0))
     used = {int(selected_indices[position]) for position in positions}
     return center, used
 
 
-def _query_rows(subject: dict[str, Any], excluded_indices: set[int]) -> np.ndarray:
+def _query_rows(
+    subject: dict[str, Any],
+    excluded_indices: set[int],
+    *,
+    minimum_detection_score: float | None = None,
+) -> np.ndarray:
+    filtered = _quality_filtered(subject, minimum_detection_score)
     mask = np.asarray(
-        [int(index) not in excluded_indices for index in subject["selected_indices"]],
+        [int(index) not in excluded_indices for index in filtered["selected_indices"]],
         dtype=bool,
     )
-    return subject["embeddings"][mask]
+    return filtered["embeddings"][mask]
 
 
 def _score_split(
@@ -93,16 +122,29 @@ def _score_split(
     medium_subjects: dict[str, Any],
     query_subjects: dict[str, Any],
     references: int,
+    minimum_enrollment_detection_score: float | None = None,
+    minimum_query_detection_score: float | None = None,
 ) -> tuple[np.ndarray, np.ndarray, int]:
     centers = []
     excluded: dict[str, set[int]] = {}
     eligible = []
     for subject_id in subject_ids:
         medium = medium_subjects[subject_id]
-        if len(medium["embeddings"]) < references + 1:
+        filtered_medium = _quality_filtered(
+            medium, minimum_enrollment_detection_score
+        )
+        if len(filtered_medium["embeddings"]) < references + 1:
             continue
-        center, used = _enrollment(medium, references)
-        queries = _query_rows(query_subjects[subject_id], used)
+        center, used = _enrollment(
+            medium,
+            references,
+            minimum_detection_score=minimum_enrollment_detection_score,
+        )
+        queries = _query_rows(
+            query_subjects[subject_id],
+            used,
+            minimum_detection_score=minimum_query_detection_score,
+        )
         if not len(queries):
             continue
         eligible.append(subject_id)
@@ -119,7 +161,9 @@ def _score_split(
     query_count = 0
     for position, subject_id in enumerate(eligible):
         queries = _query_rows(
-            query_subjects[subject_id], excluded[subject_id]
+            query_subjects[subject_id],
+            excluded[subject_id],
+            minimum_detection_score=minimum_query_detection_score,
         ).astype(np.float64, copy=False)
         scores = np.einsum("qd,cd->qc", queries, center_matrix, optimize=False)
         if not np.all(np.isfinite(scores)):
@@ -262,17 +306,50 @@ def evaluate(
     references: Sequence[int],
     seed: int,
     target_far: float,
+    calibration_far: float | None = None,
+    minimum_enrollment_detection_score: float | None = None,
+    minimum_query_detection_score: float | None = None,
 ) -> dict[str, Any]:
+    threshold_selection_far = target_far if calibration_far is None else calibration_far
+    if not 0 < threshold_selection_far <= target_far < 1:
+        raise ValueError("calibration FAR은 0보다 크고 target FAR 이하여야 합니다.")
+    for label, score in (
+        ("등록", minimum_enrollment_detection_score),
+        ("질의", minimum_query_detection_score),
+    ):
+        if score is not None and not 0 <= score <= 1:
+            raise ValueError(f"{label} 최소 검출 점수는 0과 1 사이여야 합니다.")
     low_summary, low_subjects = _load_subjects(low_dir)
     medium_summary, medium_subjects = _load_subjects(medium_dir)
     paired = sorted(set(low_subjects) & set(medium_subjects))
     maximum_references = max(references)
-    eligible = [
-        subject_id
-        for subject_id in paired
-        if len(medium_subjects[subject_id]["embeddings"]) >= maximum_references + 1
-        and len(low_subjects[subject_id]["embeddings"]) >= 1
-    ]
+    eligible = []
+    for subject_id in paired:
+        filtered_medium = _quality_filtered(
+            medium_subjects[subject_id], minimum_enrollment_detection_score
+        )
+        if len(filtered_medium["embeddings"]) < maximum_references + 1:
+            continue
+        _, maximum_used = _enrollment(
+            medium_subjects[subject_id],
+            maximum_references,
+            minimum_detection_score=minimum_enrollment_detection_score,
+        )
+        if not len(
+            _query_rows(
+                low_subjects[subject_id],
+                maximum_used,
+                minimum_detection_score=minimum_query_detection_score,
+            )
+        ) or not len(
+            _query_rows(
+                medium_subjects[subject_id],
+                maximum_used,
+                minimum_detection_score=minimum_query_detection_score,
+            )
+        ):
+            continue
+        eligible.append(subject_id)
     validation_ids, test_ids = _subject_split(eligible, seed)
 
     protocols: dict[str, Any] = {}
@@ -293,6 +370,8 @@ def evaluate(
                     medium_subjects=medium_subjects,
                     query_subjects=query_subjects,
                     references=reference_count,
+                    minimum_enrollment_detection_score=minimum_enrollment_detection_score,
+                    minimum_query_detection_score=minimum_query_detection_score,
                 )
                 private_scores[resolution][split_name] = (genuine, impostor)
                 scored.setdefault(resolution, {})[split_name] = {
@@ -303,7 +382,7 @@ def evaluate(
 
         candidate_thresholds = {
             resolution: _target_far_threshold(
-                private_scores[resolution]["validation"][1], target_far
+                private_scores[resolution]["validation"][1], threshold_selection_far
             )
             for resolution in ("low", "medium")
         }
@@ -320,6 +399,7 @@ def evaluate(
             "reference_count": reference_count,
             "enrollment_resolution": "medium",
             "target_far": target_far,
+            "calibration_far": threshold_selection_far,
             "validation_threshold_candidates": candidate_thresholds,
             "operating_threshold": operating_threshold,
             "conditions": scored,
@@ -337,6 +417,9 @@ def evaluate(
         "protocol": "medium_enrollment_subject_disjoint_low_medium_query_v1",
         "seed": seed,
         "target_far": target_far,
+        "calibration_far": threshold_selection_far,
+        "minimum_enrollment_detection_score": minimum_enrollment_detection_score,
+        "minimum_query_detection_score": minimum_query_detection_score,
         "processed_subjects": {
             "low": int(low_summary.get("subject_count", len(low_subjects))),
             "medium": int(medium_summary.get("subject_count", len(medium_subjects))),
@@ -372,6 +455,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--references", type=int, nargs="+", default=[3, 5])
     parser.add_argument("--seed", type=int, default=20260815)
     parser.add_argument("--target-far", type=float, default=0.001)
+    parser.add_argument(
+        "--calibration-far",
+        type=float,
+        help="validation 기준값 선택에 쓸 FAR. target FAR보다 작게 두면 안전 여유가 생김",
+    )
+    parser.add_argument("--minimum-enrollment-detection-score", type=float)
+    parser.add_argument("--minimum-query-detection-score", type=float)
     args = parser.parse_args(argv)
     if not args.references or min(args.references) <= 0:
         parser.error("references는 양의 정수여야 합니다.")
@@ -381,6 +471,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         references=tuple(sorted(set(args.references))),
         seed=args.seed,
         target_far=args.target_far,
+        calibration_far=args.calibration_far,
+        minimum_enrollment_detection_score=args.minimum_enrollment_detection_score,
+        minimum_query_detection_score=args.minimum_query_detection_score,
     )
     _atomic_json(args.output, result)
     print(json.dumps(result, ensure_ascii=False, indent=2))

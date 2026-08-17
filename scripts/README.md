@@ -55,6 +55,41 @@ validation 인물에서 FAR 목표 기준값을 고르고, 완전히 다른 test
   --output data/metadata/kface/kface_v3_400_verification.json
 ```
 
+기준 처리에서 실패한 이미지만 검출 입력 크기 `960 → 1280`으로 다시
+시도할 수 있다. 기준 NPZ는 수정하지 않고 새 디렉터리에 병합 결과를 만들며,
+인물별 체크포인트로 중단 후 재실행을 지원한다.
+
+```bash
+caffeinate -dimsu .venv/bin/python scripts/kface_pilot.py retry \
+  /private/Low_Resolution.zip \
+  --resolution low \
+  --baseline-dir data/processed/kface/v3_400/low \
+  --output-dir data/processed/kface/v3_1_adaptive/low \
+  --max-subjects 400 \
+  --images-per-subject 15 \
+  --retry-detection-sizes 960 1280 \
+  --retry-minimum-detection-score 0.50 \
+  --expected-bytes 10442596690 \
+  --accept-noncommercial-model-license
+```
+
+재탐지 결과는 검출 성공과 자동 판정 품질을 분리해 평가한다. 아래 연구
+후보는 검출점수 `0.60` 이상, 중화질 등록 9장, validation FAR `0.09%`
+안전 여유를 적용하고 test 목표 FAR은 `0.1%`로 유지한다.
+
+```bash
+.venv/bin/python scripts/evaluate_kface_verification.py \
+  --low-dir data/processed/kface/v3_1_adaptive/low \
+  --medium-dir data/processed/kface/v3_1_adaptive/medium \
+  --references 9 \
+  --minimum-enrollment-detection-score 0.60 \
+  --minimum-query-detection-score 0.60 \
+  --calibration-far 0.0009 \
+  --target-far 0.001 \
+  --seed 20260815 \
+  --output data/metadata/kface/kface_v3_1_quality_gate_verification.json
+```
+
 공개 결과에는 집계 분포와 지표만 남고, 원본 경로·인물 식별자·개별
 점수·임베딩은 넣지 않는다. 이 기준값은 한국인 얼굴 연구 검증이며
 운영·본인인증 승인값이 아니다.

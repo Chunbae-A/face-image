@@ -49,6 +49,11 @@ class FakeEncoder:
         return SimpleNamespace(embedding=vector, quality=quality)
 
 
+class RecoveryEncoder(FakeEncoder):
+    def encode(self, payload: bytes) -> SimpleNamespace:
+        return super().encode(b"recovered" if payload == b"reject" else payload)
+
+
 def build_nested_archive(path: Path, *, subjects: int = 3, images: int = 5) -> None:
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as outer:
         for subject in range(subjects):
@@ -153,6 +158,64 @@ print(type(encoder).__name__)
                 archive_sha256="a" * 64,
             )
 
+            self.assertEqual(resumed["skipped_completed_subjects"], 2)
+            self.assertEqual(resumed_encoder.calls, 0)
+
+    def test_adaptive_retry_only_reprocesses_missing_images_and_resumes(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "Low_Resolution.zip"
+            baseline = root / "baseline"
+            output = root / "adaptive"
+            build_nested_archive(archive, subjects=2, images=5)
+            source_hash = "a" * 64
+            kface_pilot.process_archive(
+                archive,
+                resolution="low",
+                output_dir=baseline,
+                max_subjects=2,
+                images_per_subject=3,
+                encoder=FakeEncoder(),
+                archive_sha256=source_hash,
+            )
+
+            recovery = RecoveryEncoder()
+            result = kface_pilot.process_adaptive_retry(
+                archive,
+                resolution="low",
+                baseline_dir=baseline,
+                output_dir=output,
+                max_subjects=2,
+                images_per_subject=3,
+                retry_encoders=[("det960_score50", recovery)],
+                archive_sha256=source_hash,
+            )
+
+            self.assertEqual(recovery.calls, 2)
+            self.assertEqual(result["initial_accepted_images"], 4)
+            self.assertEqual(result["recovered_images"], 2)
+            self.assertEqual(result["accepted_images"], 6)
+            self.assertEqual(result["rejected_images"], 0)
+            self.assertEqual(result["retry_recoveries"], {"det960_score50": 2})
+            for path in (output / "embeddings").glob("*.npz"):
+                with np.load(path, allow_pickle=False) as payload:
+                    self.assertEqual(payload["embeddings"].shape, (3, 512))
+                    self.assertEqual(payload["quality"].shape, (3, 6))
+                    np.testing.assert_array_equal(
+                        payload["selected_indices"], np.asarray([0, 1, 2])
+                    )
+
+            resumed_encoder = RecoveryEncoder()
+            resumed = kface_pilot.process_adaptive_retry(
+                archive,
+                resolution="low",
+                baseline_dir=baseline,
+                output_dir=output,
+                max_subjects=2,
+                images_per_subject=3,
+                retry_encoders=[("det960_score50", resumed_encoder)],
+                archive_sha256=source_hash,
+            )
             self.assertEqual(resumed["skipped_completed_subjects"], 2)
             self.assertEqual(resumed_encoder.calls, 0)
 
