@@ -145,6 +145,21 @@ TAR `94.17%`를 달성했지만 FAR이 `0.1074%`로 목표를 넘었고,
 [`reports/kface_quality_gate_analysis/2026-08-17`](reports/kface_quality_gate_analysis/2026-08-17)에
 있다.
 
+#### K-FACE v3.4 등록 5장 품질 가중·다중 중심 비교
+
+확인 사진을 추가로 거절하지 않고 coverage 100% 조건에서 단순
+평균, 품질 가중 평균, 등록 중심 2개를 비교했다. 품질 가중
+평균은 validation FAR 0.09% 기준 저화질 TAR을 `76.35% → 76.62%`로
+약 `+0.28%p` 높였지만 목표 개선폭에 부족했다.
+
+validation FAR 안전 여유를 0.08%로 높이면 test FAR은 `0.0963%`로
+목표를 통과했지만 저화질 TAR은 `75.80%`였다. 등록 중심 2개는
+저화질 TAR을 약 72%로 낮춰 후보에서 제외했다. 등록 전략만으로는
+저해상도 정보 손실을 해결하지 못했으므로 API는 변경하지 않는다.
+전체 결과는
+[`reports/kface_enrollment_strategy_benchmark/2026-08-17`](reports/kface_enrollment_strategy_benchmark/2026-08-17)에
+있다.
+
 ## 2. 딥페이크 영상 판별 결과
 
 전체 Celeb-DF-v2를 사용했다.
@@ -318,7 +333,7 @@ python scripts/check_repository_hygiene.py
 모델링은 아래 순서로 진행한다. 새 모델의 성능 수치는 실제 실행
 후에만 기록하고, 각 단계는 같은 분할과 같은 지표로 비교한다.
 
-1. K-FACE 품질 가중 등록·다중 등록 중심·기준값 안전 여유 비교
+1. K-FACE 저화질→중화질 임베딩 보정 어댑터 학습·원본 ArcFace 비교
 2. EfficientNet-B4를 재현하고 Xception을 같은 조건에서 비교 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
 3. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
 4. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
