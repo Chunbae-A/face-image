@@ -44,7 +44,7 @@ Gate는 남아 있다. 따라서 현재 응답은 자동 차단·자동 신고 �
 | 공개 후보 검색 | 공개 웹에서 이미지·영상 URL과 출처 수집 | **무료 URL 제보 + SearXNG 키워드 검색 구현, 얼굴 역검색 미연결** ([#13](https://github.com/Chunbae-A/face-image/issues/13)) |
 | 얼굴 후보 선별 | 등록 얼굴과 후보 얼굴의 동일인 가능성 비교 | **검색 이미지 다운로드·ArcFace 배치 연결 완료, 다중 얼굴·영상 트랙 미연결** ([#14](https://github.com/Chunbae-A/face-image/issues/14)) |
 | 딥페이크 판별 | 후보 얼굴 프레임이 실제인지 조작인지 분석 | **ONNX 이미지·영상 16프레임 평균 API 구현, 운영 Gate 미통과** ([#25](https://github.com/Chunbae-A/face-image/issues/25)) |
-| 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **EfficientNet-B4/Xception 비교 완료·EfficientNet-B4 유지, JPEG 조건부 결합 재검증 중; SBI·Hard Negative·FTCN 실행 전** ([#35](https://github.com/Chunbae-A/face-image/issues/35)) |
+| 딥페이크 모델 고도화 | 실제 영상 오경고와 웹 촬영 열화 약점 개선 | **JPEG 조건부 결합 Validation 후보 선택, 외부 검증 전이라 API 미적용; SBI·Hard Negative·FTCN 실행 전** ([#35](https://github.com/Chunbae-A/face-image/issues/35)) |
 | 화면용 신뢰도 | 얼굴 유사도와 딥페이크 점수를 사용자용 수치로 보정 | **K-FACE 400명 얼굴 검증·딥페이크 보정 실험 완료, 두 Gate 모두 미통과로 확률 표시 보류** ([#16](https://github.com/Chunbae-A/face-image/issues/16)) |
 | 통합 비동기 API | 검색 → 얼굴 선별 → 딥페이크 판별을 하나의 작업으로 연결 | **임시 등록·`scan_id`·진행 조회·이미지 후보 결과 완료, 영상 URL·영구 큐는 미연결** ([#17](https://github.com/Chunbae-A/face-image/issues/17)) |
 
@@ -220,6 +220,18 @@ Kaggle 4차 실행에서 학습·공식 Test·ONNX 변환·CPU 추론 시험을 
 
 재현 방법은 [`docs/experiments/deepfake-kaggle.md`](docs/experiments/deepfake-kaggle.md), 데이터 분할과 사전검사·현재 결과는 [`reports/celebdf_deepfake_baseline/2026-08-07`](reports/celebdf_deepfake_baseline/2026-08-07)에 있다.
 
+### JPEG 압축 조건부 두 모델 결합
+
+Xception이 JPEG q30에서만 보인 장점을 사용하기 위해, 평소에는 EfficientNet-B4만 실행하고 강한 JPEG 압축에서만 두 모델 점수를 결합하는 정책을 Validation에서 비교했다. 836개 영상·66,880개 짝지은 프레임을 사용했고 공식 Test는 열지 않았다.
+
+| JPEG q30 Validation | EfficientNet-B4 단독 | 조건부 결합 |
+|---|---:|---:|
+| ROC-AUC | 0.999122 | **0.999606** |
+| clean 기준값 고정 Recall | 74.31% | **78.85%** |
+| p95 추론시간 | **41.30ms** | 92.24ms |
+
+EfficientNet-B4 25%·Xception 75% logit 결합 후보가 선택됐지만, 개선량이 작고 처리시간이 약 2.23배로 늘었다. 실제 웹 JPEG 품질 Gate와 외부 영상 검증이 없으므로 현재 ONNX API는 EfficientNet-B4 단독을 유지한다. 자세한 선택 규칙·수치·개인정보 검사는 [조건부 결합 결과 보고서](reports/celebdf_jpeg_conditional_ensemble/2026-08-17)에 있다.
+
 ## 3. 화면용 딥페이크 점수 보정 결과
 
 Kaggle GPU에서 Validation 836개와 공식 Test 518개 영상의 clean 16프레임 평균 점수를 다시 계산하고 Temperature, Platt, Isotonic 보정을 비교했다. 방법 선택에는 Validation만 사용했으며 공식 Test로 보정값을 고른 경우는 0건이다.
@@ -365,7 +377,7 @@ python scripts/check_repository_hygiene.py
 1. K-FACE 저화질→중화질 임베딩 보정 어댑터 비교 완료·미채택 ([#44](https://github.com/Chunbae-A/face-image/issues/44))
 2. 저해상도 얼굴 crop 기반 인식 미세 조정과 새로운 외부 잠긴 Test 설계 ([#47](https://github.com/Chunbae-A/face-image/issues/47))
 3. EfficientNet-B4/Xception 공정 비교 완료·EfficientNet-B4 유지 ([#29](https://github.com/Chunbae-A/face-image/issues/29))
-4. JPEG 압축에서만 Xception을 보조로 쓰는 조건부 결합 검증 ([#35](https://github.com/Chunbae-A/face-image/issues/35))
+4. JPEG 조건부 결합 Validation 후보 선택 완료, 실제 웹 JPEG 품질 Gate·외부 검증 진행 ([#35](https://github.com/Chunbae-A/face-image/issues/35))
 5. SBI로 보지 못한 조작 방식의 일반화 성능 검증 ([#30](https://github.com/Chunbae-A/face-image/issues/30))
 6. 실제 영상 hard negative와 외부 검증 subset 구축 ([#31](https://github.com/Chunbae-A/face-image/issues/31))
 7. 결승 후보에 FTCN 시간 정보와 앙상블 추가 효과 검증 ([#32](https://github.com/Chunbae-A/face-image/issues/32))
