@@ -56,6 +56,7 @@ JPEG 조건부 두 모델 결합은 현재 [Issue #35](https://github.com/Chunba
 - [K-FACE 적응형 검출·품질 Gate](../reports/kface_adaptive_quality_gate/2026-08-16/README.md)
 - [K-FACE 400명 전체 반복 검증](../reports/kface_full_verification/2026-08-17/README.md)
 - [K-FACE 얼굴 픽셀 크기·밝기 Gate 탐색](../reports/kface_quality_gate_analysis/2026-08-17/README.md)
+- [K-FACE 등록 5장 품질 가중·다중 중심 비교](../reports/kface_enrollment_strategy_benchmark/2026-08-17/README.md)
 
 ## 개발자용 위치
 

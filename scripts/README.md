@@ -144,6 +144,21 @@ caffeinate -dimsu .venv/bin/python scripts/kface_full_paired.py \
 [`reports/kface_quality_gate_analysis/2026-08-17`](../reports/kface_quality_gate_analysis/2026-08-17)에
 있다.
 
+질의 사진을 추가로 거절하지 않고 등록 5장의 단순 평균·품질 가중
+평균·등록 중심 2개와 validation FAR 안전 여유 3개를 비교할 때는
+아래 Private Kaggle Notebook을 사용한다.
+
+```bash
+.venv/bin/python scripts/build_kface_enrollment_strategy_kaggle_notebook.py
+.venv/bin/kaggle kernels push \
+  -p notebooks/kaggle/kface_enrollment_strategy_benchmark \
+  --accelerator NvidiaTeslaT4
+```
+
+전체 400명·5 seed 결과는
+[`reports/kface_enrollment_strategy_benchmark/2026-08-17`](../reports/kface_enrollment_strategy_benchmark/2026-08-17)에
+있다. 최종행 전략이 없어 API 등록 방식은 변경하지 않았다.
+
 전체 중화질 다운로드가 오래 걸리면 이미 완전히 내려받힌 인물별 ZIP 중 저화질
 표본과 같은 인물만 CRC 검증해 비공개 파일럿 ZIP을 만들 수 있다. 이 명령은 원본
 얼굴을 포함한 결과를 만들기 때문에 출력 경로는 반드시 Git에서 제외된 `data/`

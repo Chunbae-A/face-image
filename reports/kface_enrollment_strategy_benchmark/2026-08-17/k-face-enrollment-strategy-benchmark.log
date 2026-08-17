@@ -1,0 +1,93 @@
+[{"stream_name":"stderr","time":7.678795624,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":7.678828674,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":7.678832564,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":7.67883534,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stderr","time":8.290712902,"data":"0.00s - Debugger warning: It seems that frozen modules are being used, which may\n"}
+,{"stream_name":"stderr","time":8.290742042,"data":"0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off\n"}
+,{"stream_name":"stderr","time":8.290752359,"data":"0.00s - to python to disable frozen modules.\n"}
+,{"stream_name":"stderr","time":8.290755446,"data":"0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.\n"}
+,{"stream_name":"stdout","time":9.365569788,"data":"{'references': 5, 'seeds': (20260815, 20260816, 20260817, 20260818, 20260819), 'margins': (0.0009, 0.0008, 0.0007)}\n"}
+,{"stream_name":"stdout","time":34.444980671,"data":"{'gpu': 'Tesla T4', 'subjects': 400, 'chunks': 8800, 'embedding_gb': 16.085}\n"}
+,{"stream_name":"stdout","time":34.51332091,"data":"{'evaluate_kface_full_embeddings.py': '36afc800cf449ccaaad71ae00559ef1cfc65cd645f289f0d644c4bd98fe6cd5f', 'analyze_kface_enrollment_strategies.py': '48971b5024f8b140d82ccf41afc8abeb18f27cc7a34b82c14a385a4d5eb9ec85'}\n"}
+,{"stream_name":"stdout","time":35.86148931,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 1, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":46.260455228,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 20, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":54.18181566,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 40, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":61.524728384,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 60, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":68.68380206,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 80, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":76.53861765,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 100, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":84.269771982,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 120, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":91.902103147,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 140, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":99.601328325,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 160, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":107.191177556,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 180, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":115.534124586,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 200, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":123.714016064,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 220, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":131.561786368,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 240, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":139.598349951,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 260, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":147.949224021,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 280, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":156.481435613,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 300, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":164.285900429,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 320, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":172.07927425,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 340, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":179.246559298,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 360, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":186.818764013,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 380, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":194.115704515,"data":"{\"stage\": \"enrollment\", \"processed_subjects\": 400, \"total_subjects\": 400}\n"}
+,{"stream_name":"stdout","time":194.845749694,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 1, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":196.823455243,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 10, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":198.917185982,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 20, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":201.091015031,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 30, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":203.221872757,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 40, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":205.344206595,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 50, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":207.542335523,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 60, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":209.646315037,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 70, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":211.811840013,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 80, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":213.935439219,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 90, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":216.039409719,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 100, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":218.162072187,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 110, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":220.263728844,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 120, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":222.447773011,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 130, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":224.59300411,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 140, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":226.730818672,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 150, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":228.862155467,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 160, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":230.976012348,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 170, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":233.071157473,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 180, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":235.149434406,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 190, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":237.249875693,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 200, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":239.419325255,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 210, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":241.635374773,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 220, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":243.690038583,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 230, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":245.859513507,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 240, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":248.021165616,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 250, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":250.150489855,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 260, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":252.255400784,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 270, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":254.392430173,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 280, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":256.535069482,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 290, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":258.681354209,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 300, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":260.725063601,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 310, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":262.869000378,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 320, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":265.024909488,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 330, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":267.168990186,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 340, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":269.240757242,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 350, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":271.39181949,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 360, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":273.555139194,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 370, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":275.676690378,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 380, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":277.71818135,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 390, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":279.847939001,"data":"{\"stage\": \"strategy_scoring\", \"processed_subjects\": 400, \"total_subjects\": 400, \"device\": \"cuda\"}\n"}
+,{"stream_name":"stdout","time":280.613719436,"data":"{\n"}
+,{"stream_name":"stdout","time":280.61375053,"data":"  \"status\": \"complete\",\n"}
+,{"stream_name":"stdout","time":280.613756083,"data":"  \"recommendation\": {\n"}
+,{"stream_name":"stdout","time":280.61376011,"data":"    \"candidate\": null,\n"}
+,{"stream_name":"stdout","time":280.613764632,"data":"    \"status\": \"no_enrollment_strategy_passed\"\n"}
+,{"stream_name":"stdout","time":280.613768935,"data":"  },\n"}
+,{"stream_name":"stdout","time":280.613772564,"data":"  \"processing_minutes\": 4.1\n"}
+,{"stream_name":"stdout","time":280.61377688,"data":"}\n"}
+,{"stream_name":"stdout","time":281.502347335,"data":"{'result_json': '/kaggle/working/kface_enrollment_strategy_benchmark.json', 'plot': '/kaggle/working/kface_enrollment_strategy_benchmark.png', 'threshold_status': 'research_only_unapproved'}\n"}
+,{"stream_name":"stderr","time":286.102689181,"data":"/usr/local/lib/python3.12/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\\|'\n"}
+,{"stream_name":"stderr","time":286.102725139,"data":"  cells[i][c] = re.sub('\\\\\\\\\\|', '|', cell)\n"}
+,{"stream_name":"stderr","time":286.254265507,"data":"/usr/local/lib/python3.12/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\\_'\n"}
+,{"stream_name":"stderr","time":286.254307196,"data":"  text = re.sub(r'_', '\\_', text) # Escape underscores in display text\n"}
+,{"stream_name":"stderr","time":286.871745515,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to notebook\n"}
+,{"stream_name":"stderr","time":287.181001075,"data":"[NbConvertApp] Writing 164632 bytes to __notebook__.ipynb\n"}
+,{"stream_name":"stderr","time":289.506110813,"data":"[NbConvertApp] Converting notebook __notebook__.ipynb to html\n"}
+,{"stream_name":"stderr","time":290.326135742,"data":"[NbConvertApp] Support files will be in __results___files/\n"}
+,{"stream_name":"stderr","time":290.326163669,"data":"[NbConvertApp] Making directory __results___files\n"}
+,{"stream_name":"stderr","time":290.326439667,"data":"[NbConvertApp] Writing 382588 bytes to __results__.html\n"}
+]
